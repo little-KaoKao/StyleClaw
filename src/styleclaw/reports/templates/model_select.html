@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ project_name }} — Model Selection</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 8px; }
+  .meta { background: #fff; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; }
+  .ref-section img { width: 150px; height: 150px; object-fit: cover; border-radius: 4px; margin: 4px; }
+  .model-card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .model-card h3 { margin-top: 0; }
+  .scores { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0; }
+  .score-badge { background: #e8f4e8; padding: 4px 10px; border-radius: 12px; font-size: 0.9em; }
+  .score-badge.low { background: #fde8e8; }
+  .score-badge.mid { background: #fef3cd; }
+  .images img { width: 200px; height: auto; border-radius: 4px; margin: 4px; }
+  .recommendation { font-size: 1.1em; font-weight: bold; padding: 8px 16px; border-radius: 8px; display: inline-block; background: #d4edda; color: #155724; }
+</style>
+</head>
+<body>
+<h1>{{ project_name }} — Model Selection</h1>
+<div class="meta">
+  <span><strong>Trigger:</strong> {{ trigger_phrase }}</span>
+  <br>
+  <span class="recommendation">{{ recommendation }}</span>
+</div>
+
+<h2>Reference Images</h2>
+<div class="ref-section">
+  {% for img in ref_images %}
+  <img src="{{ img }}" alt="ref">
+  {% endfor %}
+</div>
+
+{% for m in models %}
+<div class="model-card">
+  <h3>{{ m.model }}</h3>
+  <div class="scores">
+    {% for dim, val in m.scores.items() %}
+    <span class="score-badge {{ 'low' if val < 5 else ('mid' if val < 7 else '') }}">{{ dim }}: {{ val }}</span>
+    {% endfor %}
+    <span class="score-badge"><strong>Total: {{ "%.1f"|format(m.total) }}</strong></span>
+  </div>
+  <p>{{ m.analysis }}</p>
+  {% if m.suggestions %}
+  <p><em>{{ m.suggestions }}</em></p>
+  {% endif %}
+  <div class="images">
+    {% for img in m.images %}
+    <img src="{{ img }}" alt="{{ m.model }}">
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+</body>
+</html>
