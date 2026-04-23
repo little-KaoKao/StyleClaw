@@ -29,6 +29,11 @@ async def poll_model_select(
             updated[model_id] = record
             continue
 
+        if not record.task_id:
+            logger.warning("Skipping model %s: no task_id (submission may have failed).", model_id)
+            updated[model_id] = record
+            continue
+
         logger.info("Polling task %s for model %s...", record.task_id, model_id)
         new_record = await poll_and_update(client, record)
         project_store.save_task_record(name, model_id, new_record)
@@ -99,7 +104,12 @@ async def poll_batch(
     updated: dict[str, TaskRecord] = {}
 
     for case_id, record in records.items():
-        if record.status == "SUCCESS":
+        if record.status in ("SUCCESS", "FAILED"):
+            updated[case_id] = record
+            continue
+
+        if not record.task_id:
+            logger.warning("Skipping case %s: no task_id.", case_id)
             updated[case_id] = record
             continue
 

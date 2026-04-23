@@ -32,6 +32,14 @@ def _get_client():
     return RunningHubClient(api_key=_get_api_key())
 
 
+async def _run_with_client(coro_fn):
+    client = _get_client()
+    try:
+        return await coro_fn(client)
+    finally:
+        await client.close()
+
+
 @app.command()
 def init(
     name: str = typer.Argument(..., help="Project name"),
@@ -47,9 +55,9 @@ def init(
 
     from styleclaw.scripts.init_project import init_project
 
-    client = _get_client()
-    root = asyncio.run(init_project(name, ref, info, description, client))
-    asyncio.run(client.close())
+    root = asyncio.run(_run_with_client(
+        lambda c: init_project(name, ref, info, description, c)
+    ))
     typer.echo(f"Project initialized at {root}")
 
 
@@ -130,11 +138,9 @@ def _generate_model_select(name: str) -> None:
 
     from styleclaw.scripts.generate import generate_model_select
 
-    client = _get_client()
-    records = asyncio.run(
-        generate_model_select(name, client, analysis.trigger_phrase, sref_url=sref_url)
-    )
-    asyncio.run(client.close())
+    records = asyncio.run(_run_with_client(
+        lambda c: generate_model_select(name, c, analysis.trigger_phrase, sref_url=sref_url)
+    ))
 
     for mid, rec in records.items():
         typer.echo(f"  {mid}: task_id={rec.task_id} status={rec.status}")
@@ -152,13 +158,13 @@ def _generate_style_refine(name: str, state: "ProjectState") -> None:
 
     from styleclaw.scripts.generate import generate_style_refine
 
-    client = _get_client()
-    records = asyncio.run(generate_style_refine(
-        name, client, round_num, prompt_config.trigger_phrase,
-        sref_url=sref_url,
-        extra_model_params=prompt_config.model_params,
+    records = asyncio.run(_run_with_client(
+        lambda c: generate_style_refine(
+            name, c, round_num, prompt_config.trigger_phrase,
+            sref_url=sref_url,
+            extra_model_params=prompt_config.model_params,
+        )
     ))
-    asyncio.run(client.close())
 
     for mid, rec in records.items():
         typer.echo(f"  {mid}: task_id={rec.task_id} status={rec.status}")
@@ -185,9 +191,9 @@ def poll(
 def _poll_model_select(name: str) -> None:
     from styleclaw.scripts.poll import poll_model_select
 
-    client = _get_client()
-    records = asyncio.run(poll_model_select(name, client))
-    asyncio.run(client.close())
+    records = asyncio.run(_run_with_client(
+        lambda c: poll_model_select(name, c)
+    ))
 
     for mid, rec in records.items():
         n_results = len(rec.results)
@@ -197,9 +203,9 @@ def _poll_model_select(name: str) -> None:
 def _poll_style_refine(name: str, state: "ProjectState") -> None:
     from styleclaw.scripts.poll import poll_style_refine
 
-    client = _get_client()
-    records = asyncio.run(poll_style_refine(name, client, state.current_round))
-    asyncio.run(client.close())
+    records = asyncio.run(_run_with_client(
+        lambda c: poll_style_refine(name, c, state.current_round)
+    ))
 
     for mid, rec in records.items():
         typer.echo(f"  {mid}: status={rec.status} images={len(rec.results)}")
@@ -209,9 +215,9 @@ def _poll_batch(name: str, state: "ProjectState") -> None:
     from styleclaw.scripts.poll import poll_batch
 
     phase = "i2i" if state.phase == Phase.BATCH_I2I else "t2i"
-    client = _get_client()
-    records = asyncio.run(poll_batch(name, client, state.current_batch, phase=phase))
-    asyncio.run(client.close())
+    records = asyncio.run(_run_with_client(
+        lambda c: poll_batch(name, c, state.current_batch, phase=phase)
+    ))
 
     completed = sum(1 for r in records.values() if r.status == "SUCCESS")
     typer.echo(f"Batch poll: {completed}/{len(records)} completed.")
@@ -262,6 +268,13 @@ def _evaluate_model_select(name: str) -> None:
         typer.echo(f"  {ev.model}: total={ev.total:.1f} {ev.analysis[:60]}")
     typer.echo(f"Recommendation: {evaluation.recommendation}")
 
+    from styleclaw.scripts.report import generate_model_select_report
+
+    report_path = generate_model_select_report(name)
+    typer.echo(f"\nReport generated: {report_path}")
+    typer.echo("Review the report, then run 'select-model' to confirm which models to use.")
+    typer.echo(f"  Example: styleclaw select-model {name} --models mj-v7,niji7")
+
 
 def _evaluate_style_refine(name: str, state: "ProjectState") -> None:
     round_num = state.current_round
@@ -299,12 +312,24 @@ def _evaluate_style_refine(name: str, state: "ProjectState") -> None:
         )
     typer.echo(f"Recommendation: {evaluation.recommendation}")
 
+    from styleclaw.scripts.report import generate_style_refine_report
+
+    report_path = generate_style_refine_report(name, round_num)
+    typer.echo(f"\nReport generated: {report_path}")
+
     if evaluation.should_approve():
-        typer.echo("All scores meet threshold. Run 'approve' to advance to BATCH_T2I.")
+        typer.echo("All scores meet threshold. Review the report, then run 'approve' to advance to BATCH_T2I.")
     elif evaluation.needs_human():
-        typer.echo("Some scores are too low. Human intervention recommended.")
+        typer.echo("Some scores are too low. Review the report and decide:")
+        typer.echo(f"  - Adjust trigger: styleclaw adjust {name} --direction '...'")
+        typer.echo(f"  - Switch models:  styleclaw select-model {name} --models ...")
+        typer.echo(f"  - Approve anyway: styleclaw approve {name}")
     else:
-        typer.echo(f"Continue refining. Direction: {evaluation.next_direction}")
+        typer.echo(f"Direction: {evaluation.next_direction}")
+        typer.echo("Review the report, then:")
+        typer.echo(f"  - Continue refining: styleclaw refine {name}")
+        typer.echo(f"  - Switch models:     styleclaw select-model {name} --models ...")
+        typer.echo(f"  - Approve:           styleclaw approve {name}")
 
 
 @app.command(name="select-model")
@@ -312,10 +337,13 @@ def select_model(
     name: str = typer.Argument(..., help="Project name"),
     models: str = typer.Option(..., "--models", help="Comma-separated model IDs"),
 ) -> None:
-    """Confirm selected models for style refinement."""
+    """Confirm selected models for style refinement. Works in MODEL_SELECT or STYLE_REFINE phase."""
     state = project_store.load_state(name)
-    if state.phase != Phase.MODEL_SELECT:
-        typer.echo(f"Error: Project must be in MODEL_SELECT phase (current: {state.phase})", err=True)
+    if state.phase not in (Phase.MODEL_SELECT, Phase.STYLE_REFINE):
+        typer.echo(
+            f"Error: Project must be in MODEL_SELECT or STYLE_REFINE phase (current: {state.phase})",
+            err=True,
+        )
         raise typer.Exit(1)
 
     from styleclaw.providers.runninghub.models import MODEL_REGISTRY
@@ -326,12 +354,17 @@ def select_model(
             typer.echo(f"Error: Unknown model '{m}'. Available: {list(MODEL_REGISTRY.keys())}", err=True)
             raise typer.Exit(1)
 
-    new_state = advance(state, Phase.STYLE_REFINE)
-    new_state = new_state.with_selected_models(selected)
-    project_store.save_state(name, new_state)
-
-    typer.echo(f"Selected models: {', '.join(selected)}")
-    typer.echo(f"Phase advanced to: {new_state.phase}")
+    if state.phase == Phase.MODEL_SELECT:
+        new_state = advance(state, Phase.STYLE_REFINE)
+        new_state = new_state.with_selected_models(selected)
+        project_store.save_state(name, new_state)
+        typer.echo(f"Selected models: {', '.join(selected)}")
+        typer.echo(f"Phase advanced to: {new_state.phase}")
+    else:
+        new_state = state.with_selected_models(selected)
+        project_store.save_state(name, new_state)
+        typer.echo(f"Updated models: {', '.join(selected)} (staying in STYLE_REFINE)")
+        typer.echo(f"Run 'refine' to generate new trigger phrases for these models.")
 
 
 # --- Phase 3: STYLE_REFINE commands ---
@@ -403,6 +436,7 @@ def refine(
 def approve(
     name: str = typer.Argument(..., help="Project name"),
     phase: str = typer.Option("batch-t2i", "--phase", help="Target phase: batch-t2i or completed"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ) -> None:
     """Approve current style and advance to next phase."""
     state = project_store.load_state(name)
@@ -411,11 +445,30 @@ def approve(
         if state.phase != Phase.STYLE_REFINE:
             typer.echo(f"Error: Must be in STYLE_REFINE (current: {state.phase})", err=True)
             raise typer.Exit(1)
+
+        trigger = _get_current_trigger(name, state)
+        typer.echo("=== Approve & Start Batch Testing ===")
+        typer.echo(f"  Models:  {', '.join(state.selected_models)}")
+        typer.echo(f"  Trigger: {trigger}")
+        typer.echo(f"  Next:    BATCH_T2I (100 test cases)")
+
+        if not yes and not typer.confirm("Proceed?"):
+            typer.echo("Cancelled.")
+            raise typer.Exit(0)
+
         new_state = advance(state, Phase.BATCH_T2I)
     elif phase == "completed":
         if state.phase != Phase.BATCH_I2I:
             typer.echo(f"Error: Must be in BATCH_I2I (current: {state.phase})", err=True)
             raise typer.Exit(1)
+
+        typer.echo("=== Mark Project Completed ===")
+        typer.echo(f"  Models: {', '.join(state.selected_models)}")
+
+        if not yes and not typer.confirm("Proceed?"):
+            typer.echo("Cancelled.")
+            raise typer.Exit(0)
+
         new_state = advance(state, Phase.COMPLETED)
     else:
         typer.echo(f"Error: Unknown target phase '{phase}'", err=True)
@@ -423,6 +476,17 @@ def approve(
 
     project_store.save_state(name, new_state)
     typer.echo(f"Phase advanced to: {new_state.phase}")
+
+
+def _get_current_trigger(name: str, state: ProjectState) -> str:
+    if state.current_round >= 1:
+        prompt_config = project_store.load_prompt_config(name, state.current_round)
+        return prompt_config.trigger_phrase
+    try:
+        analysis = project_store.load_analysis(name)
+        return analysis.trigger_phrase
+    except FileNotFoundError:
+        return "(unknown)"
 
 
 @app.command()
@@ -513,11 +577,11 @@ def batch_submit_cmd(
 
         from styleclaw.scripts.batch_submit import batch_submit_i2i
 
-        client = _get_client()
-        records = asyncio.run(batch_submit_i2i(
-            name, client, state.current_batch, model_id, prompt_config.trigger_phrase,
+        records = asyncio.run(_run_with_client(
+            lambda c: batch_submit_i2i(
+                name, c, state.current_batch, model_id, prompt_config.trigger_phrase,
+            )
         ))
-        asyncio.run(client.close())
 
         typer.echo(f"Submitted {len(records)} i2i tasks.")
     else:
@@ -535,11 +599,11 @@ def batch_submit_cmd(
 
         from styleclaw.scripts.batch_submit import batch_submit_t2i
 
-        client = _get_client()
-        records = asyncio.run(batch_submit_t2i(
-            name, client, state.current_batch, model_id, sref_url=sref_url,
+        records = asyncio.run(_run_with_client(
+            lambda c: batch_submit_t2i(
+                name, c, state.current_batch, model_id, sref_url=sref_url,
+            )
         ))
-        asyncio.run(client.close())
 
         typer.echo(f"Submitted {len(records)} t2i tasks for batch {state.current_batch}.")
 
@@ -603,19 +667,20 @@ def add_refs(
 
     from styleclaw.providers.runninghub.upload import upload_file
 
-    client = _get_client()
-    upload_records = []
-    for i, img_path in enumerate(images, 1):
-        if not img_path.exists():
-            typer.echo(f"Error: Image not found: {img_path}", err=True)
-            raise typer.Exit(1)
-        dest = source_dir / img_path.name
-        shutil.copy2(img_path, dest)
-        record = asyncio.run(upload_file(client, dest))
-        upload_records.append(record)
-        typer.echo(f"  Uploaded {i}/{len(images)}: {img_path.name}")
+    async def _upload_all(client):
+        records = []
+        for i, img_path in enumerate(images, 1):
+            if not img_path.exists():
+                typer.echo(f"Error: Image not found: {img_path}", err=True)
+                raise typer.Exit(1)
+            dest = source_dir / img_path.name
+            shutil.copy2(img_path, dest)
+            record = await upload_file(client, dest)
+            records.append(record)
+            typer.echo(f"  Uploaded {i}/{len(images)}: {img_path.name}")
+        return records
 
-    asyncio.run(client.close())
+    upload_records = asyncio.run(_run_with_client(_upload_all))
     project_store.save_i2i_uploads(name, batch_num, upload_records)
 
     if state.current_batch != batch_num:

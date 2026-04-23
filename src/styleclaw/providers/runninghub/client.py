@@ -27,10 +27,7 @@ class RunningHubClient:
         self._api_key = api_key
         self._client = httpx.AsyncClient(
             base_url=BASE_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
+            headers={"Authorization": f"Bearer {api_key}"},
             timeout=60,
         )
 
@@ -75,7 +72,6 @@ class RunningHubClient:
                     resp = await self._client.post(
                         path,
                         files={"file": f},
-                        headers={"Authorization": f"Bearer {self._api_key}"},
                     )
                 resp.raise_for_status()
                 return resp.json()

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 from typing import Any
 
-import boto3
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +20,17 @@ class BedrockProvider:
         self._model_id = model_id or os.getenv(
             "CLAUDE_MODEL", "anthropic.claude-sonnet-4-20250514"
         )
-        self._client = boto3.client(
-            "bedrock-runtime",
-            region_name=self._region,
+        bearer_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK", "")
+        if bearer_token:
+            logger.info("Found token in environment variables.")
+        base_url = f"https://bedrock-runtime.{self._region}.amazonaws.com"
+        self._http = httpx.AsyncClient(
+            base_url=base_url,
+            headers={
+                "Authorization": f"Bearer {bearer_token}",
+                "Content-Type": "application/json",
+            },
+            timeout=120,
         )
 
     async def invoke(
@@ -41,15 +48,13 @@ class BedrockProvider:
             "temperature": temperature,
         }
 
-        response = await asyncio.to_thread(
-            self._client.invoke_model,
-            modelId=self._model_id,
-            contentType="application/json",
-            accept="application/json",
-            body=json.dumps(body),
-        )
+        url = f"/model/{self._model_id}/invoke"
+        resp = await self._http.post(url, content=json.dumps(body))
+        if resp.status_code != 200:
+            logger.error("Bedrock error %d: %s", resp.status_code, resp.text)
+        resp.raise_for_status()
 
-        result = json.loads(response["body"].read())
+        result = resp.json()
         text_blocks = [
             block["text"]
             for block in result.get("content", [])

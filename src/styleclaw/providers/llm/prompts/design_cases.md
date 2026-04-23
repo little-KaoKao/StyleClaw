@@ -26,6 +26,7 @@ Fill in the `description` field for each test case below. Each description shoul
 3. For character categories: describe appearance, pose, clothing, action.
 4. For scene categories: describe setting, time of day, weather, objects, mood.
 5. For group: describe number of characters, relationships, interaction, setting.
+6. **CRITICAL — Generalization testing**: Out of all 100 cases, only 1-2 cases may reference IP-specific elements (e.g., costumes, props, or settings directly tied to the IP). The remaining 98+ cases MUST describe completely original, diverse characters and scenes with NO connection to the IP. This tests whether the style trigger generalizes beyond the source material.
 
 ## Output Format
 

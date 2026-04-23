@@ -14,13 +14,29 @@ POLL_INTERVAL = 3
 TASK_TIMEOUT = 300
 
 
+SUBMIT_RETRIES = 3
+SUBMIT_RETRY_DELAY = 2
+
+
 async def submit_task(
     client: RunningHubClient,
     endpoint: str,
     params: dict[str, Any],
     model_id: str,
 ) -> TaskRecord:
-    resp = await client.post(endpoint, params)
+    resp: dict[str, Any] = {}
+    for attempt in range(SUBMIT_RETRIES):
+        resp = await client.post(endpoint, params)
+        task_id = resp.get("taskId", "")
+        error_code = resp.get("errorCode", "")
+        if task_id:
+            break
+        logger.warning(
+            "Submit to %s returned empty taskId (attempt %d/%d, errorCode=%s, errorMessage=%s). Retrying...",
+            endpoint, attempt + 1, SUBMIT_RETRIES, error_code, resp.get("errorMessage", ""),
+        )
+        if attempt < SUBMIT_RETRIES - 1:
+            await asyncio.sleep(SUBMIT_RETRY_DELAY * (attempt + 1))
 
     task_id = resp.get("taskId", "")
     status = resp.get("status", "QUEUED")
@@ -29,12 +45,13 @@ async def submit_task(
     record = TaskRecord(
         task_id=task_id,
         model_id=model_id,
-        status=status,
+        status=status if task_id else "FAILED",
         prompt=params.get("prompt", ""),
         params=params,
         results=results,
+        error_message=resp.get("errorMessage", "") if not task_id else "",
     )
-    logger.info("Submitted task %s to %s (status=%s)", task_id, endpoint, status)
+    logger.info("Submitted task %s to %s (status=%s)", task_id or "(empty)", endpoint, record.status)
     return record
 
 
@@ -68,11 +85,20 @@ async def poll_task(
 async def poll_and_update(
     client: RunningHubClient, record: TaskRecord
 ) -> TaskRecord:
-    if record.status == "SUCCESS":
+    if record.status in ("SUCCESS", "FAILED"):
         return record
 
-    result = await poll_task(client, record.task_id)
     from datetime import datetime, timezone
+
+    try:
+        result = await poll_task(client, record.task_id)
+    except (RuntimeError, TimeoutError) as exc:
+        logger.warning("Task %s failed: %s", record.task_id, exc)
+        return record.model_copy(update={
+            "status": "FAILED",
+            "error_message": str(exc),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        })
 
     return record.model_copy(update={
         "status": "SUCCESS",

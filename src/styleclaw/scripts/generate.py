@@ -68,7 +68,8 @@ async def generate_style_refine(
     async def _submit_one(model_id: str) -> TaskRecord:
         config = get_model(model_id)
         extra = (extra_model_params or {}).get(model_id, {})
-        extra.setdefault("maxImages", IMAGES_PER_MODEL_REFINE)
+        if not config.supports_sref:
+            extra.setdefault("maxImages", IMAGES_PER_MODEL_REFINE)
         params = build_params(
             model_id=model_id,
             trigger_phrase=trigger_phrase,
