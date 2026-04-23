@@ -43,7 +43,7 @@ class TaskRecord(BaseModel):
     status: str = "QUEUED"
     prompt: str = ""
     params: dict[str, Any] = Field(default_factory=dict)
-    results: list[dict[str, str]] = Field(default_factory=list)
+    results: list[dict[str, Any]] = Field(default_factory=list)
     error_message: str = ""
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     completed_at: str = ""

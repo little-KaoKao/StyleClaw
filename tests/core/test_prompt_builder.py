@@ -26,9 +26,10 @@ class TestBuildParams:
 
     def test_seedream_uses_width_height(self):
         params = build_params("seedream", "test", aspect_ratio="16:9")
-        assert params["width"] == 2048
-        assert params["height"] == 1152
+        assert params["width"] == 2560
+        assert params["height"] == 1440
         assert "aspectRatio" not in params
+        assert "resolution" not in params
 
     def test_seedream_truncates_long_prompt(self):
         long_prompt = "x" * 3000

@@ -52,7 +52,6 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         i2i_endpoint="/openapi/v2/seedream-v5-lite/image-to-image",
         max_prompt_length=2000,
         uses_width_height=True,
-        default_params={"resolution": "2k"},
     ),
 }
 

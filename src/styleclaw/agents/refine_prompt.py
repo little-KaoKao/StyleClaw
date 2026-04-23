@@ -4,7 +4,7 @@ import json
 import logging
 from pathlib import Path
 
-from styleclaw.core.image_utils import image_to_base64, media_type_for
+from styleclaw.core.image_utils import encode_image_for_llm
 from styleclaw.core.models import PromptConfig, RoundEvaluation
 from styleclaw.providers.llm.base import LLMProvider
 
@@ -39,13 +39,10 @@ async def refine_prompt(
 
     content: list[dict] = []
     for img_path in ref_image_paths:
+        b64_data, mt = encode_image_for_llm(img_path)
         content.append({
             "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": media_type_for(img_path),
-                "data": image_to_base64(img_path),
-            },
+            "source": {"type": "base64", "media_type": mt, "data": b64_data},
         })
     content.append({
         "type": "text",
