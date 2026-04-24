@@ -1,4 +1,4 @@
-from styleclaw.agents.refine_prompt import _clean_json
+from styleclaw.core.text_utils import clean_json as _clean_json
 
 
 class TestCleanJson:
