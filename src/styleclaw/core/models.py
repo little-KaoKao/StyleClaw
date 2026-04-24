@@ -199,3 +199,21 @@ class ProjectState(_FrozenModel):
             "current_batch": batch_num,
             "last_updated": datetime.now(timezone.utc).isoformat(),
         })
+
+
+class Action(BaseModel):
+    name: str
+    description: str
+    args: dict[str, Any] = Field(default_factory=dict)
+
+
+class LoopConfig(BaseModel):
+    start_step: int
+    end_step: int
+    max_iterations: int = 5
+
+
+class ActionPlan(BaseModel):
+    summary: str
+    steps: list[Action]
+    loop: LoopConfig | None = None
