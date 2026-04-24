@@ -32,8 +32,8 @@ INIT → MODEL_SELECT → STYLE_REFINE → BATCH_T2I → BATCH_I2I → COMPLETED
 ## 安装
 
 ```bash
-git clone https://github.com/your-org/styleclaw.git
-cd styleclaw
+git clone https://github.com/little-KaoKao/StyleClaw.git
+cd StyleClaw
 
 # 安装所有依赖
 uv sync
@@ -65,6 +65,34 @@ uv run styleclaw --help
 ```
 
 ## 快速上手
+
+### 自然语言模式（推荐）
+
+使用 `styleclaw run` + 自然语言描述你想做什么，系统自动规划并执行：
+
+```bash
+# 先创建项目
+uv run styleclaw init spider-verse \
+  --ref ref1.png --ref ref2.png --ref ref3.png \
+  --info "蜘蛛侠：平行宇宙动画风格"
+
+# 然后用自然语言描述意图
+uv run styleclaw run "分析风格并选出最佳模型"
+uv run styleclaw run "迭代优化触发短语直到评分通过"
+uv run styleclaw run "设计测试用例并跑批量生成"
+```
+
+`run` 命令通过 LLM 将你的意图转换为执行计划，展示给你确认后逐步执行。支持循环执行（精炼 → 生成 → 等待 → 评估），根据评分自动决定是否继续迭代。
+
+```bash
+# 选项
+uv run styleclaw run "<意图>" -p <项目名>   # 指定项目（仅有一个项目时自动选择）
+uv run styleclaw run "<意图>" --yes          # 跳过确认直接执行
+```
+
+### 逐步手动模式
+
+也可以手动执行每个命令，实现更精细的控制：
 
 ```bash
 # 1. 创建项目，指定参考图片和 IP 描述
@@ -98,6 +126,14 @@ uv run styleclaw report spider-verse
 ```
 
 ## CLI 命令参考
+
+### 编排器
+
+| 命令 | 说明 |
+|------|------|
+| `run "<意图>"` | 自然语言执行 — LLM 规划，用户确认，系统自动执行 |
+| `run "<意图>" -p <name>` | 指定项目名称 |
+| `run "<意图>" --yes` | 跳过确认，直接执行 |
 
 ### 核心流水线命令
 

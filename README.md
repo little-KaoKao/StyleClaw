@@ -32,8 +32,8 @@ INIT → MODEL_SELECT → STYLE_REFINE → BATCH_T2I → BATCH_I2I → COMPLETED
 ## Installation
 
 ```bash
-git clone https://github.com/your-org/styleclaw.git
-cd styleclaw
+git clone https://github.com/little-KaoKao/StyleClaw.git
+cd StyleClaw
 
 # Install all dependencies
 uv sync
@@ -65,6 +65,34 @@ uv run styleclaw --help
 ```
 
 ## Quick Start
+
+### Natural Language Mode (Recommended)
+
+Use `styleclaw run` with a natural language description — the system plans and executes automatically:
+
+```bash
+# Create a project first
+uv run styleclaw init spider-verse \
+  --ref ref1.png --ref ref2.png --ref ref3.png \
+  --info "Spider-Verse animation style"
+
+# Then describe what you want in natural language
+uv run styleclaw run "analyze style and select the best model"
+uv run styleclaw run "refine trigger phrase until scores pass"
+uv run styleclaw run "design test cases and run batch generation"
+```
+
+The `run` command converts your intent into an execution plan via LLM, displays it for confirmation, then executes step by step. It supports loop execution for iterative refinement (refine → generate → poll → evaluate) with automatic score-based termination.
+
+```bash
+# Options
+uv run styleclaw run "<intent>" -p <project>   # Specify project (auto-detected if only one)
+uv run styleclaw run "<intent>" --yes           # Skip confirmation prompt
+```
+
+### Step-by-Step Mode
+
+You can also run each command manually for finer control:
 
 ```bash
 # 1. Create a project with reference images
@@ -98,6 +126,14 @@ uv run styleclaw report spider-verse
 ```
 
 ## CLI Reference
+
+### Orchestrator
+
+| Command | Description |
+|---------|-------------|
+| `run "<intent>"` | Natural language execution — LLM plans, you confirm, system executes |
+| `run "<intent>" -p <name>` | Specify project explicitly |
+| `run "<intent>" --yes` | Skip confirmation and execute immediately |
 
 ### Core Pipeline Commands
 
