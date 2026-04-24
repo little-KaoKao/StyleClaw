@@ -313,10 +313,10 @@ def load_all_i2i_task_records(
 
 
 def _read_json(path: Path) -> dict | list:
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
 def _write_json(path: Path, data: dict | list) -> None:
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)

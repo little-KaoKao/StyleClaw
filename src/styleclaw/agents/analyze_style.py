@@ -19,7 +19,7 @@ async def analyze_style(
     ref_image_paths: list[Path],
     ip_info: str,
 ) -> StyleAnalysis:
-    system_prompt = PROMPT_TEMPLATE_PATH.read_text().replace("{ip_info}", ip_info)
+    system_prompt = PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8").replace("{ip_info}", ip_info)
 
     content: list[dict] = []
     for img_path in ref_image_paths:

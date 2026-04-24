@@ -19,7 +19,7 @@ async def evaluate_models(
     ref_image_paths: list[Path],
     model_images: dict[str, list[Path]],
 ) -> ModelEvaluation:
-    system_prompt = PROMPT_TEMPLATE_PATH.read_text()
+    system_prompt = PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
 
     content: list[dict] = []
 

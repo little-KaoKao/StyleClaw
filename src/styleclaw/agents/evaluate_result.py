@@ -23,7 +23,7 @@ async def evaluate_round(
     round_num: int,
 ) -> RoundEvaluation:
     system_prompt = (
-        PROMPT_TEMPLATE_PATH.read_text()
+        PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
         .replace("{round_num}", str(round_num))
     )
 

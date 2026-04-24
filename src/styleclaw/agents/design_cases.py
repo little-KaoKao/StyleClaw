@@ -26,7 +26,7 @@ async def design_cases(
     skeleton_text = _format_skeleton(skeleton)
 
     system_prompt = (
-        PROMPT_TEMPLATE_PATH.read_text()
+        PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
         .replace("{ip_info}", ip_info)
         .replace("{trigger_phrase}", trigger_phrase)
         .replace("{case_skeleton}", skeleton_text)

@@ -30,7 +30,7 @@ async def refine_prompt(
     history_text = _build_history_text(evaluations)
 
     system_prompt = (
-        PROMPT_TEMPLATE_PATH.read_text()
+        PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
         .replace("{trigger_phrase}", current_trigger)
         .replace("{round_num}", str(round_num))
         .replace("{ip_info}", ip_info)
