@@ -5,7 +5,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Phase(StrEnum):
@@ -17,13 +17,24 @@ class Phase(StrEnum):
     COMPLETED = "COMPLETED"
 
 
-class HistoryEntry(BaseModel):
+class TaskStatus(StrEnum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+
+
+class _FrozenModel(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+
+class HistoryEntry(_FrozenModel):
     phase: Phase
     completed_at: str
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class ProjectConfig(BaseModel):
+class ProjectConfig(_FrozenModel):
     name: str
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     description: str = ""
@@ -31,16 +42,16 @@ class ProjectConfig(BaseModel):
     ref_images: list[str] = Field(default_factory=list)
 
 
-class UploadRecord(BaseModel):
+class UploadRecord(_FrozenModel):
     local_path: str
     url: str
     file_name: str
 
 
-class TaskRecord(BaseModel):
+class TaskRecord(_FrozenModel):
     task_id: str
     model_id: str
-    status: str = "QUEUED"
+    status: str = TaskStatus.QUEUED
     prompt: str = ""
     params: dict[str, Any] = Field(default_factory=dict)
     results: list[dict[str, Any]] = Field(default_factory=list)
@@ -49,7 +60,7 @@ class TaskRecord(BaseModel):
     completed_at: str = ""
 
 
-class StyleAnalysis(BaseModel):
+class StyleAnalysis(_FrozenModel):
     color_palette: str = ""
     line_style: str = ""
     lighting: str = ""
@@ -61,30 +72,7 @@ class StyleAnalysis(BaseModel):
     model_suggestions: list[str] = Field(default_factory=list)
 
 
-class ModelScore(BaseModel):
-    model: str
-    image: str = ""
-    scores: dict[str, float] = Field(default_factory=dict)
-    total: float = 0.0
-    analysis: str = ""
-    suggestions: str = ""
-
-
-class ModelEvaluation(BaseModel):
-    evaluations: list[ModelScore] = Field(default_factory=list)
-    recommendation: str = ""
-    next_direction: str = ""
-
-
-class PromptConfig(BaseModel):
-    round: int = 0
-    trigger_phrase: str = ""
-    model_params: dict[str, dict[str, Any]] = Field(default_factory=dict)
-    derived_from: str = ""
-    adjustment_note: str = ""
-
-
-class DimensionScores(BaseModel):
+class DimensionScores(_FrozenModel):
     color_palette: float = 0.0
     line_style: float = 0.0
     lighting: float = 0.0
@@ -104,7 +92,7 @@ class DimensionScores(BaseModel):
         return self.min_score() >= threshold
 
 
-class RoundScore(BaseModel):
+class ModelScore(_FrozenModel):
     model: str
     image: str = ""
     scores: DimensionScores = Field(default_factory=DimensionScores)
@@ -113,7 +101,30 @@ class RoundScore(BaseModel):
     suggestions: str = ""
 
 
-class RoundEvaluation(BaseModel):
+class ModelEvaluation(_FrozenModel):
+    evaluations: list[ModelScore] = Field(default_factory=list)
+    recommendation: str = ""
+    next_direction: str = ""
+
+
+class PromptConfig(_FrozenModel):
+    round: int = 0
+    trigger_phrase: str = ""
+    model_params: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    derived_from: str = ""
+    adjustment_note: str = ""
+
+
+class RoundScore(_FrozenModel):
+    model: str
+    image: str = ""
+    scores: DimensionScores = Field(default_factory=DimensionScores)
+    total: float = 0.0
+    analysis: str = ""
+    suggestions: str = ""
+
+
+class RoundEvaluation(_FrozenModel):
     round: int = 0
     evaluations: list[RoundScore] = Field(default_factory=list)
     recommendation: str = ""
@@ -134,7 +145,7 @@ class RoundEvaluation(BaseModel):
         )
 
 
-class BatchCase(BaseModel):
+class BatchCase(_FrozenModel):
     id: str
     category: str
     description: str
@@ -142,13 +153,13 @@ class BatchCase(BaseModel):
     status: str = "pending"
 
 
-class BatchConfig(BaseModel):
+class BatchConfig(_FrozenModel):
     batch: int = 0
     trigger_phrase: str = ""
     cases: list[BatchCase] = Field(default_factory=list)
 
 
-class ProjectState(BaseModel):
+class ProjectState(_FrozenModel):
     phase: Phase = Phase.INIT
     selected_models: list[str] = Field(default_factory=list)
     current_round: int = 0

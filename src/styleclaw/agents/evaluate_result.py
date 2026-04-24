@@ -6,6 +6,7 @@ from pathlib import Path
 
 from styleclaw.core.image_utils import encode_image_for_llm
 from styleclaw.core.models import RoundEvaluation
+from styleclaw.core.text_utils import clean_json
 from styleclaw.providers.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -53,19 +54,10 @@ async def evaluate_round(
     messages = [{"role": "user", "content": content}]
     raw = await llm.invoke(system=system_prompt, messages=messages, max_tokens=4096)
 
-    cleaned = _clean_json(raw)
+    cleaned = clean_json(raw)
     data = json.loads(cleaned)
     evaluation = RoundEvaluation.model_validate(data)
     logger.info(
         "Round %d evaluation: recommendation=%s", round_num, evaluation.recommendation,
     )
     return evaluation
-
-
-def _clean_json(raw: str) -> str:
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1]
-    if cleaned.endswith("```"):
-        cleaned = cleaned.rsplit("```", 1)[0]
-    return cleaned.strip()

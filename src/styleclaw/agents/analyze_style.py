@@ -6,6 +6,7 @@ from pathlib import Path
 
 from styleclaw.core.image_utils import encode_image_for_llm
 from styleclaw.core.models import StyleAnalysis
+from styleclaw.core.text_utils import clean_json
 from styleclaw.providers.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -39,13 +40,7 @@ async def analyze_style(
     messages = [{"role": "user", "content": content}]
     raw = await llm.invoke(system=system_prompt, messages=messages)
 
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1]
-    if cleaned.endswith("```"):
-        cleaned = cleaned.rsplit("```", 1)[0]
-    cleaned = cleaned.strip()
-
+    cleaned = clean_json(raw)
     data = json.loads(cleaned)
     analysis = StyleAnalysis.model_validate(data)
     logger.info("Style analysis complete. Trigger: %s", analysis.trigger_phrase[:80])

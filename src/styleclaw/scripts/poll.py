@@ -4,7 +4,7 @@ import asyncio
 import logging
 from pathlib import Path
 
-from styleclaw.core.models import TaskRecord
+from styleclaw.core.models import TaskRecord, TaskStatus
 from styleclaw.providers.runninghub.client import RunningHubClient
 from styleclaw.providers.runninghub.tasks import poll_and_update
 from styleclaw.storage import project_store
@@ -24,8 +24,8 @@ async def poll_model_select(
     updated: dict[str, TaskRecord] = {}
 
     for model_id, record in records.items():
-        if record.status == "SUCCESS":
-            logger.info("Task %s already completed, skipping.", record.task_id)
+        if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
+            logger.info("Task %s already terminal (%s), skipping.", record.task_id, record.status)
             updated[model_id] = record
             continue
 
@@ -64,7 +64,7 @@ async def poll_style_refine(
     updated: dict[str, TaskRecord] = {}
 
     for model_id, record in records.items():
-        if record.status == "SUCCESS":
+        if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
             logger.info("Task %s already completed, skipping.", record.task_id)
             updated[model_id] = record
             continue
@@ -104,7 +104,7 @@ async def poll_batch(
     updated: dict[str, TaskRecord] = {}
 
     for case_id, record in records.items():
-        if record.status in ("SUCCESS", "FAILED"):
+        if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
             updated[case_id] = record
             continue
 

@@ -12,14 +12,14 @@ BASE_URL = "https://www.runninghub.cn"
 MAX_RETRIES = 3
 CONCURRENCY_LIMIT = 5
 
-_semaphore: asyncio.Semaphore | None = None
+_semaphore_map: dict[int, asyncio.Semaphore] = {}
 
 
 def _get_semaphore() -> asyncio.Semaphore:
-    global _semaphore
-    if _semaphore is None:
-        _semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
-    return _semaphore
+    loop_id = id(asyncio.get_running_loop())
+    if loop_id not in _semaphore_map:
+        _semaphore_map[loop_id] = asyncio.Semaphore(CONCURRENCY_LIMIT)
+    return _semaphore_map[loop_id]
 
 
 class RunningHubClient:

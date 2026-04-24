@@ -4,7 +4,7 @@ import asyncio
 import logging
 from typing import Any
 
-from styleclaw.core.models import TaskRecord
+from styleclaw.core.models import TaskRecord, TaskStatus
 from styleclaw.providers.runninghub.client import RunningHubClient
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ async def submit_task(
     record = TaskRecord(
         task_id=task_id,
         model_id=model_id,
-        status=status if task_id else "FAILED",
+        status=status if task_id else TaskStatus.FAILED,
         prompt=params.get("prompt", ""),
         params=params,
         results=results,
@@ -85,7 +85,7 @@ async def poll_task(
 async def poll_and_update(
     client: RunningHubClient, record: TaskRecord
 ) -> TaskRecord:
-    if record.status in ("SUCCESS", "FAILED"):
+    if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
         return record
 
     from datetime import datetime, timezone
@@ -95,13 +95,13 @@ async def poll_and_update(
     except (RuntimeError, TimeoutError) as exc:
         logger.warning("Task %s failed: %s", record.task_id, exc)
         return record.model_copy(update={
-            "status": "FAILED",
+            "status": TaskStatus.FAILED,
             "error_message": str(exc),
             "completed_at": datetime.now(timezone.utc).isoformat(),
         })
 
     return record.model_copy(update={
-        "status": "SUCCESS",
+        "status": TaskStatus.SUCCESS,
         "results": result.get("results", []),
         "completed_at": datetime.now(timezone.utc).isoformat(),
     })

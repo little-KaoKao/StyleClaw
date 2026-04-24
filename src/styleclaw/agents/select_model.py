@@ -6,6 +6,7 @@ from pathlib import Path
 
 from styleclaw.core.image_utils import encode_image_for_llm
 from styleclaw.core.models import ModelEvaluation
+from styleclaw.core.text_utils import clean_json
 from styleclaw.providers.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -47,13 +48,7 @@ async def evaluate_models(
     messages = [{"role": "user", "content": content}]
     raw = await llm.invoke(system=system_prompt, messages=messages, max_tokens=4096)
 
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1]
-    if cleaned.endswith("```"):
-        cleaned = cleaned.rsplit("```", 1)[0]
-    cleaned = cleaned.strip()
-
+    cleaned = clean_json(raw)
     data = json.loads(cleaned)
     evaluation = ModelEvaluation.model_validate(data)
     logger.info("Model evaluation complete. Recommendation: %s", evaluation.recommendation)

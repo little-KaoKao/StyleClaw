@@ -6,6 +6,7 @@ from pathlib import Path
 
 from styleclaw.core.case_generator import generate_case_skeleton
 from styleclaw.core.models import BatchCase, BatchConfig
+from styleclaw.core.text_utils import clean_json
 from styleclaw.providers.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -35,12 +36,24 @@ async def design_cases(
         {"type": "text", "text": "Design 100 diverse test cases for batch image generation."},
     ]}]
 
-    raw = await llm.invoke(system=system_prompt, messages=messages, max_tokens=8192)
+    raw = await llm.invoke(system=system_prompt, messages=messages, max_tokens=16384)
 
-    cleaned = _clean_json(raw)
-    data = json.loads(cleaned)
+    cleaned = clean_json(raw)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        last_brace = cleaned.rfind("}")
+        if last_brace < 0:
+            raise
+        truncated = cleaned[: last_brace + 1]
+        bracket = truncated.rfind("]")
+        if bracket < 0:
+            raise
+        data = json.loads(truncated[: bracket + 1].rsplit(",", 1)[0] + "]}")
 
     cases = [BatchCase.model_validate(c) for c in data["cases"]]
+    if not cases:
+        raise ValueError("LLM returned zero cases — response may have been truncated.")
     config = BatchConfig(
         batch=batch_num,
         trigger_phrase=trigger_phrase,
@@ -59,12 +72,3 @@ def _format_skeleton(cases: list[BatchCase]) -> str:
             lines.append(f"\n### {current_cat} (aspect: {c.aspect_ratio})")
         lines.append(f"- {c.id}: (fill in description)")
     return "\n".join(lines)
-
-
-def _clean_json(raw: str) -> str:
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1]
-    if cleaned.endswith("```"):
-        cleaned = cleaned.rsplit("```", 1)[0]
-    return cleaned.strip()
