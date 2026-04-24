@@ -704,5 +704,73 @@ def add_refs(
     typer.echo(f"Added {len(upload_records)} reference images for i2i batch {batch_num}.")
 
 
+@app.command()
+def run(
+    intent: str = typer.Argument(..., help="Natural language description of what to do"),
+    project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+) -> None:
+    """Run actions from natural language intent (plan-then-execute)."""
+    if project is None:
+        projects = project_store.list_projects()
+        if len(projects) == 1:
+            project = projects[0]
+        elif not projects:
+            typer.echo("Error: No projects found. Run 'init' first.", err=True)
+            raise typer.Exit(1)
+        else:
+            typer.echo("Error: Multiple projects found. Specify --project.", err=True)
+            typer.echo(f"  Available: {', '.join(projects)}", err=True)
+            raise typer.Exit(1)
+
+    from styleclaw.orchestrator.actions import ACTION_REGISTRY, ExecutionContext, StepResult
+    from styleclaw.orchestrator.executor import display_plan, execute
+    from styleclaw.orchestrator.planner import plan
+    from styleclaw.providers.llm.bedrock import BedrockProvider
+
+    llm = BedrockProvider()
+    action_plan = asyncio.run(plan(llm, project, intent))
+
+    display_plan(action_plan, project)
+
+    if not yes and not typer.confirm("Execute?"):
+        typer.echo("Cancelled.")
+        raise typer.Exit(0)
+
+    needs_client = any(
+        ACTION_REGISTRY.get(s.name, None) and ACTION_REGISTRY[s.name].needs_client
+        for s in action_plan.steps
+    )
+    needs_llm = any(
+        ACTION_REGISTRY.get(s.name, None) and ACTION_REGISTRY[s.name].needs_llm
+        for s in action_plan.steps
+    )
+
+    def _on_start(i: int, name: str, desc: str) -> None:
+        typer.echo(f"\n  [{i + 1}/{len(action_plan.steps)}] {name} — {desc}")
+
+    def _on_done(i: int, name: str, result: StepResult) -> None:
+        if result.ok:
+            typer.echo(f"  -> {result.message}")
+        else:
+            typer.echo(f"  x  {result.message}", err=True)
+
+    async def _execute() -> None:
+        client = _get_client() if needs_client else None
+        ctx = ExecutionContext(
+            project=project,
+            client=client,
+            llm=llm if needs_llm else None,
+        )
+        try:
+            await execute(action_plan, ctx, on_step_start=_on_start, on_step_done=_on_done)
+        finally:
+            if client:
+                await client.close()
+
+    asyncio.run(_execute())
+    typer.echo("\nDone.")
+
+
 if __name__ == "__main__":
     app()
