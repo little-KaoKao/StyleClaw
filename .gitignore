@@ -17,5 +17,8 @@ build/
 .idea/
 .history/
 
+# Worktrees
+.worktrees/
+
 # OS
 .DS_Store
