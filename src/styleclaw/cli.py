@@ -9,7 +9,7 @@ from typing import Optional
 import typer
 from dotenv import load_dotenv
 
-from styleclaw.core.models import Phase, ProjectState
+from styleclaw.core.models import Phase, ProjectState, TaskStatus
 from styleclaw.core.state_machine import advance
 from styleclaw.storage import project_store
 
@@ -38,6 +38,15 @@ async def _run_with_client(coro_fn):
         return await coro_fn(client)
     finally:
         await client.close()
+
+
+async def _run_with_llm(coro_fn):
+    from styleclaw.providers.llm.bedrock import BedrockProvider
+    llm = BedrockProvider()
+    try:
+        return await coro_fn(llm)
+    finally:
+        await llm.close()
 
 
 @app.command()
@@ -102,10 +111,10 @@ def analyze(
     ref_paths = [root / r for r in config.ref_images]
 
     from styleclaw.agents.analyze_style import analyze_style
-    from styleclaw.providers.llm.bedrock import BedrockProvider
 
-    llm = BedrockProvider()
-    analysis = asyncio.run(analyze_style(llm, ref_paths, config.ip_info))
+    analysis = asyncio.run(_run_with_llm(
+        lambda llm: analyze_style(llm, ref_paths, config.ip_info)
+    ))
     project_store.save_analysis(name, analysis)
 
     new_state = advance(state, Phase.MODEL_SELECT)
@@ -219,7 +228,7 @@ def _poll_batch(name: str, state: "ProjectState") -> None:
         lambda c: poll_batch(name, c, state.current_batch, phase=phase)
     ))
 
-    completed = sum(1 for r in records.values() if r.status == "SUCCESS")
+    completed = sum(1 for r in records.values() if r.status == TaskStatus.SUCCESS)
     typer.echo(f"Batch poll: {completed}/{len(records)} completed.")
 
 
@@ -257,10 +266,10 @@ def _evaluate_model_select(name: str) -> None:
         raise typer.Exit(1)
 
     from styleclaw.agents.select_model import evaluate_models
-    from styleclaw.providers.llm.bedrock import BedrockProvider
 
-    llm = BedrockProvider()
-    evaluation = asyncio.run(evaluate_models(llm, ref_paths, model_images))
+    evaluation = asyncio.run(_run_with_llm(
+        lambda llm: evaluate_models(llm, ref_paths, model_images)
+    ))
     project_store.save_evaluation(name, evaluation)
 
     typer.echo("Evaluation results:")
@@ -296,10 +305,10 @@ def _evaluate_style_refine(name: str, state: "ProjectState") -> None:
         raise typer.Exit(1)
 
     from styleclaw.agents.evaluate_result import evaluate_round
-    from styleclaw.providers.llm.bedrock import BedrockProvider
 
-    llm = BedrockProvider()
-    evaluation = asyncio.run(evaluate_round(llm, ref_paths, model_images, round_num))
+    evaluation = asyncio.run(_run_with_llm(
+        lambda llm: evaluate_round(llm, ref_paths, model_images, round_num)
+    ))
     project_store.save_round_evaluation(name, round_num, evaluation)
 
     typer.echo(f"Round {round_num} evaluation:")
@@ -400,7 +409,6 @@ def refine(
 
     from styleclaw.agents.refine_prompt import refine_prompt
     from styleclaw.core.models import RoundEvaluation
-    from styleclaw.providers.llm.bedrock import BedrockProvider
 
     evaluations: list[RoundEvaluation] = []
     for r in range(1, round_num):
@@ -417,10 +425,11 @@ def refine(
         prev_prompt = project_store.load_prompt_config(name, round_num - 1)
         current_trigger = prev_prompt.trigger_phrase
 
-    llm = BedrockProvider()
-    prompt_config = asyncio.run(refine_prompt(
-        llm, ref_paths, current_trigger, round_num,
-        config.ip_info, evaluations, direction,
+    prompt_config = asyncio.run(_run_with_llm(
+        lambda llm: refine_prompt(
+            llm, ref_paths, current_trigger, round_num,
+            config.ip_info, evaluations, direction,
+        )
     ))
     project_store.save_prompt_config(name, round_num, prompt_config)
 
@@ -508,7 +517,12 @@ def rollback(
     from styleclaw.core.state_machine import rollback as do_rollback
 
     state = project_store.load_state(name)
-    target = Phase(to.upper())
+    try:
+        target = Phase(to.upper())
+    except ValueError:
+        valid = ", ".join(p.value for p in Phase)
+        typer.echo(f"Error: Invalid phase '{to}'. Valid phases: {valid}", err=True)
+        raise typer.Exit(1)
 
     new_state = do_rollback(state, target)
     if round_num is not None:
@@ -538,11 +552,11 @@ def design_cases_cmd(
     prompt_config = project_store.load_prompt_config(name, last_round)
 
     from styleclaw.agents.design_cases import design_cases
-    from styleclaw.providers.llm.bedrock import BedrockProvider
 
-    llm = BedrockProvider()
-    batch_config = asyncio.run(design_cases(
-        llm, config.ip_info, prompt_config.trigger_phrase, batch_num,
+    batch_config = asyncio.run(_run_with_llm(
+        lambda llm: design_cases(
+            llm, config.ip_info, prompt_config.trigger_phrase, batch_num,
+        )
     ))
     project_store.save_batch_config(name, batch_num, batch_config)
 

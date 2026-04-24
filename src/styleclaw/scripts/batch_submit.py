@@ -68,6 +68,12 @@ async def batch_submit_i2i(
 ) -> dict[str, TaskRecord]:
     uploads = project_store.load_i2i_uploads(name, batch_num)
     model_config = get_model(model_id)
+
+    existing = project_store.load_all_i2i_task_records(name, batch_num)
+    submitted_case_ids = {
+        cid for cid, rec in existing.items() if rec.status != "pending"
+    }
+
     tasks: dict[str, asyncio.Task] = {}
 
     async def _submit_one(idx: int, image_url: str) -> TaskRecord:
@@ -85,7 +91,11 @@ async def batch_submit_i2i(
 
     async with asyncio.TaskGroup() as tg:
         for i, upload in enumerate(uploads, 1):
-            tasks[f"i2i-{i:03d}"] = tg.create_task(_submit_one(i, upload.url))
+            case_id = f"i2i-{i:03d}"
+            if case_id in submitted_case_ids:
+                logger.info("Skipping already submitted case %s.", case_id)
+                continue
+            tasks[case_id] = tg.create_task(_submit_one(i, upload.url))
 
     records: dict[str, TaskRecord] = {}
     cases: list[BatchCase] = []

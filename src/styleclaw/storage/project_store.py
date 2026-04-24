@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from styleclaw.core.models import (
@@ -15,7 +16,7 @@ from styleclaw.core.models import (
     UploadRecord,
 )
 
-DATA_ROOT = Path("data/projects")
+DATA_ROOT = Path(os.getenv("STYLECLAW_DATA_ROOT", "data/projects"))
 
 
 def project_dir(name: str) -> Path:
@@ -46,6 +47,10 @@ def list_projects() -> list[str]:
     return sorted(
         d.name for d in DATA_ROOT.iterdir() if d.is_dir() and (d / "config.json").exists()
     )
+
+
+def save_config(name: str, config: ProjectConfig) -> None:
+    _write_json(project_dir(name) / "config.json", config.model_dump())
 
 
 def load_config(name: str) -> ProjectConfig:

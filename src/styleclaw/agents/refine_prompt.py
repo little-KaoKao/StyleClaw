@@ -6,6 +6,7 @@ from pathlib import Path
 
 from styleclaw.core.image_utils import encode_image_for_llm
 from styleclaw.core.models import PromptConfig, RoundEvaluation
+from styleclaw.core.text_utils import clean_json
 from styleclaw.providers.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -52,16 +53,12 @@ async def refine_prompt(
     messages = [{"role": "user", "content": content}]
     raw = await llm.invoke(system=system_prompt, messages=messages)
 
-    cleaned = _clean_json(raw)
+    cleaned = clean_json(raw)
     data = json.loads(cleaned)
 
-    config = PromptConfig(
-        round=round_num,
-        trigger_phrase=data["trigger_phrase"],
-        model_params=data.get("model_params", {}),
-        derived_from=f"round-{round_num - 1:03d}" if round_num > 1 else "initial-analysis",
-        adjustment_note=data.get("adjustment_note", ""),
-    )
+    data["round"] = round_num
+    data.setdefault("derived_from", f"round-{round_num - 1:03d}" if round_num > 1 else "initial-analysis")
+    config = PromptConfig.model_validate(data)
     logger.info("Refined trigger (round %d): %s", round_num, config.trigger_phrase[:80])
     return config
 
@@ -84,12 +81,3 @@ def _build_history_text(evaluations: list[RoundEvaluation]) -> str:
         if ev.next_direction:
             lines.append(f"  Direction: {ev.next_direction}")
     return "\n".join(lines)
-
-
-def _clean_json(raw: str) -> str:
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1]
-    if cleaned.endswith("```"):
-        cleaned = cleaned.rsplit("```", 1)[0]
-    return cleaned.strip()

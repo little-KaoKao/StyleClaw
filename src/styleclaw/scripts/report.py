@@ -4,16 +4,14 @@ import base64
 import logging
 from pathlib import Path
 
+from jinja2 import Environment, FileSystemLoader
+from styleclaw.core.models import TaskStatus
 from styleclaw.storage import project_store
 
 logger = logging.getLogger(__name__)
 
-try:
-    from jinja2 import Environment, FileSystemLoader
-    TEMPLATES_DIR = Path(__file__).parent.parent / "reports" / "templates"
-    _env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
-except ImportError:
-    _env = None
+TEMPLATES_DIR = Path(__file__).parent.parent / "reports" / "templates"
+_env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
 
 
 def _img_to_data_uri(path: Path) -> str:
@@ -27,8 +25,6 @@ def _img_to_data_uri(path: Path) -> str:
 
 
 def generate_model_select_report(name: str) -> Path:
-    if _env is None:
-        raise RuntimeError("jinja2 is required for report generation. Run: uv add jinja2")
 
     root = project_store.project_dir(name)
     config = project_store.load_config(name)
@@ -45,7 +41,7 @@ def generate_model_select_report(name: str) -> Path:
         images = sorted(results_dir.glob("output-*.png"))
         model_data.append({
             "model": ev.model,
-            "scores": ev.scores,
+            "scores": ev.scores.model_dump(),
             "total": ev.total,
             "analysis": ev.analysis,
             "suggestions": ev.suggestions,
@@ -68,8 +64,6 @@ def generate_model_select_report(name: str) -> Path:
 
 
 def generate_style_refine_report(name: str, round_num: int) -> Path:
-    if _env is None:
-        raise RuntimeError("jinja2 is required for report generation. Run: uv add jinja2")
 
     root = project_store.project_dir(name)
     config = project_store.load_config(name)
@@ -87,7 +81,7 @@ def generate_style_refine_report(name: str, round_num: int) -> Path:
         images = sorted(results_dir.glob("output-*.png"))
         model_data.append({
             "model": ev.model,
-            "scores": ev.scores,
+            "scores": ev.scores.model_dump(),
             "total": ev.total,
             "analysis": ev.analysis,
             "images": [_img_to_data_uri(p) for p in images],
@@ -110,8 +104,6 @@ def generate_style_refine_report(name: str, round_num: int) -> Path:
 
 
 def generate_batch_t2i_report(name: str, batch_num: int) -> Path:
-    if _env is None:
-        raise RuntimeError("jinja2 is required for report generation. Run: uv add jinja2")
 
     config = project_store.load_batch_config(name, batch_num)
     records = project_store.load_all_batch_task_records(name, batch_num)
@@ -137,7 +129,7 @@ def generate_batch_t2i_report(name: str, batch_num: int) -> Path:
         trigger_phrase=config.trigger_phrase,
         cases=cases_data,
         total=len(config.cases),
-        completed=sum(1 for c in cases_data if c["status"] == "SUCCESS"),
+        completed=sum(1 for c in cases_data if c["status"] == TaskStatus.SUCCESS),
     )
 
     dest = project_store.batch_t2i_dir(name, batch_num) / "report.html"
@@ -147,8 +139,6 @@ def generate_batch_t2i_report(name: str, batch_num: int) -> Path:
 
 
 def generate_batch_i2i_report(name: str, batch_num: int) -> Path:
-    if _env is None:
-        raise RuntimeError("jinja2 is required for report generation. Run: uv add jinja2")
 
     uploads = project_store.load_i2i_uploads(name, batch_num)
     records = project_store.load_all_i2i_task_records(name, batch_num)
@@ -173,7 +163,7 @@ def generate_batch_i2i_report(name: str, batch_num: int) -> Path:
         batch_num=batch_num,
         pairs=pairs,
         total=len(uploads),
-        completed=sum(1 for p in pairs if p["status"] == "SUCCESS"),
+        completed=sum(1 for p in pairs if p["status"] == TaskStatus.SUCCESS),
     )
 
     dest = project_store.batch_i2i_dir(name, batch_num) / "report.html"

@@ -29,8 +29,8 @@ async def init_project(
     root = project_store.create_project(config)
     refs_dir = root / "refs"
 
-    upload_records: list[UploadRecord] = []
     ref_local_names: list[str] = []
+    local_dests: list[Path] = []
 
     for i, img_path in enumerate(ref_images, 1):
         suffix = img_path.suffix or ".png"
@@ -38,15 +38,22 @@ async def init_project(
         dest = refs_dir / dest_name
         shutil.copy2(img_path, dest)
         ref_local_names.append(f"refs/{dest_name}")
+        local_dests.append(dest)
 
-        record = await upload_file(client, dest)
-        upload_records.append(record)
-        logger.info("Uploaded ref %d/%d: %s", i, len(ref_images), dest_name)
+    upload_records: list[UploadRecord] = [None] * len(local_dests)  # type: ignore[list-item]
+
+    async def _upload(idx: int, dest: Path) -> None:
+        upload_records[idx] = await upload_file(client, dest)
+        logger.info("Uploaded ref %d/%d: %s", idx + 1, len(local_dests), dest.name)
+
+    async with asyncio.TaskGroup() as tg:
+        for idx, dest in enumerate(local_dests):
+            tg.create_task(_upload(idx, dest))
 
     project_store.save_uploads(name, upload_records)
 
     updated_config = config.model_copy(update={"ref_images": ref_local_names})
-    project_store._write_json(root / "config.json", updated_config.model_dump())
+    project_store.save_config(name, updated_config)
 
     logger.info("Project '%s' initialized with %d reference images.", name, len(ref_images))
     return root

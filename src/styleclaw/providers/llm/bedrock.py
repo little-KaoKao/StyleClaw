@@ -21,8 +21,11 @@ class BedrockProvider:
             "CLAUDE_MODEL", "anthropic.claude-sonnet-4-20250514"
         )
         bearer_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK", "")
-        if bearer_token:
-            logger.info("Found token in environment variables.")
+        if not bearer_token:
+            raise ValueError(
+                "AWS_BEARER_TOKEN_BEDROCK is not set. "
+                "Please set it in your .env file or environment."
+            )
         base_url = f"https://bedrock-runtime.{self._region}.amazonaws.com"
         self._http = httpx.AsyncClient(
             base_url=base_url,
@@ -33,12 +36,15 @@ class BedrockProvider:
             timeout=120,
         )
 
+    async def close(self) -> None:
+        await self._http.aclose()
+
     async def invoke(
         self,
         system: str,
         messages: list[dict[str, Any]],
         max_tokens: int = 4096,
-        temperature: float = 0.7,
+        temperature: float = 0.3,
     ) -> str:
         body = {
             "anthropic_version": "bedrock-2023-05-31",

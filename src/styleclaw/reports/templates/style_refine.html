@@ -40,11 +40,9 @@
 <div class="model-card">
   <h3>{{ m.model }}</h3>
   <div class="scores">
-    <span class="score-badge {{ 'low' if m.scores.color_palette < 5 else ('mid' if m.scores.color_palette < 7 else '') }}">Color: {{ m.scores.color_palette }}</span>
-    <span class="score-badge {{ 'low' if m.scores.line_style < 5 else ('mid' if m.scores.line_style < 7 else '') }}">Line: {{ m.scores.line_style }}</span>
-    <span class="score-badge {{ 'low' if m.scores.lighting < 5 else ('mid' if m.scores.lighting < 7 else '') }}">Light: {{ m.scores.lighting }}</span>
-    <span class="score-badge {{ 'low' if m.scores.texture < 5 else ('mid' if m.scores.texture < 7 else '') }}">Texture: {{ m.scores.texture }}</span>
-    <span class="score-badge {{ 'low' if m.scores.overall_mood < 5 else ('mid' if m.scores.overall_mood < 7 else '') }}">Mood: {{ m.scores.overall_mood }}</span>
+    {% for dim, val in m.scores.items() %}
+    <span class="score-badge {{ 'low' if val < 5 else ('mid' if val < 7 else '') }}">{{ dim }}: {{ val }}</span>
+    {% endfor %}
     <span class="score-badge"><strong>Total: {{ "%.1f"|format(m.total) }}</strong></span>
   </div>
   <p>{{ m.analysis }}</p>
