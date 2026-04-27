@@ -34,7 +34,8 @@ class TestGenerateModelSelect:
         records = await generate_model_select(
             "test-proj", mock_client, "bold anime style",
         )
-        assert len(records) == 4  # all 4 models in registry
+        from styleclaw.providers.runninghub.models import MODEL_REGISTRY
+        assert len(records) == len(MODEL_REGISTRY)
 
     async def test_submits_for_specific_models(self, setup_project, mock_client) -> None:
         records = await generate_model_select(
