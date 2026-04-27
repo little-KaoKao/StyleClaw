@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Awaitable
 
-from styleclaw.core.config import MAX_AUTO_ROUNDS, ORCHESTRATOR_POLL_INTERVAL
+from styleclaw.core.config import MAX_AUTO_ROUNDS, MAX_POLL_CYCLES, ORCHESTRATOR_POLL_INTERVAL
 from styleclaw.core.models import Phase
 from styleclaw.providers.llm.base import LLMProvider
 from styleclaw.providers.runninghub.client import RunningHubClient
@@ -86,9 +86,10 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
 async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     from styleclaw.scripts.poll import poll_batch, poll_model_select, poll_style_refine
 
+    max_cycles = args.get("max_cycles", MAX_POLL_CYCLES)
     state = project_store.load_state(ctx.project)
 
-    while True:
+    for cycle in range(max_cycles):
         if state.phase == Phase.MODEL_SELECT:
             records = await poll_model_select(ctx.project, ctx.client)
         elif state.phase == Phase.STYLE_REFINE:
@@ -104,9 +105,11 @@ async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
         if not pending:
             return StepResult(ok=True, message=f"{completed}/{len(records)} completed")
 
-        logger.info("Waiting... %d/%d completed", completed, len(records))
+        logger.info("Waiting... %d/%d completed (cycle %d/%d)", completed, len(records), cycle + 1, max_cycles)
         await asyncio.sleep(ctx.poll_interval)
         state = project_store.load_state(ctx.project)
+
+    return StepResult(ok=False, message=f"Poll timed out after {max_cycles} cycles")
 
 
 async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:

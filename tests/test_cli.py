@@ -1,29 +1,20 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
 
 from styleclaw.cli import app
 from styleclaw.core.models import (
-    BatchCase,
-    BatchConfig,
-    DimensionScores,
-    ModelEvaluation,
-    ModelScore,
     Phase,
     ProjectConfig,
     ProjectState,
     PromptConfig,
-    RoundEvaluation,
-    RoundScore,
     StyleAnalysis,
-    TaskRecord,
-    UploadRecord,
 )
+from styleclaw.orchestrator.actions import StepResult
 from styleclaw.storage import project_store
 
 runner = CliRunner()
@@ -73,13 +64,19 @@ class TestInitCommand:
         assert result.exit_code == 1
         assert "not found" in result.output
 
-    @patch("styleclaw.cli._run_with_client")
-    def test_init_success(self, mock_run, tmp_path) -> None:
+    @patch("styleclaw.scripts.init_project.init_project")
+    @patch("styleclaw.providers.runninghub.client.RunningHubClient")
+    def test_init_success(self, mock_client_cls, mock_init, tmp_path) -> None:
         ref = tmp_path / "ref.png"
         ref.write_bytes(b"fake")
-        mock_run.return_value = tmp_path / "projects" / "new-proj"
+        mock_client = MagicMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client_cls.return_value = mock_client
+        mock_init.return_value = tmp_path / "projects" / "new-proj"
         result = runner.invoke(app, ["init", "new-proj", "--ref", str(ref)])
         assert result.exit_code == 0
+        assert "initialized" in result.output
 
 
 class TestAnalyzeCommand:
@@ -89,6 +86,15 @@ class TestAnalyzeCommand:
         assert result.exit_code == 1
         assert "INIT" in result.output
 
+    @patch("styleclaw.cli._run_action")
+    def test_success(self, mock_run, setup_project) -> None:
+        _set_state(Phase.INIT)
+        mock_run.return_value = StepResult(ok=True, message="Trigger: bold anime")
+        result = runner.invoke(app, ["analyze", "test-proj"])
+        assert result.exit_code == 0
+        assert "Analysis complete" in result.output
+        mock_run.assert_called_once_with("test-proj", "analyze")
+
 
 class TestGenerateCommand:
     def test_wrong_phase(self, setup_project) -> None:
@@ -97,34 +103,18 @@ class TestGenerateCommand:
         assert result.exit_code == 1
         assert "Cannot generate" in result.output
 
-    @patch("styleclaw.cli._run_with_client")
+    @patch("styleclaw.cli._run_action")
     def test_model_select_phase(self, mock_run, setup_project) -> None:
         _set_state(Phase.MODEL_SELECT)
-
-        analysis = StyleAnalysis(trigger_phrase="bold anime")
-        project_store.save_analysis("test-proj", analysis)
-        uploads = [UploadRecord(local_path="r.png", url="https://cdn.example.com/r.png", file_name="r.png")]
-        project_store.save_uploads("test-proj", uploads)
-
-        mock_run.return_value = {
-            "mj-v7": TaskRecord(task_id="t1", model_id="mj-v7", status="QUEUED"),
-        }
+        mock_run.return_value = StepResult(ok=True, message="Submitted 5 model tasks")
         result = runner.invoke(app, ["generate", "test-proj"])
         assert result.exit_code == 0
-        assert "mj-v7" in result.output
+        assert "Submitted 5 model tasks" in result.output
 
-    @patch("styleclaw.cli._run_with_client")
+    @patch("styleclaw.cli._run_action")
     def test_style_refine_phase(self, mock_run, setup_project) -> None:
         _set_state(Phase.STYLE_REFINE, current_round=1)
-
-        prompt = PromptConfig(round=1, trigger_phrase="bold anime")
-        project_store.save_prompt_config("test-proj", 1, prompt)
-        uploads = [UploadRecord(local_path="r.png", url="https://cdn.example.com/r.png", file_name="r.png")]
-        project_store.save_uploads("test-proj", uploads)
-
-        mock_run.return_value = {
-            "mj-v7": TaskRecord(task_id="t1", model_id="mj-v7", status="QUEUED"),
-        }
+        mock_run.return_value = StepResult(ok=True, message="Submitted 2 refine tasks")
         result = runner.invoke(app, ["generate", "test-proj"])
         assert result.exit_code == 0
 
@@ -142,43 +132,43 @@ class TestPollCommand:
         assert result.exit_code == 1
         assert "Nothing to poll" in result.output
 
-    @patch("styleclaw.cli._run_with_client")
+    @patch("styleclaw.cli._run_action")
     def test_model_select_phase(self, mock_run, setup_project) -> None:
         _set_state(Phase.MODEL_SELECT)
-        mock_run.return_value = {
-            "mj-v7": TaskRecord(task_id="t1", model_id="mj-v7", status="SUCCESS", results=[{"url": "http://img.png"}]),
-        }
+        mock_run.return_value = StepResult(ok=True, message="5/5 completed")
         result = runner.invoke(app, ["poll", "test-proj"])
         assert result.exit_code == 0
-        assert "mj-v7" in result.output
+        assert "5/5 completed" in result.output
 
-    @patch("styleclaw.cli._run_with_client")
+    @patch("styleclaw.cli._run_action")
     def test_style_refine_phase(self, mock_run, setup_project) -> None:
         _set_state(Phase.STYLE_REFINE, current_round=1)
-        mock_run.return_value = {
-            "mj-v7": TaskRecord(task_id="t1", model_id="mj-v7", status="SUCCESS", results=[]),
-        }
+        mock_run.return_value = StepResult(ok=True, message="2/2 completed")
         result = runner.invoke(app, ["poll", "test-proj"])
         assert result.exit_code == 0
 
-    @patch("styleclaw.cli._run_with_client")
+    @patch("styleclaw.cli._run_action")
     def test_batch_t2i_phase(self, mock_run, setup_project) -> None:
         _set_state(Phase.BATCH_T2I, current_batch=1)
-        mock_run.return_value = {
-            "am-001": TaskRecord(task_id="t1", model_id="mj-v7", status="SUCCESS", results=[]),
-        }
+        mock_run.return_value = StepResult(ok=True, message="100/100 completed")
         result = runner.invoke(app, ["poll", "test-proj"])
         assert result.exit_code == 0
-        assert "1/1 completed" in result.output
+        assert "100/100 completed" in result.output
 
-    @patch("styleclaw.cli._run_with_client")
+    @patch("styleclaw.cli._run_action")
     def test_batch_i2i_phase(self, mock_run, setup_project) -> None:
         _set_state(Phase.BATCH_I2I, current_batch=1)
-        mock_run.return_value = {
-            "i2i-001": TaskRecord(task_id="t1", model_id="mj-v7", status="SUCCESS", results=[]),
-        }
+        mock_run.return_value = StepResult(ok=True, message="50/50 completed")
         result = runner.invoke(app, ["poll", "test-proj"])
         assert result.exit_code == 0
+
+    @patch("styleclaw.cli._run_action")
+    def test_poll_timeout(self, mock_run, setup_project) -> None:
+        _set_state(Phase.MODEL_SELECT)
+        mock_run.return_value = StepResult(ok=False, message="Poll timed out after 60 cycles")
+        result = runner.invoke(app, ["poll", "test-proj"])
+        assert result.exit_code == 1
+        assert "timed out" in result.output
 
 
 class TestEvaluateCommand:
@@ -187,6 +177,14 @@ class TestEvaluateCommand:
         result = runner.invoke(app, ["evaluate", "test-proj"])
         assert result.exit_code == 1
         assert "Cannot evaluate" in result.output
+
+    @patch("styleclaw.cli._run_action")
+    def test_success(self, mock_run, setup_project) -> None:
+        _set_state(Phase.MODEL_SELECT)
+        mock_run.return_value = StepResult(ok=True, message="Recommendation: mj-v7")
+        result = runner.invoke(app, ["evaluate", "test-proj"])
+        assert result.exit_code == 0
+        assert "Recommendation" in result.output
 
 
 class TestSelectModelCommand:
@@ -230,6 +228,14 @@ class TestRefineCommand:
         result = runner.invoke(app, ["refine", "test-proj"])
         assert result.exit_code == 1
         assert "max auto rounds" in result.output
+
+    @patch("styleclaw.cli._run_action")
+    def test_success(self, mock_run, setup_project) -> None:
+        _set_state(Phase.STYLE_REFINE, current_round=0)
+        mock_run.return_value = StepResult(ok=True, message="Round 1: bold anime style")
+        result = runner.invoke(app, ["refine", "test-proj"])
+        assert result.exit_code == 0
+        assert "Round 1" in result.output
 
 
 class TestApproveCommand:
@@ -302,6 +308,14 @@ class TestDesignCasesCommand:
         result = runner.invoke(app, ["design-cases", "test-proj"])
         assert result.exit_code == 1
 
+    @patch("styleclaw.cli._run_action")
+    def test_success(self, mock_run, setup_project) -> None:
+        _set_state(Phase.BATCH_T2I)
+        mock_run.return_value = StepResult(ok=True, message="Designed 100 cases")
+        result = runner.invoke(app, ["design-cases", "test-proj"])
+        assert result.exit_code == 0
+        assert "100 cases" in result.output
+
 
 class TestBatchSubmitCommand:
     def test_t2i_wrong_phase(self, setup_project) -> None:
@@ -326,25 +340,21 @@ class TestBatchSubmitCommand:
         assert result.exit_code == 1
         assert "No model selected" in result.output
 
-    @patch("styleclaw.cli._run_with_client")
+    @patch("styleclaw.cli._run_action")
     def test_t2i_success(self, mock_run, setup_project) -> None:
         _set_state(Phase.BATCH_T2I, current_batch=1, selected_models=["mj-v7"])
-        uploads = [UploadRecord(local_path="r.png", url="https://cdn.example.com/r.png", file_name="r.png")]
-        project_store.save_uploads("test-proj", uploads)
-        mock_run.return_value = {"am-001": TaskRecord(task_id="t1", model_id="mj-v7", status="QUEUED")}
+        mock_run.return_value = StepResult(ok=True, message="Submitted 100 t2i tasks")
         result = runner.invoke(app, ["batch-submit", "test-proj"])
         assert result.exit_code == 0
-        assert "1 t2i tasks" in result.output
+        assert "t2i tasks" in result.output
 
-    @patch("styleclaw.cli._run_with_client")
+    @patch("styleclaw.cli._run_action")
     def test_i2i_success(self, mock_run, setup_project) -> None:
         _set_state(Phase.BATCH_I2I, current_batch=1, current_round=1, selected_models=["mj-v7"])
-        prompt = PromptConfig(round=1, trigger_phrase="bold anime")
-        project_store.save_prompt_config("test-proj", 1, prompt)
-        mock_run.return_value = {"i2i-001": TaskRecord(task_id="t1", model_id="mj-v7", status="QUEUED")}
+        mock_run.return_value = StepResult(ok=True, message="Submitted 50 i2i tasks")
         result = runner.invoke(app, ["batch-submit", "test-proj", "--i2i"])
         assert result.exit_code == 0
-        assert "1 i2i tasks" in result.output
+        assert "i2i tasks" in result.output
 
 
 class TestReportCommand:
@@ -378,7 +388,7 @@ class TestGetCurrentTrigger:
         assert _get_current_trigger("test-proj", project_store.load_state("test-proj")) == "(unknown)"
 
 
-class TestRunWithClient:
+class TestBuildContext:
     def test_api_key_missing(self, monkeypatch) -> None:
         monkeypatch.delenv("RUNNINGHUB_API_KEY", raising=False)
         import typer
