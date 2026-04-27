@@ -53,6 +53,15 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         max_prompt_length=2000,
         uses_width_height=True,
     ),
+    "gpt-image-2": ModelConfig(
+        model_id="gpt-image-2",
+        name="全能图片G-2 (GPT-Image-2)",
+        t2i_endpoint="/openapi/v2/rhart-image-g-2-official/text-to-image",
+        i2i_endpoint="/openapi/v2/rhart-image-g-2-official/image-to-image",
+        max_prompt_length=20000,
+        aspect_ratio_values=("1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"),
+        default_params={"resolution": "2k", "quality": "medium"},
+    ),
 }
 
 
