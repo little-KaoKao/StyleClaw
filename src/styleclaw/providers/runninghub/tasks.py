@@ -4,14 +4,13 @@ import asyncio
 import logging
 from typing import Any
 
+from styleclaw.core.config import POLL_INTERVAL, TASK_TIMEOUT
 from styleclaw.core.models import TaskRecord, TaskStatus
 from styleclaw.providers.runninghub.client import RunningHubClient
 
 logger = logging.getLogger(__name__)
 
 QUERY_PATH = "/openapi/v2/query"
-POLL_INTERVAL = 3
-TASK_TIMEOUT = 300
 
 
 SUBMIT_RETRIES = 3
