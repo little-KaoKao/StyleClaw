@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, Self
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 3
 
 
 class BedrockProvider:
@@ -36,6 +39,12 @@ class BedrockProvider:
             timeout=120,
         )
 
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self.close()
+
     async def close(self) -> None:
         await self._http.aclose()
 
@@ -55,15 +64,38 @@ class BedrockProvider:
         }
 
         url = f"/model/{self._model_id}/invoke"
-        resp = await self._http.post(url, content=json.dumps(body))
-        if resp.status_code != 200:
-            logger.error("Bedrock error %d: %s", resp.status_code, resp.text)
-        resp.raise_for_status()
-
-        result = resp.json()
-        text_blocks = [
-            block["text"]
-            for block in result.get("content", [])
-            if block.get("type") == "text"
-        ]
-        return "\n".join(text_blocks)
+        last_exc: Exception | None = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                resp = await self._http.post(url, content=json.dumps(body))
+                if resp.status_code >= 500:
+                    resp.raise_for_status()
+                resp.raise_for_status()
+                result = resp.json()
+                text_blocks = [
+                    block["text"]
+                    for block in result.get("content", [])
+                    if block.get("type") == "text"
+                ]
+                return "\n".join(text_blocks)
+            except httpx.TransportError as exc:
+                last_exc = exc
+                wait = 2**attempt
+                logger.warning(
+                    "Bedrock request failed (attempt %d/%d): %s. Retrying in %ds.",
+                    attempt + 1, MAX_RETRIES, exc, wait,
+                )
+                await asyncio.sleep(wait)
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code < 500:
+                    raise
+                last_exc = exc
+                wait = 2**attempt
+                logger.warning(
+                    "Bedrock request failed (attempt %d/%d): %s. Retrying in %ds.",
+                    attempt + 1, MAX_RETRIES, exc, wait,
+                )
+                await asyncio.sleep(wait)
+        raise RuntimeError(
+            f"Bedrock invoke failed after {MAX_RETRIES} retries"
+        ) from last_exc

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Self
 
 import httpx
 
@@ -12,33 +12,29 @@ BASE_URL = "https://www.runninghub.cn"
 MAX_RETRIES = 3
 CONCURRENCY_LIMIT = 5
 
-_semaphore_map: dict[int, asyncio.Semaphore] = {}
-
-
-def _get_semaphore() -> asyncio.Semaphore:
-    loop_id = id(asyncio.get_running_loop())
-    if loop_id not in _semaphore_map:
-        _semaphore_map[loop_id] = asyncio.Semaphore(CONCURRENCY_LIMIT)
-    return _semaphore_map[loop_id]
-
 
 class RunningHubClient:
     def __init__(self, api_key: str) -> None:
         self._api_key = api_key
+        self._semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
         self._client = httpx.AsyncClient(
             base_url=BASE_URL,
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=60,
         )
 
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self.close()
+
     async def post(self, path: str, json_data: dict[str, Any]) -> dict[str, Any]:
-        sem = _get_semaphore()
-        async with sem:
+        async with self._semaphore:
             return await self._post_with_retry(path, json_data)
 
     async def upload(self, path: str, file_path: str) -> dict[str, Any]:
-        sem = _get_semaphore()
-        async with sem:
+        async with self._semaphore:
             return await self._upload_with_retry(path, file_path)
 
     async def _post_with_retry(

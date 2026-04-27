@@ -4,15 +4,7 @@ import pytest
 import respx
 import httpx
 
-from styleclaw.providers.runninghub.client import RunningHubClient, _get_semaphore
-import styleclaw.providers.runninghub.client as client_mod
-
-
-@pytest.fixture(autouse=True)
-def reset_semaphore():
-    client_mod._semaphore_map.clear()
-    yield
-    client_mod._semaphore_map.clear()
+from styleclaw.providers.runninghub.client import RunningHubClient
 
 
 @pytest.fixture
@@ -83,8 +75,39 @@ class TestRunningHubClient:
         await rh_client.close()
 
 
-class TestSemaphore:
-    async def test_get_semaphore_creates_once(self) -> None:
-        s1 = _get_semaphore()
-        s2 = _get_semaphore()
-        assert s1 is s2
+class TestAsyncContextManager:
+    async def test_aenter_returns_self(self) -> None:
+        client = RunningHubClient(api_key="test-key")
+        async with client as ctx:
+            assert ctx is client
+
+    async def test_aexit_closes_http_client(self) -> None:
+        client = RunningHubClient(api_key="test-key")
+        async with client:
+            pass
+        assert client._client.is_closed
+
+    @respx.mock
+    async def test_usable_inside_context(self) -> None:
+        respx.post("https://www.runninghub.cn/api/test").respond(
+            json={"ok": True}
+        )
+        async with RunningHubClient(api_key="test-key") as client:
+            result = await client.post("/api/test", {})
+            assert result["ok"] is True
+
+
+class TestSemaphoreIsInstanceAttribute:
+    async def test_each_client_has_own_semaphore(self) -> None:
+        c1 = RunningHubClient(api_key="k1")
+        c2 = RunningHubClient(api_key="k2")
+        assert c1._semaphore is not c2._semaphore
+
+    async def test_semaphore_has_correct_limit(self) -> None:
+        from styleclaw.providers.runninghub.client import CONCURRENCY_LIMIT
+        client = RunningHubClient(api_key="test-key")
+        assert client._semaphore._value == CONCURRENCY_LIMIT
+
+    async def test_no_module_level_semaphore_map(self) -> None:
+        import styleclaw.providers.runninghub.client as mod
+        assert not hasattr(mod, "_semaphore_map")
