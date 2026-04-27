@@ -9,6 +9,7 @@ from typing import Optional
 import typer
 from dotenv import load_dotenv
 
+from styleclaw.core.config import MAX_AUTO_ROUNDS
 from styleclaw.core.models import Phase, ProjectState, TaskStatus
 from styleclaw.core.state_machine import advance
 from styleclaw.storage import project_store
@@ -377,9 +378,6 @@ def select_model(
 
 
 # --- Phase 3: STYLE_REFINE commands ---
-
-
-MAX_AUTO_ROUNDS = 5
 
 
 @app.command()

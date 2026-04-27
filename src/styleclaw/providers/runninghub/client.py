@@ -6,11 +6,12 @@ from typing import Any
 
 import httpx
 
+from styleclaw.core.config import CONCURRENCY_LIMIT
+
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://www.runninghub.cn"
 MAX_RETRIES = 3
-CONCURRENCY_LIMIT = 5
 
 _semaphore_map: dict[int, asyncio.Semaphore] = {}
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Awaitable
 
+from styleclaw.core.config import MAX_AUTO_ROUNDS, ORCHESTRATOR_POLL_INTERVAL
 from styleclaw.core.models import Phase
 from styleclaw.providers.llm.base import LLMProvider
 from styleclaw.providers.runninghub.client import RunningHubClient
@@ -26,7 +27,7 @@ class ExecutionContext:
     project: str
     client: RunningHubClient | None = None
     llm: LLMProvider | None = None
-    poll_interval: float = 30.0
+    poll_interval: float = ORCHESTRATOR_POLL_INTERVAL
 
 
 @dataclass(frozen=True)
@@ -208,8 +209,8 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     ref_paths = [root / r for r in config.ref_images]
 
     round_num = state.current_round + 1
-    if round_num > 5:
-        return StepResult(ok=False, message="Max rounds (5) reached")
+    if round_num > MAX_AUTO_ROUNDS:
+        return StepResult(ok=False, message=f"Max rounds ({MAX_AUTO_ROUNDS}) reached")
 
     evaluations: list[RoundEvaluation] = []
     for r in range(1, round_num):
