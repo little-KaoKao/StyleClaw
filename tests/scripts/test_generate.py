@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from styleclaw.core.models import Phase, ProjectConfig, ProjectState, TaskRecord
+from styleclaw.providers.runninghub.models import MODEL_REGISTRY
 from styleclaw.scripts.generate import generate_model_select, generate_style_refine
 from styleclaw.storage import project_store
 
@@ -34,7 +35,7 @@ class TestGenerateModelSelect:
         records = await generate_model_select(
             "test-proj", mock_client, "bold anime style",
         )
-        assert len(records) == 4  # all 4 models in registry
+        assert len(records) == len(MODEL_REGISTRY)
 
     async def test_submits_for_specific_models(self, setup_project, mock_client) -> None:
         records = await generate_model_select(
