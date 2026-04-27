@@ -65,3 +65,55 @@ class TestGenerateStyleRefine:
         )
         record = project_store.load_round_task_record("test-proj", 1, "mj-v7")
         assert record.task_id == "t1"
+
+
+class TestIdempotency:
+    async def test_model_select_skips_existing_success(self, setup_project, mock_client) -> None:
+        existing = TaskRecord(task_id="old-1", model_id="mj-v7", status="SUCCESS")
+        project_store.save_task_record("test-proj", "mj-v7", existing)
+
+        records = await generate_model_select(
+            "test-proj", mock_client, "bold anime style", models=["mj-v7"],
+        )
+        assert records["mj-v7"].task_id == "old-1"
+        mock_client.post.assert_not_called()
+
+    async def test_model_select_resubmits_failed(self, setup_project, mock_client) -> None:
+        existing = TaskRecord(task_id="old-1", model_id="mj-v7", status="FAILED")
+        project_store.save_task_record("test-proj", "mj-v7", existing)
+
+        records = await generate_model_select(
+            "test-proj", mock_client, "bold anime style", models=["mj-v7"],
+        )
+        assert records["mj-v7"].task_id == "t1"
+        mock_client.post.assert_called_once()
+
+    async def test_model_select_skips_queued(self, setup_project, mock_client) -> None:
+        existing = TaskRecord(task_id="old-1", model_id="mj-v7", status="QUEUED")
+        project_store.save_task_record("test-proj", "mj-v7", existing)
+
+        records = await generate_model_select(
+            "test-proj", mock_client, "bold anime style", models=["mj-v7"],
+        )
+        assert records["mj-v7"].task_id == "old-1"
+        mock_client.post.assert_not_called()
+
+    async def test_style_refine_skips_existing_success(self, setup_project, mock_client) -> None:
+        existing = TaskRecord(task_id="old-1", model_id="mj-v7", status="SUCCESS")
+        project_store.save_round_task_record("test-proj", 1, "mj-v7", existing)
+
+        records = await generate_style_refine(
+            "test-proj", mock_client, 1, "bold anime style",
+        )
+        assert records["mj-v7"].task_id == "old-1"
+        mock_client.post.assert_not_called()
+
+    async def test_style_refine_resubmits_failed(self, setup_project, mock_client) -> None:
+        existing = TaskRecord(task_id="old-1", model_id="mj-v7", status="FAILED")
+        project_store.save_round_task_record("test-proj", 1, "mj-v7", existing)
+
+        records = await generate_style_refine(
+            "test-proj", mock_client, 1, "bold anime style",
+        )
+        assert records["mj-v7"].task_id == "t1"
+        mock_client.post.assert_called_once()
