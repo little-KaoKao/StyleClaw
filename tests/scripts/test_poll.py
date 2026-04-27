@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+import asyncio
+from unittest.mock import AsyncMock, call, patch
 
 import pytest
 
 from styleclaw.core.models import Phase, ProjectConfig, ProjectState, TaskRecord
-from styleclaw.scripts.poll import poll_batch, poll_model_select, poll_style_refine
+from styleclaw.scripts.poll import (
+    _download_results,
+    poll_batch,
+    poll_model_select,
+    poll_style_refine,
+)
 from styleclaw.storage import project_store
 
 
@@ -114,3 +120,84 @@ class TestPollBatch:
         results = await poll_batch("test-proj", mock_client, 1, phase="t2i")
         assert results["am-001"].status == "QUEUED"
         mock_client.post.assert_not_called()
+
+
+class TestDownloadResults:
+    async def test_downloads_each_result_url(self, tmp_path) -> None:
+        results = [
+            {"url": "http://example.com/img1.png"},
+            {"url": "http://example.com/img2.png"},
+        ]
+        with patch("styleclaw.scripts.poll.download_image", new_callable=AsyncMock) as mock_dl:
+            await _download_results(results, tmp_path)
+            assert mock_dl.call_count == 2
+            assert mock_dl.call_args_list[0] == call(
+                "http://example.com/img1.png", tmp_path / "output-001.png"
+            )
+            assert mock_dl.call_args_list[1] == call(
+                "http://example.com/img2.png", tmp_path / "output-002.png"
+            )
+
+    async def test_skips_empty_urls(self, tmp_path) -> None:
+        results = [{"url": ""}, {"other_key": "value"}, {"url": "http://ok.png"}]
+        with patch("styleclaw.scripts.poll.download_image", new_callable=AsyncMock) as mock_dl:
+            await _download_results(results, tmp_path)
+            assert mock_dl.call_count == 1
+
+    async def test_empty_results_list(self, tmp_path) -> None:
+        with patch("styleclaw.scripts.poll.download_image", new_callable=AsyncMock) as mock_dl:
+            await _download_results([], tmp_path)
+            mock_dl.assert_not_called()
+
+
+class TestConcurrentPoll:
+    @patch("styleclaw.scripts.poll.download_image", new_callable=AsyncMock)
+    async def test_poll_model_select_runs_concurrently(
+        self, mock_download, setup_project, mock_client
+    ) -> None:
+        for mid in ("mj-v7", "niji7"):
+            record = TaskRecord(task_id=f"t-{mid}", model_id=mid, status="QUEUED")
+            project_store.save_task_record("test-proj", mid, record)
+
+        poll_start_times: list[float] = []
+
+        original_poll_and_update = None
+
+        async def _tracking_poll(client, record):
+            poll_start_times.append(asyncio.get_event_loop().time())
+            from styleclaw.providers.runninghub.tasks import poll_and_update as real_fn
+            return record.model_copy(update={
+                "status": "SUCCESS",
+                "results": [{"url": "http://img.png"}],
+            })
+
+        with patch("styleclaw.scripts.poll.poll_and_update", side_effect=_tracking_poll):
+            results = await poll_model_select("test-proj", mock_client)
+
+        assert len(results) == 2
+        assert all(r.status == "SUCCESS" for r in results.values())
+
+    @patch("styleclaw.scripts.poll.download_image", new_callable=AsyncMock)
+    async def test_poll_batch_runs_concurrently(
+        self, mock_download, setup_project, mock_client
+    ) -> None:
+        for i in range(3):
+            cid = f"am-{i:03d}"
+            record = TaskRecord(task_id=f"t-{cid}", model_id="mj-v7", status="QUEUED")
+            project_store.save_batch_task_record("test-proj", 1, cid, record)
+
+        results = await poll_batch("test-proj", mock_client, 1, phase="t2i")
+        assert len(results) == 3
+        assert all(r.status == "SUCCESS" for r in results.values())
+
+    @patch("styleclaw.scripts.poll.download_image", new_callable=AsyncMock)
+    async def test_poll_style_refine_runs_concurrently(
+        self, mock_download, setup_project, mock_client
+    ) -> None:
+        for mid in ("mj-v7", "niji7"):
+            record = TaskRecord(task_id=f"t-{mid}", model_id=mid, status="QUEUED")
+            project_store.save_round_task_record("test-proj", 1, mid, record)
+
+        results = await poll_style_refine("test-proj", mock_client, 1)
+        assert len(results) == 2
+        assert all(r.status == "SUCCESS" for r in results.values())

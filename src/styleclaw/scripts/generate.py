@@ -4,7 +4,7 @@ import asyncio
 import logging
 from typing import Any
 
-from styleclaw.core.models import TaskRecord
+from styleclaw.core.models import TaskRecord, TaskStatus
 from styleclaw.core.prompt_builder import build_params
 from styleclaw.providers.runninghub.client import RunningHubClient
 from styleclaw.providers.runninghub.models import MODEL_REGISTRY, get_model
@@ -24,7 +24,20 @@ async def generate_model_select(
     models: list[str] | None = None,
 ) -> dict[str, TaskRecord]:
     model_ids = models or list(MODEL_REGISTRY.keys())
-    tasks: dict[str, asyncio.Task] = {}
+
+    existing = project_store.load_all_task_records(name)
+
+    to_submit: list[str] = []
+    skipped: dict[str, TaskRecord] = {}
+    for mid in model_ids:
+        prev = existing.get(mid)
+        if prev and prev.status != TaskStatus.FAILED:
+            logger.info("Skipping model %s: already has %s record.", mid, prev.status)
+            skipped[mid] = prev
+        else:
+            to_submit.append(mid)
+
+    tasks: dict[str, asyncio.Task[TaskRecord]] = {}
 
     async def _submit_one(model_id: str) -> TaskRecord:
         config = get_model(model_id)
@@ -39,14 +52,17 @@ async def generate_model_select(
         return record
 
     async with asyncio.TaskGroup() as tg:
-        for mid in model_ids:
+        for mid in to_submit:
             tasks[mid] = tg.create_task(_submit_one(mid))
 
-    records: dict[str, TaskRecord] = {}
+    records: dict[str, TaskRecord] = {**skipped}
     for mid, task in tasks.items():
         records[mid] = task.result()
 
-    logger.info("Submitted %d generation tasks for model-select.", len(records))
+    logger.info(
+        "Submitted %d generation tasks for model-select (%d skipped).",
+        len(tasks), len(skipped),
+    )
     return records
 
 
@@ -63,7 +79,20 @@ async def generate_style_refine(
 ) -> dict[str, TaskRecord]:
     state = project_store.load_state(name)
     model_ids = state.selected_models
-    tasks: dict[str, asyncio.Task] = {}
+
+    existing = project_store.load_all_round_task_records(name, round_num)
+
+    to_submit: list[str] = []
+    skipped: dict[str, TaskRecord] = {}
+    for mid in model_ids:
+        prev = existing.get(mid)
+        if prev and prev.status != TaskStatus.FAILED:
+            logger.info("Skipping model %s round %d: already has %s record.", mid, round_num, prev.status)
+            skipped[mid] = prev
+        else:
+            to_submit.append(mid)
+
+    tasks: dict[str, asyncio.Task[TaskRecord]] = {}
 
     async def _submit_one(model_id: str) -> TaskRecord:
         config = get_model(model_id)
@@ -82,12 +111,15 @@ async def generate_style_refine(
         return record
 
     async with asyncio.TaskGroup() as tg:
-        for mid in model_ids:
+        for mid in to_submit:
             tasks[mid] = tg.create_task(_submit_one(mid))
 
-    records: dict[str, TaskRecord] = {}
+    records: dict[str, TaskRecord] = {**skipped}
     for mid, task in tasks.items():
         records[mid] = task.result()
 
-    logger.info("Submitted %d generation tasks for style-refine round %d.", len(records), round_num)
+    logger.info(
+        "Submitted %d generation tasks for style-refine round %d (%d skipped).",
+        len(tasks), round_num, len(skipped),
+    )
     return records
