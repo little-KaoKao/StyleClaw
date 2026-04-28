@@ -3,6 +3,7 @@ data/
 
 # Environment
 .env
+llms.txt
 
 # Python
 __pycache__/
