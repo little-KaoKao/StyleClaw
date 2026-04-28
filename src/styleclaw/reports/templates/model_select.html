@@ -4,18 +4,22 @@
 <meta charset="UTF-8">
 <title>{{ project_name }} — Model Selection</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+  body { font-family: system-ui, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
   h1 { border-bottom: 2px solid #333; padding-bottom: 8px; }
   .meta { background: #fff; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; }
   .ref-section img { width: 150px; height: 150px; object-fit: cover; border-radius: 4px; margin: 4px; }
   .model-card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
   .model-card h3 { margin-top: 0; }
+  .variant-tag { display: inline-block; font-size: 0.8em; padding: 2px 8px; border-radius: 4px; margin-left: 8px; }
+  .variant-tag.prompt-only { background: #d1ecf1; color: #0c5460; }
+  .variant-tag.prompt-sref { background: #fff3cd; color: #856404; }
   .scores { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0; }
   .score-badge { background: #e8f4e8; padding: 4px 10px; border-radius: 12px; font-size: 0.9em; }
   .score-badge.low { background: #fde8e8; }
   .score-badge.mid { background: #fef3cd; }
   .images img { width: 200px; height: auto; border-radius: 4px; margin: 4px; }
   .recommendation { font-size: 1.1em; font-weight: bold; padding: 8px 16px; border-radius: 8px; display: inline-block; background: #d4edda; color: #155724; }
+  .variant-rec { font-size: 0.95em; padding: 6px 12px; border-radius: 8px; display: inline-block; background: #cce5ff; color: #004085; margin-left: 8px; }
 </style>
 </head>
 <body>
@@ -24,6 +28,9 @@
   <span><strong>Trigger:</strong> {{ trigger_phrase }}</span>
   <br>
   <span class="recommendation">{{ recommendation }}</span>
+  {% if recommended_variant %}
+  <span class="variant-rec">推荐方案: {{ recommended_variant }}</span>
+  {% endif %}
 </div>
 
 <h2>Reference Images</h2>
@@ -35,7 +42,11 @@
 
 {% for m in models %}
 <div class="model-card">
-  <h3>{{ m.model }}</h3>
+  <h3>{{ m.model }}
+    {% if m.variant %}
+    <span class="variant-tag {{ m.variant }}">{{ m.variant }}</span>
+    {% endif %}
+  </h3>
   <div class="scores">
     {% for dim, val in m.scores.items() %}
     <span class="score-badge {{ 'low' if val < 5 else ('mid' if val < 7 else '') }}">{{ dim }}: {{ val }}</span>

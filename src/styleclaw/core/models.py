@@ -95,6 +95,7 @@ class DimensionScores(_FrozenModel):
 
 class ModelScore(_FrozenModel):
     model: str
+    variant: str = ""
     image: str = ""
     scores: DimensionScores = Field(default_factory=DimensionScores)
     total: float = 0.0
@@ -105,6 +106,7 @@ class ModelScore(_FrozenModel):
 class ModelEvaluation(_FrozenModel):
     evaluations: list[ModelScore] = Field(default_factory=list)
     recommendation: str = ""
+    recommended_variant: str = ""
     next_direction: str = ""
 
 

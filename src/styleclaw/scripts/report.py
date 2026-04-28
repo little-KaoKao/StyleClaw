@@ -38,10 +38,14 @@ def generate_model_select_report(name: str) -> Path:
 
     model_data: list[dict] = []
     for ev in evaluation.evaluations:
-        results_dir = project_store.model_results_dir(name, ev.model)
+        if ev.variant:
+            results_dir = project_store.model_results_dir(name, ev.model, variant=ev.variant)
+        else:
+            results_dir = project_store.model_results_dir(name, ev.model)
         images = sorted(results_dir.glob("output-*.png"))
         model_data.append({
             "model": ev.model,
+            "variant": ev.variant,
             "scores": ev.scores.model_dump(),
             "total": ev.total,
             "analysis": ev.analysis,
@@ -54,6 +58,7 @@ def generate_model_select_report(name: str) -> Path:
         project_name=name,
         trigger_phrase=analysis.trigger_phrase,
         recommendation=evaluation.recommendation,
+        recommended_variant=evaluation.recommended_variant,
         ref_images=ref_images,
         models=model_data,
     )

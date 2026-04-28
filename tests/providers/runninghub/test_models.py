@@ -2,6 +2,7 @@ import pytest
 
 from styleclaw.providers.runninghub.models import (
     MODEL_REGISTRY,
+    SrefMode,
     get_model,
 )
 
@@ -14,29 +15,30 @@ class TestModelRegistry:
     def test_mj_v7_config(self):
         m = get_model("mj-v7")
         assert m.max_prompt_length == 8192
-        assert m.supports_sref is True
+        assert m.sref_mode == SrefMode.PARAM
         assert "/text-to-image-v7" in m.t2i_endpoint
 
     def test_niji7_config(self):
         m = get_model("niji7")
-        assert m.supports_sref is True
+        assert m.sref_mode == SrefMode.PARAM
         assert "/text-to-image-niji7" in m.t2i_endpoint
 
     def test_nb2_config(self):
         m = get_model("nb2")
         assert m.max_prompt_length == 20000
-        assert m.supports_sref is False
+        assert m.sref_mode == SrefMode.PROMPT
         assert m.i2i_endpoint != m.t2i_endpoint
 
     def test_seedream_config(self):
         m = get_model("seedream")
         assert m.max_prompt_length == 2000
         assert m.uses_width_height is True
+        assert m.sref_mode == SrefMode.PROMPT
 
     def test_gpt_image_2_config(self):
         m = get_model("gpt-image-2")
         assert m.max_prompt_length == 20000
-        assert m.supports_sref is False
+        assert m.sref_mode == SrefMode.PROMPT
         assert m.uses_width_height is False
         assert m.i2i_endpoint != m.t2i_endpoint
         assert m.default_params == {"resolution": "2k", "quality": "medium"}

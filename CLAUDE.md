@@ -99,7 +99,7 @@ data/projects/<project-name>/
 │   ├── initial-analysis.json            # StyleAnalysis from LLM
 │   ├── evaluation.json                  # ModelEvaluation from LLM
 │   ├── report.html
-│   └── results/<model-id>/
+│   └── results/<model-id>/<variant>/    # variant = "prompt-only" | "prompt-sref"
 │       ├── task.json                    # TaskRecord
 │       └── output-*.png
 ├── style-refine/
@@ -146,18 +146,25 @@ styleclaw analyze <project-name>
 
 ### Phase 2: MODEL_SELECT
 
+Each model is tested under two conditions (variants):
+- **prompt-only**: Only the trigger phrase, no style reference image
+- **prompt-sref**: Trigger phrase + style reference image (MJ via `--sref` param, others via `参考图1的风格：` prompt prefix + `imageUrls`)
+
+If prompt-only is sufficient (total ≥ 7.0), prefer it for flexibility.
+
 ```bash
-# Generate test images across all models
+# Generate test images across all models (2 variants each)
 styleclaw generate <project-name>
 
 # Poll until images are ready
 styleclaw poll <project-name>
 
-# LLM evaluates which models best reproduce the style
+# LLM evaluates which models best reproduce the style (compares both variants)
 styleclaw evaluate <project-name>
-# → Outputs scores + HTML report
+# → Outputs scores + HTML report with variant comparison
 
 # Confirm model selection (advances to STYLE_REFINE)
+# In full-pipeline `run` mode, this step pauses for user confirmation
 styleclaw select-model <project-name> --models mj-v7
 ```
 
@@ -253,12 +260,15 @@ styleclaw report <project-name>
 
 ## Available Image Generation Models
 
-| Model ID | Name | sref Support | Notes |
-|----------|------|:---:|-------|
-| `mj-v7` | Midjourney v7 | Yes | Default stylize=200, returns 4 images per task |
-| `niji7` | Midjourney niji7 | Yes | Anime-focused, stylize=200 |
-| `nb2` | NanoBanana2 | No | resolution=2k, max 20000 char prompt |
-| `seedream` | Seedream v5-lite | No | Uses width×height instead of aspectRatio, max 2000 char prompt |
+| Model ID | Name | sref Mode | Notes |
+|----------|------|:---------:|-------|
+| `mj-v7` | Midjourney v7 | `param` | `--sref` + `sw=100`, stylize=200, returns 4 images per task |
+| `niji7` | Midjourney niji7 | `param` | `--sref` + `sw=100`, anime-focused, stylize=200 |
+| `nb2` | NanoBanana2 | `prompt` | `参考图1的风格：` + `imageUrls`, resolution=2k, max 20000 char |
+| `seedream` | Seedream v5-lite | `prompt` | `参考图1的风格：` + `imageUrls`, width×height, max 2000 char |
+| `gpt-image-2` | GPT-Image-2 | `prompt` | `参考图1的风格：` + `imageUrls`, resolution=2k, max 20000 char |
+
+**sref modes**: `param` = style ref via API parameter (`sref`+`sw`); `prompt` = style ref via prompt prefix + `imageUrls` parameter
 
 ## Conventions
 
@@ -267,7 +277,7 @@ styleclaw report <project-name>
 - **Client lifecycle**: Use `_run_with_client()` in CLI to ensure proper httpx client cleanup
 - **Storage**: JSON files under `data/projects/<name>/`, monkeypatch `DATA_ROOT` in tests
 - **LLM output**: Always strip markdown fences via `_clean_json()` before parsing
-- **Prompt building**: Final prompt = `trigger_phrase + ", " + character_desc` (via `build_params()` in `prompt_builder.py`)
+- **Prompt building**: Final prompt = `trigger_phrase + ", " + character_desc`; for prompt-sref variant with `SrefMode.PROMPT` models: `参考图1的风格：trigger_phrase + ", " + character_desc` + `imageUrls` param
 - **Image encoding**: `encode_image_for_llm()` returns `(base64_str, media_type)` — resizes to 1024px long-edge, format determined by image mode (RGBA→PNG, else→JPEG)
 - **Submit retry**: RunningHub submit retries up to 3 times on empty `taskId` response
 - **Poll**: Skips tasks with status `SUCCESS` or `FAILED`, skips tasks with no `task_id`

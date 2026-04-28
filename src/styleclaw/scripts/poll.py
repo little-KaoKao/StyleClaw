@@ -30,26 +30,31 @@ async def _download_results(results: list[dict[str, Any]], dest_dir: Path) -> No
 
 async def _poll_one_model_select(
     name: str,
-    model_id: str,
+    key: str,
     record: TaskRecord,
     client: RunningHubClient,
 ) -> tuple[str, TaskRecord]:
     if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
         logger.info("Task %s already terminal (%s), skipping.", record.task_id, record.status)
-        return model_id, record
+        return key, record
 
     if not record.task_id:
-        logger.warning("Skipping model %s: no task_id (submission may have failed).", model_id)
-        return model_id, record
+        logger.warning("Skipping %s: no task_id (submission may have failed).", key)
+        return key, record
 
-    logger.info("Polling task %s for model %s...", record.task_id, model_id)
+    logger.info("Polling task %s for %s...", record.task_id, key)
     new_record = await poll_and_update(client, record)
-    project_store.save_task_record(name, model_id, new_record)
 
-    results_dir = project_store.model_results_dir(name, model_id)
+    if "/" in key:
+        model_id, variant = key.split("/", 1)
+        project_store.save_task_record(name, model_id, new_record, variant=variant)
+        results_dir = project_store.model_results_dir(name, model_id, variant=variant)
+    else:
+        project_store.save_task_record(name, key, new_record)
+        results_dir = project_store.model_results_dir(name, key)
+
     await _download_results(new_record.results, results_dir)
-
-    return model_id, new_record
+    return key, new_record
 
 
 async def poll_model_select(
@@ -64,17 +69,17 @@ async def poll_model_select(
 
     async with asyncio.TaskGroup() as tg:
         tasks = {
-            model_id: tg.create_task(
-                _poll_one_model_select(name, model_id, record, client)
+            key: tg.create_task(
+                _poll_one_model_select(name, key, record, client)
             )
-            for model_id, record in records.items()
+            for key, record in records.items()
         }
 
-    for model_id, task in tasks.items():
+    for key, task in tasks.items():
         _, new_record = task.result()
-        updated[model_id] = new_record
+        updated[key] = new_record
 
-    logger.info("Poll complete. %d models processed.", len(updated))
+    logger.info("Poll complete. %d tasks processed.", len(updated))
     return updated
 
 

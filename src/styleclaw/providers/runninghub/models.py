@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
+
+
+class SrefMode(StrEnum):
+    PARAM = "param"
+    PROMPT = "prompt"
 
 
 @dataclass(frozen=True)
@@ -11,10 +17,10 @@ class ModelConfig:
     t2i_endpoint: str
     i2i_endpoint: str
     max_prompt_length: int
+    sref_mode: SrefMode = SrefMode.PROMPT
     aspect_ratio_key: str = "aspectRatio"
     aspect_ratio_values: tuple[str, ...] = ("1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3")
     default_params: dict[str, Any] = field(default_factory=dict)
-    supports_sref: bool = False
     uses_width_height: bool = False
 
 
@@ -25,7 +31,7 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         t2i_endpoint="/openapi/v2/youchuan/text-to-image-v7",
         i2i_endpoint="/openapi/v2/youchuan/text-to-image-v7",
         max_prompt_length=8192,
-        supports_sref=True,
+        sref_mode=SrefMode.PARAM,
         default_params={"stylize": 200},
     ),
     "niji7": ModelConfig(
@@ -34,7 +40,7 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         t2i_endpoint="/openapi/v2/youchuan/text-to-image-niji7",
         i2i_endpoint="/openapi/v2/youchuan/text-to-image-niji7",
         max_prompt_length=8192,
-        supports_sref=True,
+        sref_mode=SrefMode.PARAM,
         default_params={"stylize": 200},
     ),
     "nb2": ModelConfig(
@@ -43,6 +49,7 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         t2i_endpoint="/openapi/v2/rhart-image-n-g31-flash-official/text-to-image",
         i2i_endpoint="/openapi/v2/rhart-image-n-g31-flash-official/image-to-image",
         max_prompt_length=20000,
+        sref_mode=SrefMode.PROMPT,
         default_params={"resolution": "2k"},
     ),
     "seedream": ModelConfig(
@@ -51,6 +58,7 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         t2i_endpoint="/openapi/v2/seedream-v5-lite/text-to-image",
         i2i_endpoint="/openapi/v2/seedream-v5-lite/image-to-image",
         max_prompt_length=2000,
+        sref_mode=SrefMode.PROMPT,
         uses_width_height=True,
     ),
     "gpt-image-2": ModelConfig(
@@ -59,6 +67,7 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         t2i_endpoint="/openapi/v2/rhart-image-g-2-official/text-to-image",
         i2i_endpoint="/openapi/v2/rhart-image-g-2-official/image-to-image",
         max_prompt_length=20000,
+        sref_mode=SrefMode.PROMPT,
         aspect_ratio_values=("1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"),
         default_params={"resolution": "2k", "quality": "medium"},
     ),

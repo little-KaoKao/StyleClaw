@@ -496,6 +496,50 @@ def add_refs(
     typer.echo(f"Added {len(upload_records)} reference images for i2i batch {batch_num}.")
 
 
+def _confirm_select_model(
+    action_name: str,
+    args: dict[str, Any],
+    ctx: "ExecutionContext",
+) -> dict[str, Any] | None:
+    """Prompt user to confirm or override model selection."""
+    from styleclaw.providers.runninghub.models import MODEL_REGISTRY
+
+    try:
+        evaluation = project_store.load_evaluation(ctx.project)
+    except FileNotFoundError:
+        evaluation = None
+
+    typer.echo("\n=== 模型选择确认 ===")
+    if evaluation:
+        typer.echo(f"  LLM 推荐: {evaluation.recommendation}")
+        if evaluation.recommended_variant:
+            typer.echo(f"  推荐方案: {evaluation.recommended_variant}")
+        typer.echo("  各模型评分:")
+        for ev in evaluation.evaluations:
+            label = f"{ev.model}"
+            if ev.variant:
+                label += f" [{ev.variant}]"
+            typer.echo(f"    {label:30s} total={ev.total:.1f}")
+        typer.echo("")
+
+    default_models = args.get("models", "")
+    if not default_models and evaluation:
+        default_models = evaluation.recommendation
+
+    available = list(MODEL_REGISTRY.keys())
+    typer.echo(f"  可选模型: {', '.join(available)}")
+    user_input = typer.prompt(
+        "  选择模型 (逗号分隔, 回车使用推荐)",
+        default=default_models,
+    )
+
+    if not user_input or not user_input.strip():
+        typer.echo("  已取消。")
+        return None
+
+    return {**args, "models": user_input.strip()}
+
+
 @app.command()
 def run(
     intent: str = typer.Argument(..., help="Natural language description of what to do"),
@@ -549,8 +593,15 @@ def run(
             else:
                 typer.echo(f"  x  {result.message}", err=True)
 
+        confirm_fn = None if yes else _confirm_select_model
+
         async with _build_context(project, needs_client, needs_llm) as ctx:
-            results = await execute(action_plan, ctx, on_step_start=_on_start, on_step_done=_on_done)
+            results = await execute(
+                action_plan, ctx,
+                on_step_start=_on_start,
+                on_step_done=_on_done,
+                on_confirm=confirm_fn,
+            )
             if results and not results[-1].ok:
                 raise typer.Exit(1)
 

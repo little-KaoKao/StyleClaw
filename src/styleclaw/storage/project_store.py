@@ -123,22 +123,47 @@ def load_analysis(name: str) -> StyleAnalysis:
     return _load_model(StyleAnalysis, project_dir(name) / "model-select" / "initial-analysis.json")
 
 
-def model_results_dir(name: str, model_id: str) -> Path:
-    d = project_dir(name) / "model-select" / "results" / model_id
+def model_results_dir(name: str, model_id: str, variant: str = "") -> Path:
+    if variant:
+        d = project_dir(name) / "model-select" / "results" / model_id / variant
+    else:
+        d = project_dir(name) / "model-select" / "results" / model_id
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def save_task_record(name: str, model_id: str, record: TaskRecord) -> None:
-    _save_model(record, model_results_dir(name, model_id) / "task.json")
+def save_task_record(name: str, model_id: str, record: TaskRecord, variant: str = "") -> None:
+    _save_model(record, model_results_dir(name, model_id, variant) / "task.json")
 
 
-def load_task_record(name: str, model_id: str) -> TaskRecord:
-    return _load_model(TaskRecord, model_results_dir(name, model_id) / "task.json")
+def load_task_record(name: str, model_id: str, variant: str = "") -> TaskRecord:
+    return _load_model(TaskRecord, model_results_dir(name, model_id, variant) / "task.json")
+
+
+def _load_variant_records(results_dir: Path) -> dict[str, TaskRecord]:
+    """Load task records from variant sub-dirs: results/<model>/<variant>/task.json"""
+    records: dict[str, TaskRecord] = {}
+    if not results_dir.exists():
+        return records
+    for model_dir in results_dir.iterdir():
+        if not model_dir.is_dir():
+            continue
+        for variant_dir in model_dir.iterdir():
+            if not variant_dir.is_dir():
+                continue
+            task_file = variant_dir / "task.json"
+            if task_file.exists():
+                key = f"{model_dir.name}/{variant_dir.name}"
+                records[key] = _load_model(TaskRecord, task_file)
+    return records
 
 
 def load_all_task_records(name: str) -> dict[str, TaskRecord]:
-    return _load_all_records(project_dir(name) / "model-select" / "results")
+    results_dir = project_dir(name) / "model-select" / "results"
+    records = _load_variant_records(results_dir)
+    if records:
+        return records
+    return _load_all_records(results_dir)
 
 
 def save_evaluation(name: str, evaluation: ModelEvaluation) -> None:

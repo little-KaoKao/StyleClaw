@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from typing import Any, Callable
 
 import typer
 
@@ -10,6 +10,8 @@ from styleclaw.orchestrator.actions import ACTION_REGISTRY, ExecutionContext, St
 from styleclaw.storage import project_store
 
 logger = logging.getLogger(__name__)
+
+ConfirmCallback = Callable[[str, dict[str, Any], ExecutionContext], dict[str, Any] | None]
 
 
 def _should_continue_loop(ctx: ExecutionContext) -> bool:
@@ -45,6 +47,7 @@ async def execute(
     ctx: ExecutionContext,
     on_step_start: Callable[[int, str, str], None] | None = None,
     on_step_done: Callable[[int, str, StepResult], None] | None = None,
+    on_confirm: ConfirmCallback | None = None,
 ) -> list[StepResult]:
     results: list[StepResult] = []
     steps = plan.steps
@@ -75,6 +78,16 @@ async def execute(
             if on_step_done:
                 on_step_done(i, step.name, result)
             return results
+
+        if action_def.requires_confirmation and on_confirm:
+            confirmed_args = on_confirm(step.name, step.args, ctx)
+            if confirmed_args is None:
+                result = StepResult(ok=False, message=f"User cancelled '{step.name}'")
+                results.append(result)
+                if on_step_done:
+                    on_step_done(i, step.name, result)
+                return results
+            step = step.model_copy(update={"args": confirmed_args})
 
         if on_step_start:
             on_step_start(i, step.name, step.description)

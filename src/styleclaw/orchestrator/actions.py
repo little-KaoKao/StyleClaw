@@ -35,6 +35,7 @@ class ActionDef:
     fn: Callable[[ExecutionContext, dict[str, Any]], Awaitable[StepResult]]
     needs_client: bool = False
     needs_llm: bool = False
+    requires_confirmation: bool = False
 
 
 async def do_analyze(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
@@ -128,11 +129,15 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
 
         model_images: dict[str, list[Path]] = {}
         records = project_store.load_all_task_records(ctx.project)
-        for mid in records:
-            results_dir = project_store.model_results_dir(ctx.project, mid)
+        for key in records:
+            if "/" in key:
+                model_id, variant = key.split("/", 1)
+                results_dir = project_store.model_results_dir(ctx.project, model_id, variant=variant)
+            else:
+                results_dir = project_store.model_results_dir(ctx.project, key)
             images = sorted(results_dir.glob("output-*.png"))
             if images:
-                model_images[mid] = images
+                model_images[key] = images
 
         if not model_images:
             return StepResult(ok=False, message="No generated images found")
@@ -333,7 +338,7 @@ ACTION_REGISTRY: dict[str, ActionDef] = {
     "generate":     ActionDef(fn=do_generate,      needs_client=True,  needs_llm=False),
     "poll":         ActionDef(fn=do_poll,          needs_client=True,  needs_llm=False),
     "evaluate":     ActionDef(fn=do_evaluate,      needs_client=False, needs_llm=True),
-    "select-model": ActionDef(fn=do_select_model,  needs_client=False, needs_llm=False),
+    "select-model": ActionDef(fn=do_select_model,  needs_client=False, needs_llm=False, requires_confirmation=True),
     "refine":       ActionDef(fn=do_refine,        needs_client=False, needs_llm=True),
     "approve":      ActionDef(fn=do_approve,       needs_client=False, needs_llm=False),
     "design-cases": ActionDef(fn=do_design_cases,  needs_client=False, needs_llm=True),
