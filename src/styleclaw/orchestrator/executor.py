@@ -59,7 +59,7 @@ async def execute(
             results.append(result)
             if on_step_done:
                 on_step_done(i, step.name, result)
-            raise typer.Exit(1)
+            return results
 
         if on_step_start:
             on_step_start(i, step.name, step.description)
@@ -71,7 +71,7 @@ async def execute(
             on_step_done(i, step.name, result)
 
         if not result.ok:
-            raise typer.Exit(1)
+            return results
 
         if plan.loop and i == plan.loop.end_step:
             if _should_continue_loop(ctx) and loop_count < plan.loop.max_iterations:

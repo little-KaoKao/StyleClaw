@@ -34,7 +34,7 @@ async def plan(llm: LLMProvider, project: str, intent: str) -> ActionPlan:
         available = list(dict.fromkeys(available + next_phases_actions))
 
     template = Template(PROMPT_PATH.read_text())
-    system_prompt = template.substitute(
+    system_prompt = template.safe_substitute(
         project_name=project,
         phase=state.phase.value,
         current_round=state.current_round,

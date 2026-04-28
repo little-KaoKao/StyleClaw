@@ -27,7 +27,7 @@ async def design_cases(
 
     system_prompt = (
         PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
-        .replace("{ip_info}", ip_info)
+        .replace("{ip_info}", ip_info.replace("{", "{{").replace("}", "}}"))
         .replace("{trigger_phrase}", trigger_phrase)
         .replace("{case_skeleton}", skeleton_text)
     )
@@ -49,8 +49,14 @@ async def design_cases(
         bracket = truncated.rfind("]")
         if bracket < 0:
             raise
-        data = json.loads(truncated[: bracket + 1].rsplit(",", 1)[0] + "]}")
+        candidate = truncated[: bracket + 1].rsplit(",", 1)[0] + "]}"
+        try:
+            data = json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Could not recover truncated JSON from LLM: {exc}") from exc
 
+    if "cases" not in data:
+        raise ValueError("LLM response missing 'cases' key")
     cases = [BatchCase.model_validate(c) for c in data["cases"]]
     if not cases:
         raise ValueError("LLM returned zero cases — response may have been truncated.")

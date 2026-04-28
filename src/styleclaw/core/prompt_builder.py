@@ -47,7 +47,9 @@ def build_params(
         params["sw"] = 100
 
     if extra_params:
-        params.update(extra_params)
+        reserved = {"prompt", "width", "height", "sref", "sw", config.aspect_ratio_key}
+        safe = {k: v for k, v in extra_params.items() if k not in reserved}
+        params.update(safe)
 
     return params
 

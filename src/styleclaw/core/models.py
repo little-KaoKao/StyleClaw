@@ -79,14 +79,15 @@ class DimensionScores(_FrozenModel):
     texture: float = 0.0
     overall_mood: float = 0.0
 
+    def _all_scores(self) -> list[float]:
+        return [self.color_palette, self.line_style, self.lighting, self.texture, self.overall_mood]
+
     def average(self) -> float:
-        vals = [self.color_palette, self.line_style, self.lighting, self.texture, self.overall_mood]
+        vals = self._all_scores()
         return sum(vals) / len(vals)
 
     def min_score(self) -> float:
-        return min(
-            self.color_palette, self.line_style, self.lighting, self.texture, self.overall_mood
-        )
+        return min(self._all_scores())
 
     def all_above(self, threshold: float) -> bool:
         return self.min_score() >= threshold

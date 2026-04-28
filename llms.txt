@@ -1,5 +1,5 @@
 # RunningHub-API
-***REDACTED***
+优先使用标准模型 API（/openapi/v2/...），只有当该模型没有标准 API 封装时才 fallback 到 AI应用接口（nodeInfoList）。
 
 ## Docs
 - [开始](https://www.runninghub.cn/runninghub-api-doc-cn/doc-8287334.md): 

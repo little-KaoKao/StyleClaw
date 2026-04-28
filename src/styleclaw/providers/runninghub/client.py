@@ -49,12 +49,13 @@ class RunningHubClient:
                 return resp.json()
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
-                wait = 2**attempt
-                logger.warning(
-                    "Request to %s failed (attempt %d/%d): %s. Retrying in %ds.",
-                    path, attempt + 1, MAX_RETRIES, exc, wait,
-                )
-                await asyncio.sleep(wait)
+                if attempt < MAX_RETRIES - 1:
+                    wait = 2**attempt
+                    logger.warning(
+                        "Request to %s failed (attempt %d/%d): %s. Retrying in %ds.",
+                        path, attempt + 1, MAX_RETRIES, exc, wait,
+                    )
+                    await asyncio.sleep(wait)
         raise RuntimeError(
             f"Request to {path} failed after {MAX_RETRIES} retries"
         ) from last_exc
@@ -74,12 +75,13 @@ class RunningHubClient:
                 return resp.json()
             except (httpx.HTTPStatusError, httpx.TransportError) as exc:
                 last_exc = exc
-                wait = 2**attempt
-                logger.warning(
-                    "Upload to %s failed (attempt %d/%d): %s. Retrying in %ds.",
-                    path, attempt + 1, MAX_RETRIES, exc, wait,
-                )
-                await asyncio.sleep(wait)
+                if attempt < MAX_RETRIES - 1:
+                    wait = 2**attempt
+                    logger.warning(
+                        "Upload to %s failed (attempt %d/%d): %s. Retrying in %ds.",
+                        path, attempt + 1, MAX_RETRIES, exc, wait,
+                    )
+                    await asyncio.sleep(wait)
         raise RuntimeError(
             f"Upload to {path} failed after {MAX_RETRIES} retries"
         ) from last_exc

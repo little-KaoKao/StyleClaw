@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -106,6 +106,8 @@ class TestPollAndUpdate:
         assert result.status == "FAILED"
         assert "error" in result.error_message
 
+    @patch("styleclaw.providers.runninghub.tasks.TASK_TIMEOUT", 0.03)
+    @patch("styleclaw.providers.runninghub.tasks.POLL_INTERVAL", 0.01)
     async def test_updates_on_timeout(self, mock_client: AsyncMock) -> None:
         record = TaskRecord(task_id="t1", model_id="mj-v7", status="QUEUED")
         mock_client.post.return_value = {"status": "RUNNING"}

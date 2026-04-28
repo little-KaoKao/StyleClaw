@@ -73,12 +73,12 @@ class TestBedrockProvider:
             await provider.invoke(system="s", messages=[])
 
     @respx.mock
-    async def test_invoke_handles_empty_content(self, provider: BedrockProvider) -> None:
+    async def test_invoke_raises_on_empty_content(self, provider: BedrockProvider) -> None:
         respx.post(
             f"https://bedrock-runtime.us-east-1.amazonaws.com/model/test-model/invoke"
         ).respond(json={"content": []})
-        result = await provider.invoke(system="s", messages=[])
-        assert result == ""
+        with pytest.raises(ValueError, match="no text content"):
+            await provider.invoke(system="s", messages=[])
 
     async def test_close(self, provider: BedrockProvider) -> None:
         await provider.close()

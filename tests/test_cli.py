@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from styleclaw.cli import app
 from styleclaw.core.models import (
+    HistoryEntry,
     Phase,
     ProjectConfig,
     ProjectState,
@@ -294,7 +295,14 @@ class TestAdjustCommand:
 
 class TestRollbackCommand:
     def test_rollback_to_style_refine(self, setup_project) -> None:
-        _set_state(Phase.BATCH_T2I)
+        history = [
+            HistoryEntry(phase=Phase.INIT, completed_at="2024-01-01T00:00:00+00:00"),
+            HistoryEntry(phase=Phase.MODEL_SELECT, completed_at="2024-01-01T00:00:01+00:00"),
+            HistoryEntry(phase=Phase.STYLE_REFINE, completed_at="2024-01-01T00:00:02+00:00"),
+        ]
+        _set_state(Phase.BATCH_T2I, history=history, current_round=2)
+        rd = project_store.project_dir("test-proj") / "style-refine" / "round-002"
+        rd.mkdir(parents=True, exist_ok=True)
         result = runner.invoke(app, ["rollback", "test-proj", "--to", "STYLE_REFINE", "--round", "2"])
         assert result.exit_code == 0
         state = project_store.load_state("test-proj")

@@ -64,17 +64,32 @@ class TestAdvance:
 
 
 class TestRollback:
+    def _state_with_history(self, current: Phase, visited: list[Phase]) -> ProjectState:
+        from styleclaw.core.models import HistoryEntry
+        history = [
+            HistoryEntry(phase=p, completed_at="2024-01-01T00:00:00+00:00")
+            for p in visited
+        ]
+        return ProjectState(phase=current, history=history)
+
     def test_can_rollback_to_earlier_phase(self):
-        assert can_rollback(Phase.STYLE_REFINE, Phase.INIT) is True
+        state = self._state_with_history(Phase.STYLE_REFINE, [Phase.INIT, Phase.MODEL_SELECT])
+        assert can_rollback(state, Phase.INIT) is True
 
     def test_cannot_rollback_from_init(self):
-        assert can_rollback(Phase.INIT, Phase.INIT) is False
+        state = ProjectState(phase=Phase.INIT)
+        assert can_rollback(state, Phase.INIT) is False
 
     def test_cannot_rollback_to_later_phase(self):
-        assert can_rollback(Phase.INIT, Phase.MODEL_SELECT) is False
+        state = ProjectState(phase=Phase.INIT)
+        assert can_rollback(state, Phase.MODEL_SELECT) is False
+
+    def test_cannot_rollback_to_unvisited_phase(self):
+        state = self._state_with_history(Phase.BATCH_T2I, [Phase.INIT, Phase.STYLE_REFINE])
+        assert can_rollback(state, Phase.MODEL_SELECT) is False
 
     def test_rollback_succeeds(self):
-        state = ProjectState(phase=Phase.STYLE_REFINE)
+        state = self._state_with_history(Phase.STYLE_REFINE, [Phase.INIT, Phase.MODEL_SELECT])
         new_state = rollback(state, Phase.INIT)
         assert new_state.phase == Phase.INIT
         assert new_state.history[-1].metadata["rollback_from"] == "STYLE_REFINE"

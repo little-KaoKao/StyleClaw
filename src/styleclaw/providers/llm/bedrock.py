@@ -77,25 +77,29 @@ class BedrockProvider:
                     for block in result.get("content", [])
                     if block.get("type") == "text"
                 ]
+                if not text_blocks:
+                    raise ValueError("Bedrock returned no text content in response")
                 return "\n".join(text_blocks)
             except httpx.TransportError as exc:
                 last_exc = exc
-                wait = 2**attempt
-                logger.warning(
-                    "Bedrock request failed (attempt %d/%d): %s. Retrying in %ds.",
-                    attempt + 1, MAX_RETRIES, exc, wait,
-                )
-                await asyncio.sleep(wait)
+                if attempt < MAX_RETRIES - 1:
+                    wait = 2**attempt
+                    logger.warning(
+                        "Bedrock request failed (attempt %d/%d): %s. Retrying in %ds.",
+                        attempt + 1, MAX_RETRIES, exc, wait,
+                    )
+                    await asyncio.sleep(wait)
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code < 500:
                     raise
                 last_exc = exc
-                wait = 2**attempt
-                logger.warning(
-                    "Bedrock request failed (attempt %d/%d): %s. Retrying in %ds.",
-                    attempt + 1, MAX_RETRIES, exc, wait,
-                )
-                await asyncio.sleep(wait)
+                if attempt < MAX_RETRIES - 1:
+                    wait = 2**attempt
+                    logger.warning(
+                        "Bedrock request failed (attempt %d/%d): %s. Retrying in %ds.",
+                        attempt + 1, MAX_RETRIES, exc, wait,
+                    )
+                    await asyncio.sleep(wait)
         raise RuntimeError(
             f"Bedrock invoke failed after {MAX_RETRIES} retries"
         ) from last_exc

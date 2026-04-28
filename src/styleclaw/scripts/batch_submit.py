@@ -4,7 +4,7 @@ import asyncio
 import logging
 from typing import Any
 
-from styleclaw.core.models import BatchCase, BatchConfig, TaskRecord
+from styleclaw.core.models import BatchCase, BatchConfig, TaskRecord, TaskStatus
 from styleclaw.core.prompt_builder import build_params
 from styleclaw.providers.runninghub.client import RunningHubClient
 from styleclaw.providers.runninghub.models import get_model
@@ -71,7 +71,7 @@ async def batch_submit_i2i(
 
     existing = project_store.load_all_i2i_task_records(name, batch_num)
     submitted_case_ids = {
-        cid for cid, rec in existing.items() if rec.status != "pending"
+        cid for cid, rec in existing.items() if rec.status != TaskStatus.FAILED
     }
 
     tasks: dict[str, asyncio.Task] = {}

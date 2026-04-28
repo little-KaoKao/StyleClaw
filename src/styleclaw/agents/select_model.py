@@ -49,7 +49,13 @@ async def evaluate_models(
     raw = await llm.invoke(system=system_prompt, messages=messages, max_tokens=4096)
 
     cleaned = clean_json(raw)
-    data = json.loads(cleaned)
-    evaluation = ModelEvaluation.model_validate(data)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM returned invalid JSON for model evaluation: {exc}") from exc
+    try:
+        evaluation = ModelEvaluation.model_validate(data)
+    except Exception as exc:
+        raise ValueError(f"LLM response failed validation for ModelEvaluation: {exc}") from exc
     logger.info("Model evaluation complete. Recommendation: %s", evaluation.recommendation)
     return evaluation

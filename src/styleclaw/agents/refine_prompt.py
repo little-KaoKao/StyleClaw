@@ -29,13 +29,16 @@ async def refine_prompt(
 ) -> PromptConfig:
     history_text = _build_history_text(evaluations)
 
+    def _sanitize(s: str) -> str:
+        return s.replace("{", "{{").replace("}", "}}")
+
     system_prompt = (
         PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
         .replace("{trigger_phrase}", current_trigger)
         .replace("{round_num}", str(round_num))
-        .replace("{ip_info}", ip_info)
+        .replace("{ip_info}", _sanitize(ip_info))
         .replace("{history_scores}", history_text)
-        .replace("{human_direction}", human_direction or "(none)")
+        .replace("{human_direction}", _sanitize(human_direction) if human_direction else "(none)")
     )
 
     content: list[dict] = []
@@ -54,11 +57,17 @@ async def refine_prompt(
     raw = await llm.invoke(system=system_prompt, messages=messages)
 
     cleaned = clean_json(raw)
-    data = json.loads(cleaned)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM returned invalid JSON for prompt refinement: {exc}") from exc
 
     data["round"] = round_num
     data.setdefault("derived_from", f"round-{round_num - 1:03d}" if round_num > 1 else "initial-analysis")
-    config = PromptConfig.model_validate(data)
+    try:
+        config = PromptConfig.model_validate(data)
+    except Exception as exc:
+        raise ValueError(f"LLM response failed validation for PromptConfig: {exc}") from exc
     logger.info("Refined trigger (round %d): %s", round_num, config.trigger_phrase[:80])
     return config
 

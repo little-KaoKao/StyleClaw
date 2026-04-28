@@ -9,24 +9,36 @@ from PIL import Image
 MAX_LONG_EDGE = 1024
 
 
+def _needs_alpha(img: Image.Image) -> bool:
+    return img.mode in ("RGBA", "PA", "LA") or (
+        img.mode == "P" and "transparency" in img.info
+    )
+
+
 def _output_format(img: Image.Image) -> str:
-    return "PNG" if img.mode == "RGBA" else "JPEG"
+    return "PNG" if _needs_alpha(img) else "JPEG"
 
 
 def resize_for_llm(image_path: Path | str) -> tuple[bytes, str]:
-    img = Image.open(image_path)
-    w, h = img.size
-    long_edge = max(w, h)
+    path = Path(image_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"Image not found: {path}")
 
-    if long_edge > MAX_LONG_EDGE:
-        scale = MAX_LONG_EDGE / long_edge
-        new_w = int(w * scale)
-        new_h = int(h * scale)
-        img = img.resize((new_w, new_h), Image.LANCZOS)
+    with Image.open(path) as img:
+        w, h = img.size
+        long_edge = max(w, h)
 
-    fmt = _output_format(img)
-    buf = io.BytesIO()
-    img.save(buf, format=fmt, quality=85)
+        if long_edge > MAX_LONG_EDGE:
+            scale = MAX_LONG_EDGE / long_edge
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            img = img.resize((new_w, new_h), Image.LANCZOS)
+
+        fmt = _output_format(img)
+        if fmt == "JPEG" and img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, format=fmt, quality=85)
     media_type = "image/png" if fmt == "PNG" else "image/jpeg"
     return buf.getvalue(), media_type
 
@@ -37,8 +49,9 @@ def image_to_base64(image_path: Path | str) -> str:
 
 
 def media_type_for(image_path: Path | str) -> str:
-    img = Image.open(image_path)
-    fmt = _output_format(img)
+    path = Path(image_path)
+    with Image.open(path) as img:
+        fmt = _output_format(img)
     return "image/png" if fmt == "PNG" else "image/jpeg"
 
 

@@ -84,6 +84,10 @@ async def _poll_one_style_refine(
         logger.info("Task %s already completed, skipping.", record.task_id)
         return model_id, record
 
+    if not record.task_id:
+        logger.warning("Skipping model %s (round %d): no task_id.", model_id, round_num)
+        return model_id, record
+
     logger.info("Polling task %s for model %s (round %d)...", record.task_id, model_id, round_num)
     new_record = await poll_and_update(client, record)
     project_store.save_round_task_record(name, round_num, model_id, new_record)

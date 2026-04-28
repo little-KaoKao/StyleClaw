@@ -17,11 +17,17 @@ async def upload_file(client: RunningHubClient, file_path: Path) -> UploadRecord
     if resp.get("code") != 0:
         raise RuntimeError(f"Upload failed: {resp.get('message', resp)}")
 
-    data = resp["data"]
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Upload response missing 'data' field: {resp}")
+    url = data.get("download_url")
+    file_name = data.get("fileName")
+    if not url or not file_name:
+        raise RuntimeError(f"Upload response missing required fields in 'data': {data}")
     record = UploadRecord(
         local_path=str(file_path),
-        url=data["download_url"],
-        file_name=data["fileName"],
+        url=url,
+        file_name=file_name,
     )
     logger.info("Uploaded %s -> %s", file_path.name, record.url)
     return record

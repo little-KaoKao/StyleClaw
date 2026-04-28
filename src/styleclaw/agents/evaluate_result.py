@@ -55,8 +55,15 @@ async def evaluate_round(
     raw = await llm.invoke(system=system_prompt, messages=messages, max_tokens=4096)
 
     cleaned = clean_json(raw)
-    data = json.loads(cleaned)
-    evaluation = RoundEvaluation.model_validate(data)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM returned invalid JSON for round evaluation: {exc}") from exc
+    data["round"] = round_num
+    try:
+        evaluation = RoundEvaluation.model_validate(data)
+    except Exception as exc:
+        raise ValueError(f"LLM response failed validation for RoundEvaluation: {exc}") from exc
     logger.info(
         "Round %d evaluation: recommendation=%s", round_num, evaluation.recommendation,
     )

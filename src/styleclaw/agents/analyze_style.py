@@ -19,7 +19,8 @@ async def analyze_style(
     ref_image_paths: list[Path],
     ip_info: str,
 ) -> StyleAnalysis:
-    system_prompt = PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8").replace("{ip_info}", ip_info)
+    template = PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
+    system_prompt = template.replace("{ip_info}", ip_info.replace("{", "{{").replace("}", "}}"))
 
     content: list[dict] = []
     for img_path in ref_image_paths:
@@ -41,7 +42,13 @@ async def analyze_style(
     raw = await llm.invoke(system=system_prompt, messages=messages)
 
     cleaned = clean_json(raw)
-    data = json.loads(cleaned)
-    analysis = StyleAnalysis.model_validate(data)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM returned invalid JSON for style analysis: {exc}") from exc
+    try:
+        analysis = StyleAnalysis.model_validate(data)
+    except Exception as exc:
+        raise ValueError(f"LLM response failed validation for StyleAnalysis: {exc}") from exc
     logger.info("Style analysis complete. Trigger: %s", analysis.trigger_phrase[:80])
     return analysis

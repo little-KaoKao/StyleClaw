@@ -33,18 +33,22 @@ def advance(state: ProjectState, target: Phase) -> ProjectState:
     return state.with_phase(target)
 
 
-def can_rollback(current: Phase, target: Phase) -> bool:
-    if current == Phase.INIT:
+def can_rollback(state: ProjectState, target: Phase) -> bool:
+    if state.phase == Phase.INIT:
         return False
-    current_idx = ALL_PHASES.index(current)
+    current_idx = ALL_PHASES.index(state.phase)
     target_idx = ALL_PHASES.index(target)
-    return target_idx < current_idx
+    if target_idx >= current_idx:
+        return False
+    visited = {entry.phase for entry in state.history}
+    visited.add(state.phase)
+    return target in visited
 
 
 def rollback(state: ProjectState, target: Phase) -> ProjectState:
-    if not can_rollback(state.phase, target):
+    if not can_rollback(state, target):
         raise ValueError(
             f"Cannot rollback from {state.phase} to {target}. "
-            f"Target must be an earlier phase."
+            f"Target must be an earlier, previously visited phase."
         )
     return state.with_phase(target, metadata={"rollback_from": str(state.phase)})

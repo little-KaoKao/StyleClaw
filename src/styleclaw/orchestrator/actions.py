@@ -90,6 +90,7 @@ async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     state = project_store.load_state(ctx.project)
 
     for cycle in range(max_cycles):
+        state = project_store.load_state(ctx.project)
         if state.phase == Phase.MODEL_SELECT:
             records = await poll_model_select(ctx.project, ctx.client)
         elif state.phase == Phase.STYLE_REFINE:
@@ -107,7 +108,6 @@ async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
 
         logger.info("Waiting... %d/%d completed (cycle %d/%d)", completed, len(records), cycle + 1, max_cycles)
         await asyncio.sleep(ctx.poll_interval)
-        state = project_store.load_state(ctx.project)
 
     return StepResult(ok=False, message=f"Poll timed out after {max_cycles} cycles")
 

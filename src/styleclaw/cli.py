@@ -61,7 +61,9 @@ def _run_action(
 ) -> StepResult:
     from styleclaw.orchestrator.actions import ACTION_REGISTRY
 
-    action_def = ACTION_REGISTRY[action_name]
+    action_def = ACTION_REGISTRY.get(action_name)
+    if action_def is None:
+        raise ValueError(f"Unknown action: {action_name}")
 
     async def _exec() -> StepResult:
         async with _build_context(
@@ -338,6 +340,13 @@ def rollback(
 
     new_state = do_rollback(state, target)
     if round_num is not None:
+        if round_num < 0:
+            typer.echo(f"Error: Round number must be non-negative, got {round_num}", err=True)
+            raise typer.Exit(1)
+        round_dir = project_store.project_dir(name) / "style-refine" / f"round-{round_num:03d}"
+        if target == Phase.STYLE_REFINE and round_num > 0 and not round_dir.exists():
+            typer.echo(f"Error: Round {round_num} does not exist on disk.", err=True)
+            raise typer.Exit(1)
         new_state = new_state.with_round(round_num)
     project_store.save_state(name, new_state)
 
@@ -526,7 +535,9 @@ def run(
                 typer.echo(f"  x  {result.message}", err=True)
 
         async with _build_context(project, needs_client, needs_llm) as ctx:
-            await execute(action_plan, ctx, on_step_start=_on_start, on_step_done=_on_done)
+            results = await execute(action_plan, ctx, on_step_start=_on_start, on_step_done=_on_done)
+            if results and not results[-1].ok:
+                raise typer.Exit(1)
 
     asyncio.run(_plan_and_execute())
     typer.echo("\nDone.")

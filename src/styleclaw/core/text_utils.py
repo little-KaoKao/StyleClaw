@@ -12,7 +12,7 @@ def clean_json(raw: str) -> str:
     cleaned = cleaned.strip()
     if cleaned.startswith(("{", "[")):
         return cleaned
-    match = re.search(r"[\[{]", cleaned)
+    match = re.search(r"[{\[]", cleaned)
     if match:
         tail = cleaned[match.start():]
         brace = tail[0]

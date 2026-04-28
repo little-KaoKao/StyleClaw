@@ -300,5 +300,7 @@ def _read_json(path: Path) -> dict | list:
 
 
 def _write_json(path: Path, data: dict | list) -> None:
-    with open(path, "w", encoding="utf-8") as f:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+    tmp.replace(path)

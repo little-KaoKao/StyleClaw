@@ -64,8 +64,10 @@ async def poll_task(
     interval: float = POLL_INTERVAL,
     timeout: float = TASK_TIMEOUT,
 ) -> dict[str, Any]:
-    elapsed = 0.0
-    while elapsed < timeout:
+    import time
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
         result = await query_task(client, task_id)
         status = result.get("status", "")
         if status == "SUCCESS":
@@ -76,7 +78,6 @@ async def poll_task(
             )
         logger.debug("Task %s status=%s, waiting %ss...", task_id, status, interval)
         await asyncio.sleep(interval)
-        elapsed += interval
 
     raise TimeoutError(f"Task {task_id} timed out after {timeout}s")
 

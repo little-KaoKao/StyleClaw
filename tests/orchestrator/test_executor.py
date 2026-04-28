@@ -3,7 +3,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
-import typer
 
 from styleclaw.core.models import (
     Action,
@@ -121,7 +120,7 @@ class TestExecute:
         assert len(results) == 1
         assert results[0].ok is True
 
-    async def test_failure_exits(self, setup_project, ctx) -> None:
+    async def test_failure_stops_early(self, setup_project, ctx) -> None:
         project_store.save_state("test-proj", ProjectState(phase=Phase.INIT))
 
         fail_result = StepResult(ok=False, message="error")
@@ -137,17 +136,21 @@ class TestExecute:
             "styleclaw.orchestrator.executor.ACTION_REGISTRY",
             {"analyze": ActionDef(fn=AsyncMock(return_value=fail_result))},
         ):
-            with pytest.raises(typer.Exit):
-                await execute(plan, ctx)
+            results = await execute(plan, ctx)
 
-    async def test_unknown_action_exits(self, setup_project, ctx) -> None:
+        assert len(results) == 1
+        assert results[0].ok is False
+
+    async def test_unknown_action_stops_early(self, setup_project, ctx) -> None:
         plan = ActionPlan(
             summary="Unknown",
             steps=[Action(name="nonexistent", description="不存在")],
         )
 
-        with pytest.raises(typer.Exit):
-            await execute(plan, ctx)
+        results = await execute(plan, ctx)
+        assert len(results) == 1
+        assert results[0].ok is False
+        assert "Unknown action" in results[0].message
 
     async def test_callbacks_called(self, setup_project, ctx) -> None:
         project_store.save_state("test-proj", ProjectState(phase=Phase.INIT))
