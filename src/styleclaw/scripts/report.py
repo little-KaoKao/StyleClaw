@@ -16,6 +16,7 @@ _env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
 
 def _img_to_data_uri(path: Path) -> str:
     if not path.exists():
+        logger.warning("Image not found for report: %s", path)
         return ""
     data = base64.b64encode(path.read_bytes()).decode("utf-8")
     suffix = path.suffix.lower()

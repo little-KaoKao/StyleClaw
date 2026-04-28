@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 
-from styleclaw.core.image_utils import encode_image_for_llm
+from styleclaw.core.image_utils import build_image_block, encode_image_for_llm
 from styleclaw.core.models import StyleAnalysis
-from styleclaw.core.text_utils import clean_json
+from styleclaw.core.text_utils import parse_llm_response, sanitize_braces
 from styleclaw.providers.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -20,19 +19,9 @@ async def analyze_style(
     ip_info: str,
 ) -> StyleAnalysis:
     template = PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
-    system_prompt = template.replace("{ip_info}", ip_info.replace("{", "{{").replace("}", "}}"))
+    system_prompt = template.replace("{ip_info}", sanitize_braces(ip_info))
 
-    content: list[dict] = []
-    for img_path in ref_image_paths:
-        b64_data, media_type = encode_image_for_llm(img_path)
-        content.append({
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": media_type,
-                "data": b64_data,
-            },
-        })
+    content: list[dict] = [build_image_block(p) for p in ref_image_paths]
     content.append({
         "type": "text",
         "text": "Analyze these reference images and generate a style trigger phrase.",
@@ -41,14 +30,6 @@ async def analyze_style(
     messages = [{"role": "user", "content": content}]
     raw = await llm.invoke(system=system_prompt, messages=messages)
 
-    cleaned = clean_json(raw)
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"LLM returned invalid JSON for style analysis: {exc}") from exc
-    try:
-        analysis = StyleAnalysis.model_validate(data)
-    except Exception as exc:
-        raise ValueError(f"LLM response failed validation for StyleAnalysis: {exc}") from exc
+    analysis = parse_llm_response(raw, StyleAnalysis, "style analysis")
     logger.info("Style analysis complete. Trigger: %s", analysis.trigger_phrase[:80])
     return analysis

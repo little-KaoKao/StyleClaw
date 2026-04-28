@@ -22,6 +22,10 @@ async def batch_submit_t2i(
     sref_url: str = "",
 ) -> dict[str, TaskRecord]:
     config = project_store.load_batch_config(name, batch_num)
+    if not config.cases:
+        raise ValueError(
+            f"No cases found in batch {batch_num}. Run 'design-cases' first."
+        )
     model_config = get_model(model_id)
     pending = [c for c in config.cases if c.status == "pending"]
 
@@ -98,20 +102,27 @@ async def batch_submit_i2i(
             tasks[case_id] = tg.create_task(_submit_one(i, upload.url))
 
     records: dict[str, TaskRecord] = {}
-    cases: list[BatchCase] = []
+    new_cases: dict[str, BatchCase] = {}
     for case_id, task in tasks.items():
         records[case_id] = task.result()
-        cases.append(BatchCase(
+        new_cases[case_id] = BatchCase(
             id=case_id,
             category="i2i",
-            description=f"Image-to-image from uploaded reference",
+            description="Image-to-image from uploaded reference",
             status="submitted",
-        ))
+        )
 
+    try:
+        prev_config = project_store.load_i2i_batch_config(name, batch_num)
+        existing_cases = {c.id: c for c in prev_config.cases}
+    except FileNotFoundError:
+        existing_cases = {}
+
+    merged_cases = {**existing_cases, **new_cases}
     i2i_config = BatchConfig(
         batch=batch_num,
         trigger_phrase=trigger_phrase,
-        cases=cases,
+        cases=list(merged_cases.values()),
     )
     project_store.save_i2i_batch_config(name, batch_num, i2i_config)
 

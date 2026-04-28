@@ -6,7 +6,7 @@ TRANSITIONS: dict[Phase, list[Phase]] = {
     Phase.INIT: [Phase.MODEL_SELECT],
     Phase.MODEL_SELECT: [Phase.STYLE_REFINE],
     Phase.STYLE_REFINE: [Phase.BATCH_T2I, Phase.STYLE_REFINE],
-    Phase.BATCH_T2I: [Phase.BATCH_I2I, Phase.STYLE_REFINE, Phase.COMPLETED],
+    Phase.BATCH_T2I: [Phase.BATCH_I2I, Phase.STYLE_REFINE],
     Phase.BATCH_I2I: [Phase.STYLE_REFINE, Phase.COMPLETED],
 }
 

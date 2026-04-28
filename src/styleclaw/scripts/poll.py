@@ -17,10 +17,15 @@ logger = logging.getLogger(__name__)
 async def _download_results(results: list[dict[str, Any]], dest_dir: Path) -> None:
     for i, result in enumerate(results, 1):
         url = result.get("url", "")
-        if url:
-            dest = dest_dir / f"output-{i:03d}.png"
-            await download_image(url, dest)
-            logger.info("Downloaded %s -> %s", url[:60], dest.name)
+        if not url:
+            logger.warning("Result %d has no URL, skipping download.", i)
+            continue
+        dest = dest_dir / f"output-{i:03d}.png"
+        try:
+            actual = await download_image(url, dest)
+            logger.info("Downloaded %s -> %s", url[:60], actual.name)
+        except RuntimeError as exc:
+            logger.error("Failed to download result %d: %s", i, exc)
 
 
 async def _poll_one_model_select(

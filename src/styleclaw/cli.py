@@ -59,6 +59,8 @@ def _run_action(
     action_name: str,
     args: dict[str, Any] | None = None,
 ) -> StepResult:
+    import httpx
+
     from styleclaw.orchestrator.actions import ACTION_REGISTRY
 
     action_def = ACTION_REGISTRY.get(action_name)
@@ -73,7 +75,17 @@ def _run_action(
         ) as ctx:
             return await action_def.fn(ctx, args or {})
 
-    return asyncio.run(_exec())
+    try:
+        return asyncio.run(_exec())
+    except (ValueError, RuntimeError, FileNotFoundError, FileExistsError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    except httpx.HTTPStatusError as exc:
+        typer.echo(f"API error ({exc.response.status_code}): {exc}", err=True)
+        raise typer.Exit(1) from exc
+    except httpx.TransportError as exc:
+        typer.echo(f"Network error: {exc}", err=True)
+        raise typer.Exit(1) from exc
 
 
 @app.command()
@@ -309,7 +321,8 @@ def _get_current_trigger(name: str, state: ProjectState) -> str:
         analysis = project_store.load_analysis(name)
         return analysis.trigger_phrase
     except FileNotFoundError:
-        return "(unknown)"
+        logging.getLogger(__name__).warning("Analysis file not found for project '%s'", name)
+        return "(not found — run 'analyze' first)"
 
 
 @app.command()
@@ -471,7 +484,9 @@ def add_refs(
                 typer.echo(f"  Uploaded {i}/{len(images)}: {img_path.name}")
             return records
 
-    upload_records = asyncio.run(_upload_all())
+    new_records = asyncio.run(_upload_all())
+    existing_records = project_store.load_i2i_uploads(name, batch_num)
+    upload_records = existing_records + new_records
     project_store.save_i2i_uploads(name, batch_num, upload_records)
 
     if state.current_batch != batch_num:

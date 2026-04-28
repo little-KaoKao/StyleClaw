@@ -19,7 +19,10 @@ class BedrockProvider:
         region: str | None = None,
         model_id: str | None = None,
     ) -> None:
-        self._region = region or os.getenv("AWS_REGION", "us-east-1")
+        self._region = region or os.getenv("AWS_REGION", "")
+        if not self._region:
+            self._region = "us-east-1"
+            logger.warning("AWS_REGION not set, defaulting to 'us-east-1'")
         self._model_id = model_id or os.getenv(
             "CLAUDE_MODEL", "anthropic.claude-sonnet-4-20250514"
         )
@@ -68,8 +71,6 @@ class BedrockProvider:
         for attempt in range(MAX_RETRIES):
             try:
                 resp = await self._http.post(url, content=json.dumps(body))
-                if resp.status_code >= 500:
-                    resp.raise_for_status()
                 resp.raise_for_status()
                 result = resp.json()
                 text_blocks = [

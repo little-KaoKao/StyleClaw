@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+from datetime import datetime, timezone
 from typing import Any
+
+import httpx
 
 from styleclaw.core.config import POLL_INTERVAL, TASK_TIMEOUT
 from styleclaw.core.models import TaskRecord, TaskStatus
@@ -38,19 +42,26 @@ async def submit_task(
             await asyncio.sleep(SUBMIT_RETRY_DELAY * (attempt + 1))
 
     task_id = resp.get("taskId", "")
+    if not task_id:
+        error_msg = resp.get("errorMessage", "")
+        error_code = resp.get("errorCode", "")
+        raise RuntimeError(
+            f"Task submission to {endpoint} failed after {SUBMIT_RETRIES} retries: "
+            f"errorCode={error_code}, errorMessage={error_msg}"
+        )
+
     status = resp.get("status", "QUEUED")
     results = resp.get("results") or []
 
     record = TaskRecord(
         task_id=task_id,
         model_id=model_id,
-        status=status if task_id else TaskStatus.FAILED,
+        status=status,
         prompt=params.get("prompt", ""),
         params=params,
         results=results,
-        error_message=resp.get("errorMessage", "") if not task_id else "",
     )
-    logger.info("Submitted task %s to %s (status=%s)", task_id or "(empty)", endpoint, record.status)
+    logger.info("Submitted task %s to %s (status=%s)", task_id, endpoint, record.status)
     return record
 
 
@@ -64,11 +75,14 @@ async def poll_task(
     interval: float = POLL_INTERVAL,
     timeout: float = TASK_TIMEOUT,
 ) -> dict[str, Any]:
-    import time
-
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        result = await query_task(client, task_id)
+        try:
+            result = await query_task(client, task_id)
+        except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+            logger.warning("Poll query for task %s failed: %s. Will retry.", task_id, exc)
+            await asyncio.sleep(interval)
+            continue
         status = result.get("status", "")
         if status == "SUCCESS":
             return result
@@ -87,8 +101,6 @@ async def poll_and_update(
 ) -> TaskRecord:
     if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
         return record
-
-    from datetime import datetime, timezone
 
     try:
         result = await poll_task(client, record.task_id)

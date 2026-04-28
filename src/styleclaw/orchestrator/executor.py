@@ -19,6 +19,7 @@ def _should_continue_loop(ctx: ExecutionContext) -> bool:
     try:
         evaluation = project_store.load_round_evaluation(ctx.project, state.current_round)
     except FileNotFoundError:
+        logger.warning("No evaluation found for round %d, stopping loop.", state.current_round)
         return False
     return not evaluation.should_approve()
 
@@ -56,6 +57,20 @@ async def execute(
         action_def = ACTION_REGISTRY.get(step.name)
         if action_def is None:
             result = StepResult(ok=False, message=f"Unknown action: {step.name}")
+            results.append(result)
+            if on_step_done:
+                on_step_done(i, step.name, result)
+            return results
+
+        if action_def.needs_client and ctx.client is None:
+            result = StepResult(ok=False, message=f"Action '{step.name}' requires an HTTP client but none was provided")
+            results.append(result)
+            if on_step_done:
+                on_step_done(i, step.name, result)
+            return results
+
+        if action_def.needs_llm and ctx.llm is None:
+            result = StepResult(ok=False, message=f"Action '{step.name}' requires an LLM provider but none was provided")
             results.append(result)
             if on_step_done:
                 on_step_done(i, step.name, result)

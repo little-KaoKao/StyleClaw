@@ -4,9 +4,9 @@ import json
 import logging
 from pathlib import Path
 
-from styleclaw.core.image_utils import encode_image_for_llm
+from styleclaw.core.image_utils import build_image_block
 from styleclaw.core.models import PromptConfig, RoundEvaluation
-from styleclaw.core.text_utils import clean_json
+from styleclaw.core.text_utils import clean_json, parse_llm_response, sanitize_braces
 from styleclaw.providers.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -29,25 +29,16 @@ async def refine_prompt(
 ) -> PromptConfig:
     history_text = _build_history_text(evaluations)
 
-    def _sanitize(s: str) -> str:
-        return s.replace("{", "{{").replace("}", "}}")
-
     system_prompt = (
         PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
         .replace("{trigger_phrase}", current_trigger)
         .replace("{round_num}", str(round_num))
-        .replace("{ip_info}", _sanitize(ip_info))
+        .replace("{ip_info}", sanitize_braces(ip_info))
         .replace("{history_scores}", history_text)
-        .replace("{human_direction}", _sanitize(human_direction) if human_direction else "(none)")
+        .replace("{human_direction}", sanitize_braces(human_direction) if human_direction else "(none)")
     )
 
-    content: list[dict] = []
-    for img_path in ref_image_paths:
-        b64_data, mt = encode_image_for_llm(img_path)
-        content.append({
-            "type": "image",
-            "source": {"type": "base64", "media_type": mt, "data": b64_data},
-        })
+    content: list[dict] = [build_image_block(p) for p in ref_image_paths]
     content.append({
         "type": "text",
         "text": "Refine the trigger phrase based on the evaluation history and reference images.",
@@ -64,10 +55,9 @@ async def refine_prompt(
 
     data["round"] = round_num
     data.setdefault("derived_from", f"round-{round_num - 1:03d}" if round_num > 1 else "initial-analysis")
-    try:
-        config = PromptConfig.model_validate(data)
-    except Exception as exc:
-        raise ValueError(f"LLM response failed validation for PromptConfig: {exc}") from exc
+    config = parse_llm_response(
+        json.dumps(data), PromptConfig, "prompt refinement",
+    )
     logger.info("Refined trigger (round %d): %s", round_num, config.trigger_phrase[:80])
     return config
 

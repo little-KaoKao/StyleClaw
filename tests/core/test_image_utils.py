@@ -7,9 +7,8 @@ import pytest
 from PIL import Image
 
 from styleclaw.core.image_utils import (
+    build_image_block,
     encode_image_for_llm,
-    image_to_base64,
-    media_type_for,
     resize_for_llm,
 )
 
@@ -85,16 +84,15 @@ class TestEncodeImageForLlm:
         assert len(decoded) > 0
 
 
-class TestImageToBase64:
-    def test_returns_base64_string(self, small_image: Path) -> None:
-        result = image_to_base64(small_image)
-        decoded = base64.b64decode(result)
+class TestBuildImageBlock:
+    def test_returns_image_block_dict(self, small_image: Path) -> None:
+        block = build_image_block(small_image)
+        assert block["type"] == "image"
+        assert block["source"]["type"] == "base64"
+        assert block["source"]["media_type"] == "image/jpeg"
+        decoded = base64.b64decode(block["source"]["data"])
         assert len(decoded) > 0
 
-
-class TestMediaTypeFor:
-    def test_rgb_jpeg(self, rgb_image: Path) -> None:
-        assert media_type_for(rgb_image) == "image/jpeg"
-
-    def test_rgba_png(self, rgba_image: Path) -> None:
-        assert media_type_for(rgba_image) == "image/png"
+    def test_rgba_returns_png_block(self, rgba_image: Path) -> None:
+        block = build_image_block(rgba_image)
+        assert block["source"]["media_type"] == "image/png"

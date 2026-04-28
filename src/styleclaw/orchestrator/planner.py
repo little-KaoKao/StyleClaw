@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from string import Template
 
 from styleclaw.core.models import ActionPlan
-from styleclaw.core.text_utils import clean_json
+from styleclaw.core.text_utils import parse_llm_response
 from styleclaw.orchestrator.actions import PHASE_ACTIONS
 from styleclaw.providers.llm.base import LLMProvider
 from styleclaw.storage import project_store
@@ -52,6 +51,4 @@ async def plan(llm: LLMProvider, project: str, intent: str) -> ActionPlan:
         temperature=0.3,
     )
 
-    cleaned = clean_json(raw)
-    data = json.loads(cleaned)
-    return ActionPlan.model_validate(data)
+    return parse_llm_response(raw, ActionPlan, "action plan")

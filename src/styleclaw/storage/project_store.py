@@ -295,12 +295,20 @@ def load_all_i2i_task_records(
 
 
 def _read_json(path: Path) -> dict | list:
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Corrupted JSON file: {path}: {exc}") from exc
 
 
 def _write_json(path: Path, data: dict | list) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    tmp.replace(path)
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        tmp.replace(path)
+    except OSError:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+        raise

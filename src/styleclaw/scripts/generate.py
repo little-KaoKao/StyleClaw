@@ -13,8 +13,6 @@ from styleclaw.storage import project_store
 
 logger = logging.getLogger(__name__)
 
-IMAGES_PER_MODEL = 3
-
 
 async def generate_model_select(
     name: str,

@@ -38,9 +38,8 @@ class TestSubmitTask:
 
     async def test_fails_after_max_retries(self, mock_client: AsyncMock) -> None:
         mock_client.post.return_value = {"taskId": "", "errorCode": "BUSY", "errorMessage": "server busy"}
-        record = await submit_task(mock_client, "/api/gen", {"prompt": "test"}, "mj-v7")
-        assert record.status == "FAILED"
-        assert record.error_message == "server busy"
+        with pytest.raises(RuntimeError, match="failed after 3 retries"):
+            await submit_task(mock_client, "/api/gen", {"prompt": "test"}, "mj-v7")
 
     async def test_captures_prompt_in_record(self, mock_client: AsyncMock) -> None:
         mock_client.post.return_value = {"taskId": "t1"}

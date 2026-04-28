@@ -28,13 +28,13 @@ class TestCanAdvance:
     def test_batch_t2i_to_style_refine(self):
         assert can_advance(Phase.BATCH_T2I, Phase.STYLE_REFINE) is True
 
-    def test_batch_t2i_to_completed(self):
-        assert can_advance(Phase.BATCH_T2I, Phase.COMPLETED) is True
+    def test_batch_t2i_to_completed_blocked(self):
+        assert can_advance(Phase.BATCH_T2I, Phase.COMPLETED) is False
 
-    def test_batch_t2i_to_completed_advance(self):
+    def test_batch_t2i_to_completed_advance_raises(self):
         state = ProjectState(phase=Phase.BATCH_T2I)
-        new_state = advance(state, Phase.COMPLETED)
-        assert new_state.phase == Phase.COMPLETED
+        with pytest.raises(ValueError, match="Cannot transition"):
+            advance(state, Phase.COMPLETED)
 
     def test_batch_i2i_to_completed(self):
         assert can_advance(Phase.BATCH_I2I, Phase.COMPLETED) is True

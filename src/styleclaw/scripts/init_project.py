@@ -40,16 +40,17 @@ async def init_project(
         ref_local_names.append(f"refs/{dest_name}")
         local_dests.append(dest)
 
-    upload_records: list[UploadRecord] = [None] * len(local_dests)  # type: ignore[list-item]
+    results: dict[int, UploadRecord] = {}
 
     async def _upload(idx: int, dest: Path) -> None:
-        upload_records[idx] = await upload_file(client, dest)
+        results[idx] = await upload_file(client, dest)
         logger.info("Uploaded ref %d/%d: %s", idx + 1, len(local_dests), dest.name)
 
     async with asyncio.TaskGroup() as tg:
         for idx, dest in enumerate(local_dests):
             tg.create_task(_upload(idx, dest))
 
+    upload_records = [results[i] for i in range(len(local_dests))]
     project_store.save_uploads(name, upload_records)
 
     updated_config = config.model_copy(update={"ref_images": ref_local_names})

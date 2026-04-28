@@ -24,7 +24,8 @@ def resize_for_llm(image_path: Path | str) -> tuple[bytes, str]:
     if not path.is_file():
         raise FileNotFoundError(f"Image not found: {path}")
 
-    with Image.open(path) as img:
+    img = Image.open(path)
+    try:
         w, h = img.size
         long_edge = max(w, h)
 
@@ -32,29 +33,32 @@ def resize_for_llm(image_path: Path | str) -> tuple[bytes, str]:
             scale = MAX_LONG_EDGE / long_edge
             new_w = int(w * scale)
             new_h = int(h * scale)
-            img = img.resize((new_w, new_h), Image.LANCZOS)
+            resized = img.resize((new_w, new_h), Image.LANCZOS)
+            img.close()
+            img = resized
 
         fmt = _output_format(img)
         if fmt == "JPEG" and img.mode not in ("RGB", "L"):
-            img = img.convert("RGB")
+            converted = img.convert("RGB")
+            img.close()
+            img = converted
         buf = io.BytesIO()
         img.save(buf, format=fmt, quality=85)
+    finally:
+        img.close()
     media_type = "image/png" if fmt == "PNG" else "image/jpeg"
     return buf.getvalue(), media_type
 
-
-def image_to_base64(image_path: Path | str) -> str:
-    data, _ = resize_for_llm(image_path)
-    return base64.b64encode(data).decode("utf-8")
-
-
-def media_type_for(image_path: Path | str) -> str:
-    path = Path(image_path)
-    with Image.open(path) as img:
-        fmt = _output_format(img)
-    return "image/png" if fmt == "PNG" else "image/jpeg"
 
 
 def encode_image_for_llm(image_path: Path | str) -> tuple[str, str]:
     data, media_type = resize_for_llm(image_path)
     return base64.b64encode(data).decode("utf-8"), media_type
+
+
+def build_image_block(image_path: Path | str) -> dict:
+    b64_data, media_type = encode_image_for_llm(image_path)
+    return {
+        "type": "image",
+        "source": {"type": "base64", "media_type": media_type, "data": b64_data},
+    }

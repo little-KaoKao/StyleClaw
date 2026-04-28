@@ -393,7 +393,8 @@ class TestGetCurrentTrigger:
     def test_no_analysis(self, setup_project) -> None:
         _set_state(Phase.STYLE_REFINE, current_round=0)
         from styleclaw.cli import _get_current_trigger
-        assert _get_current_trigger("test-proj", project_store.load_state("test-proj")) == "(unknown)"
+        result = _get_current_trigger("test-proj", project_store.load_state("test-proj"))
+        assert "not found" in result
 
 
 class TestBuildContext:

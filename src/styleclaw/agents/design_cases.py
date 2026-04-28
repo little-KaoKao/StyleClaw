@@ -6,7 +6,7 @@ from pathlib import Path
 
 from styleclaw.core.case_generator import generate_case_skeleton
 from styleclaw.core.models import BatchCase, BatchConfig
-from styleclaw.core.text_utils import clean_json
+from styleclaw.core.text_utils import clean_json, sanitize_braces
 from styleclaw.providers.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ async def design_cases(
 
     system_prompt = (
         PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
-        .replace("{ip_info}", ip_info.replace("{", "{{").replace("}", "}}"))
+        .replace("{ip_info}", sanitize_braces(ip_info))
         .replace("{trigger_phrase}", trigger_phrase)
         .replace("{case_skeleton}", skeleton_text)
     )
@@ -39,6 +39,7 @@ async def design_cases(
     raw = await llm.invoke(system=system_prompt, messages=messages, max_tokens=16384)
 
     cleaned = clean_json(raw)
+    truncated_recovery = False
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError:
@@ -52,6 +53,7 @@ async def design_cases(
         candidate = truncated[: bracket + 1].rsplit(",", 1)[0] + "]}"
         try:
             data = json.loads(candidate)
+            truncated_recovery = True
         except json.JSONDecodeError as exc:
             raise ValueError(f"Could not recover truncated JSON from LLM: {exc}") from exc
 
@@ -65,6 +67,12 @@ async def design_cases(
         trigger_phrase=trigger_phrase,
         cases=cases,
     )
+    if truncated_recovery:
+        logger.warning(
+            "LLM response was truncated. Recovered %d cases (expected 100). "
+            "Consider re-running 'design-cases'.",
+            len(cases),
+        )
     logger.info("Designed %d test cases for batch %d.", len(cases), batch_num)
     return config
 

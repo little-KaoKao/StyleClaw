@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from unittest.mock import AsyncMock, call, patch
 
 import pytest
@@ -43,7 +44,7 @@ class TestPollModelSelect:
         record = TaskRecord(task_id="t1", model_id="mj-v7", status="QUEUED")
         project_store.save_task_record("test-proj", "mj-v7", record)
 
-        mock_download.return_value = None
+        mock_download.return_value = Path("/tmp/output-001.png")
         results = await poll_model_select("test-proj", mock_client)
         assert results["mj-v7"].status == "SUCCESS"
         assert mock_download.called

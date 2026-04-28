@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Awaitable
 
 from styleclaw.core.config import MAX_AUTO_ROUNDS, MAX_POLL_CYCLES, ORCHESTRATOR_POLL_INTERVAL
-from styleclaw.core.models import Phase
+from styleclaw.core.models import Phase, TaskStatus
 from styleclaw.providers.llm.base import LLMProvider
 from styleclaw.providers.runninghub.client import RunningHubClient
 from styleclaw.storage import project_store
@@ -102,11 +102,15 @@ async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
             return StepResult(ok=False, message=f"Nothing to poll in {state.phase}")
 
         pending = [r for r in records.values() if r.status not in ("SUCCESS", "FAILED")]
-        completed = len(records) - len(pending)
+        succeeded = sum(1 for r in records.values() if r.status == TaskStatus.SUCCESS)
+        failed = sum(1 for r in records.values() if r.status == TaskStatus.FAILED)
         if not pending:
-            return StepResult(ok=True, message=f"{completed}/{len(records)} completed")
+            msg = f"{succeeded}/{len(records)} succeeded"
+            if failed:
+                msg += f" ({failed} failed)"
+            return StepResult(ok=failed == 0, message=msg)
 
-        logger.info("Waiting... %d/%d completed (cycle %d/%d)", completed, len(records), cycle + 1, max_cycles)
+        logger.info("Waiting... %d/%d completed (cycle %d/%d)", succeeded + failed, len(records), cycle + 1, max_cycles)
         await asyncio.sleep(ctx.poll_interval)
 
     return StepResult(ok=False, message=f"Poll timed out after {max_cycles} cycles")
@@ -221,7 +225,7 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
             ev = project_store.load_round_evaluation(ctx.project, r)
             evaluations.append(ev)
         except FileNotFoundError:
-            pass
+            logger.warning("Evaluation for round %d not found, skipping history entry.", r)
 
     if round_num == 1:
         analysis = project_store.load_analysis(ctx.project)
