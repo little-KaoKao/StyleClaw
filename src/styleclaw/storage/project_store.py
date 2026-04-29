@@ -319,6 +319,17 @@ def load_all_i2i_task_records(
     return _load_all_records(batch_i2i_dir(name, batch_num) / "results")
 
 
+def save_thinking(json_path: Path, thinking: str) -> None:
+    """Write thinking text to a sibling .thinking.md file.
+
+    No-op when thinking is empty. Called by agents after saving their JSON output.
+    """
+    if not thinking:
+        return
+    md_path = json_path.with_suffix(".thinking.md")
+    md_path.write_text(thinking, encoding="utf-8")
+
+
 def _read_json(path: Path) -> dict | list:
     try:
         with open(path, encoding="utf-8") as f:

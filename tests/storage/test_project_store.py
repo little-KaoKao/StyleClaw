@@ -200,3 +200,27 @@ class TestGenericHelpers:
         ) as mock:
             project_store.load_all_i2i_task_records("test-project", 1)
             assert mock.call_count == 1
+
+
+class TestSaveThinking:
+    def test_writes_thinking_md_next_to_json(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(project_store, "DATA_ROOT", tmp_path / "projects")
+        target = tmp_path / "projects" / "p" / "analysis.json"
+        target.parent.mkdir(parents=True)
+        target.write_text("{}")
+
+        project_store.save_thinking(target, "I reasoned step-by-step.")
+
+        md = target.with_suffix(".thinking.md")
+        assert md.exists()
+        assert "I reasoned step-by-step." in md.read_text(encoding="utf-8")
+
+    def test_empty_thinking_does_not_write_file(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(project_store, "DATA_ROOT", tmp_path / "projects")
+        target = tmp_path / "projects" / "p" / "analysis.json"
+        target.parent.mkdir(parents=True)
+
+        project_store.save_thinking(target, "")
+
+        md = target.with_suffix(".thinking.md")
+        assert not md.exists()
