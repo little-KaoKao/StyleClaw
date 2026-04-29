@@ -28,6 +28,8 @@ class ExecutionContext:
     client: RunningHubClient | None = None
     llm: LLMProvider | None = None
     poll_interval: float = ORCHESTRATOR_POLL_INTERVAL
+    show_thinking: bool = False
+    thinking_budget: int = 5000
 
 
 @dataclass(frozen=True)

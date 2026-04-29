@@ -55,3 +55,17 @@ class TestActionRegistry:
         assert ACTION_REGISTRY["design-cases"].needs_llm is True
         assert ACTION_REGISTRY["generate"].needs_llm is False
         assert ACTION_REGISTRY["approve"].needs_llm is False
+
+
+class TestExecutionContextThinking:
+    def test_thinking_defaults(self):
+        from styleclaw.orchestrator.actions import ExecutionContext
+        ctx = ExecutionContext(project="p")
+        assert ctx.show_thinking is False
+        assert ctx.thinking_budget == 5000
+
+    def test_thinking_can_be_set(self):
+        from styleclaw.orchestrator.actions import ExecutionContext
+        ctx = ExecutionContext(project="p", show_thinking=True, thinking_budget=8000)
+        assert ctx.show_thinking is True
+        assert ctx.thinking_budget == 8000
