@@ -94,7 +94,9 @@ class TestAnalyzeCommand:
         result = runner.invoke(app, ["analyze", "test-proj"])
         assert result.exit_code == 0
         assert "Analysis complete" in result.output
-        mock_run.assert_called_once_with("test-proj", "analyze")
+        mock_run.assert_called_once_with(
+            "test-proj", "analyze", show_thinking=False, thinking_budget=5000,
+        )
 
 
 class TestGenerateCommand:
@@ -404,3 +406,35 @@ class TestBuildContext:
         from styleclaw.cli import _get_api_key
         with pytest.raises(typer.Exit):
             _get_api_key()
+
+
+class TestShowThinkingFlag:
+    def test_analyze_forwards_show_thinking(self, setup_project) -> None:
+        captured_ctx = {}
+
+        async def fake_action(ctx, args):
+            captured_ctx["show_thinking"] = ctx.show_thinking
+            captured_ctx["thinking_budget"] = ctx.thinking_budget
+            from styleclaw.core.state_machine import advance
+            state = project_store.load_state(ctx.project)
+            project_store.save_state(ctx.project, advance(state, Phase.MODEL_SELECT))
+            return StepResult(ok=True, message="ok")
+
+        with patch.dict(
+            "styleclaw.orchestrator.actions.ACTION_REGISTRY",
+            {"analyze": MagicMock(
+                fn=fake_action, needs_client=False, needs_llm=True,
+                requires_confirmation=False,
+            )},
+        ):
+            with patch("styleclaw.providers.llm.bedrock.BedrockProvider") as FakeLLM:
+                FakeLLM.return_value = MagicMock()
+                FakeLLM.return_value.close = AsyncMock()
+                result = runner.invoke(
+                    app,
+                    ["analyze", "test-proj", "--show-thinking", "--thinking-budget", "4000"],
+                )
+
+        assert result.exit_code == 0, result.output
+        assert captured_ctx["show_thinking"] is True
+        assert captured_ctx["thinking_budget"] == 4000

@@ -35,6 +35,8 @@ async def _build_context(
     project: str,
     needs_client: bool = False,
     needs_llm: bool = False,
+    show_thinking: bool = False,
+    thinking_budget: int = 5000,
 ) -> AsyncIterator[ExecutionContext]:
     from styleclaw.providers.llm.bedrock import BedrockProvider
     from styleclaw.providers.runninghub.client import RunningHubClient
@@ -46,7 +48,10 @@ async def _build_context(
             client = RunningHubClient(api_key=_get_api_key())
         if needs_llm:
             llm = BedrockProvider()
-        yield ExecutionContext(project=project, client=client, llm=llm)
+        yield ExecutionContext(
+            project=project, client=client, llm=llm,
+            show_thinking=show_thinking, thinking_budget=thinking_budget,
+        )
     finally:
         if client:
             await client.close()
@@ -58,6 +63,8 @@ def _run_action(
     project: str,
     action_name: str,
     args: dict[str, Any] | None = None,
+    show_thinking: bool = False,
+    thinking_budget: int = 5000,
 ) -> StepResult:
     import httpx
 
@@ -72,6 +79,8 @@ def _run_action(
             project,
             needs_client=action_def.needs_client,
             needs_llm=action_def.needs_llm,
+            show_thinking=show_thinking,
+            thinking_budget=thinking_budget,
         ) as ctx:
             return await action_def.fn(ctx, args or {})
 
@@ -141,6 +150,12 @@ def status(
 @app.command()
 def analyze(
     name: str = typer.Argument(..., help="Project name"),
+    show_thinking: bool = typer.Option(
+        False, "--show-thinking", help="Capture and save LLM reasoning alongside output",
+    ),
+    thinking_budget: int = typer.Option(
+        5000, "--thinking-budget", help="Thinking token budget (when --show-thinking)",
+    ),
 ) -> None:
     """Analyze reference images and generate initial trigger phrase."""
     state = project_store.load_state(name)
@@ -148,8 +163,20 @@ def analyze(
         typer.echo(f"Error: Project must be in INIT phase (current: {state.phase})", err=True)
         raise typer.Exit(1)
 
-    result = _run_action(name, "analyze")
+    result = _run_action(
+        name, "analyze",
+        show_thinking=show_thinking, thinking_budget=thinking_budget,
+    )
     typer.echo(f"Analysis complete. {result.message}")
+    if show_thinking:
+        md = (
+            project_store.project_dir(name)
+            / "model-select" / "initial-analysis.thinking.md"
+        )
+        if md.exists():
+            typer.echo("\n--- LLM thinking ---")
+            typer.echo(md.read_text(encoding="utf-8"))
+            typer.echo("--- end thinking ---\n")
     state = project_store.load_state(name)
     typer.echo(f"Phase advanced to: {state.phase}")
 
@@ -198,6 +225,12 @@ def poll(
 @app.command()
 def evaluate(
     name: str = typer.Argument(..., help="Project name"),
+    show_thinking: bool = typer.Option(
+        False, "--show-thinking", help="Capture and save LLM reasoning alongside output",
+    ),
+    thinking_budget: int = typer.Option(
+        5000, "--thinking-budget", help="Thinking token budget (when --show-thinking)",
+    ),
 ) -> None:
     """Evaluate generated images against reference style (auto-detects phase)."""
     state = project_store.load_state(name)
@@ -206,11 +239,28 @@ def evaluate(
         typer.echo(f"Error: Cannot evaluate in {state.phase} phase.", err=True)
         raise typer.Exit(1)
 
-    result = _run_action(name, "evaluate")
+    result = _run_action(
+        name, "evaluate",
+        show_thinking=show_thinking, thinking_budget=thinking_budget,
+    )
     if not result.ok:
         typer.echo(f"Error: {result.message}", err=True)
         raise typer.Exit(1)
     typer.echo(result.message)
+
+    if show_thinking:
+        project_dir = project_store.project_dir(name)
+        if state.phase == Phase.MODEL_SELECT:
+            md = project_dir / "model-select" / "evaluation.thinking.md"
+        else:
+            md = (
+                project_dir / "style-refine"
+                / f"round-{state.current_round:03d}" / "evaluation.thinking.md"
+            )
+        if md.exists():
+            typer.echo("\n--- LLM thinking ---")
+            typer.echo(md.read_text(encoding="utf-8"))
+            typer.echo("--- end thinking ---\n")
 
 
 @app.command(name="select-model")
@@ -246,6 +296,12 @@ def select_model(
 def refine(
     name: str = typer.Argument(..., help="Project name"),
     direction: str = typer.Option("", "--direction", help="Human direction for refinement"),
+    show_thinking: bool = typer.Option(
+        False, "--show-thinking", help="Capture and save LLM reasoning alongside output",
+    ),
+    thinking_budget: int = typer.Option(
+        5000, "--thinking-budget", help="Thinking token budget (when --show-thinking)",
+    ),
 ) -> None:
     """Refine trigger phrase using LLM (one round)."""
     state = project_store.load_state(name)
@@ -261,11 +317,25 @@ def refine(
         )
         raise typer.Exit(1)
 
-    result = _run_action(name, "refine", {"direction": direction})
+    result = _run_action(
+        name, "refine", {"direction": direction},
+        show_thinking=show_thinking, thinking_budget=thinking_budget,
+    )
     if not result.ok:
         typer.echo(f"Error: {result.message}", err=True)
         raise typer.Exit(1)
     typer.echo(result.message)
+
+    if show_thinking:
+        new_state = project_store.load_state(name)
+        md = (
+            project_store.project_dir(name) / "style-refine"
+            / f"round-{new_state.current_round:03d}" / "prompt.thinking.md"
+        )
+        if md.exists():
+            typer.echo("\n--- LLM thinking ---")
+            typer.echo(md.read_text(encoding="utf-8"))
+            typer.echo("--- end thinking ---\n")
 
 
 @app.command()
@@ -329,9 +399,18 @@ def _get_current_trigger(name: str, state: ProjectState) -> str:
 def adjust(
     name: str = typer.Argument(..., help="Project name"),
     direction: str = typer.Option(..., "--direction", help="Adjustment direction"),
+    show_thinking: bool = typer.Option(
+        False, "--show-thinking", help="Capture and save LLM reasoning alongside output",
+    ),
+    thinking_budget: int = typer.Option(
+        5000, "--thinking-budget", help="Thinking token budget (when --show-thinking)",
+    ),
 ) -> None:
     """Give adjustment direction then refine (shortcut for refine --direction)."""
-    refine(name=name, direction=direction)
+    refine(
+        name=name, direction=direction,
+        show_thinking=show_thinking, thinking_budget=thinking_budget,
+    )
 
 
 @app.command()
@@ -545,6 +624,12 @@ def run(
     intent: str = typer.Argument(..., help="Natural language description of what to do"),
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    show_thinking: bool = typer.Option(
+        False, "--show-thinking", help="Capture and save LLM reasoning alongside output",
+    ),
+    thinking_budget: int = typer.Option(
+        5000, "--thinking-budget", help="Thinking token budget (when --show-thinking)",
+    ),
 ) -> None:
     """Run actions from natural language intent (plan-then-execute)."""
     if project is None:
@@ -595,7 +680,10 @@ def run(
 
         confirm_fn = None if yes else _confirm_select_model
 
-        async with _build_context(project, needs_client, needs_llm) as ctx:
+        async with _build_context(
+            project, needs_client, needs_llm,
+            show_thinking=show_thinking, thinking_budget=thinking_budget,
+        ) as ctx:
             results = await execute(
                 action_plan, ctx,
                 on_step_start=_on_start,
