@@ -48,3 +48,31 @@ class TestAnalyzeStyleWithThinking:
         analysis = await analyze_style(fake_llm, [ref_image], ip_info="test")
         assert isinstance(analysis, StyleAnalysis)
         assert analysis.trigger_phrase == "plain"
+
+
+from styleclaw.agents.refine_prompt import (
+    refine_prompt,
+    refine_prompt_with_thinking,
+)
+from styleclaw.core.models import PromptConfig
+
+
+class TestRefinePromptWithThinking:
+    async def test_returns_config_and_thinking(self, ref_image):
+        fake_llm = AsyncMock()
+        fake_llm.invoke_with_thinking = AsyncMock(
+            return_value=LLMResponse(
+                text='{"trigger_phrase": "new trigger"}',
+                thinking="Color scored low so I added 'vivid palette'.",
+            )
+        )
+        config, thinking = await refine_prompt_with_thinking(
+            fake_llm, [ref_image],
+            current_trigger="old trigger", round_num=2,
+            ip_info="ip", evaluations=[], human_direction="",
+            thinking_budget=3000,
+        )
+        assert isinstance(config, PromptConfig)
+        assert config.trigger_phrase == "new trigger"
+        assert config.round == 2
+        assert thinking.startswith("Color scored low")
