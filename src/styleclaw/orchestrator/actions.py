@@ -41,21 +41,35 @@ class ActionDef:
 
 
 async def do_analyze(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
-    from styleclaw.agents.analyze_style import analyze_style
+    from styleclaw.agents.analyze_style import analyze_style, analyze_style_with_thinking
     from styleclaw.core.state_machine import advance
 
     config = project_store.load_config(ctx.project)
     root = project_store.project_dir(ctx.project)
     ref_paths = [root / r for r in config.ref_images]
 
-    analysis = await analyze_style(ctx.llm, ref_paths, config.ip_info)
+    thinking = ""
+    if ctx.show_thinking:
+        analysis, thinking = await analyze_style_with_thinking(
+            ctx.llm, ref_paths, config.ip_info, thinking_budget=ctx.thinking_budget,
+        )
+    else:
+        analysis = await analyze_style(ctx.llm, ref_paths, config.ip_info)
     project_store.save_analysis(ctx.project, analysis)
+
+    if thinking:
+        project_store.save_thinking(
+            root / "model-select" / "initial-analysis.json", thinking,
+        )
 
     state = project_store.load_state(ctx.project)
     new_state = advance(state, Phase.MODEL_SELECT)
     project_store.save_state(ctx.project, new_state)
 
-    return StepResult(ok=True, message=f"Trigger: {analysis.trigger_phrase}")
+    msg = f"Trigger: {analysis.trigger_phrase}"
+    if thinking:
+        msg += f" | thinking saved ({len(thinking)} chars)"
+    return StepResult(ok=True, message=msg)
 
 
 async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
@@ -126,7 +140,10 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
     ref_paths = [root / r for r in config.ref_images]
 
     if state.phase == Phase.MODEL_SELECT:
-        from styleclaw.agents.select_model import evaluate_models
+        from styleclaw.agents.select_model import (
+            evaluate_models,
+            evaluate_models_with_thinking,
+        )
         from styleclaw.scripts.report import generate_model_select_report
 
         model_images: dict[str, list[Path]] = {}
@@ -144,17 +161,33 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         if not model_images:
             return StepResult(ok=False, message="No generated images found")
 
-        evaluation = await evaluate_models(ctx.llm, ref_paths, model_images)
+        thinking = ""
+        if ctx.show_thinking:
+            evaluation, thinking = await evaluate_models_with_thinking(
+                ctx.llm, ref_paths, model_images, thinking_budget=ctx.thinking_budget,
+            )
+        else:
+            evaluation = await evaluate_models(ctx.llm, ref_paths, model_images)
         project_store.save_evaluation(ctx.project, evaluation)
+        if thinking:
+            project_store.save_thinking(
+                root / "model-select" / "evaluation.json", thinking,
+            )
         generate_model_select_report(ctx.project)
+
+        msg = f"Recommendation: {evaluation.recommendation}"
+        if thinking:
+            msg += f" | thinking saved ({len(thinking)} chars)"
         return StepResult(
-            ok=True,
-            message=f"Recommendation: {evaluation.recommendation}",
+            ok=True, message=msg,
             data={"recommendation": evaluation.recommendation},
         )
 
     if state.phase == Phase.STYLE_REFINE:
-        from styleclaw.agents.evaluate_result import evaluate_round
+        from styleclaw.agents.evaluate_result import (
+            evaluate_round,
+            evaluate_round_with_thinking,
+        )
         from styleclaw.scripts.report import generate_style_refine_report
 
         round_num = state.current_round
@@ -169,19 +202,28 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         if not model_images:
             return StepResult(ok=False, message="No generated images for this round")
 
-        evaluation = await evaluate_round(ctx.llm, ref_paths, model_images, round_num)
+        thinking = ""
+        if ctx.show_thinking:
+            evaluation, thinking = await evaluate_round_with_thinking(
+                ctx.llm, ref_paths, model_images, round_num,
+                thinking_budget=ctx.thinking_budget,
+            )
+        else:
+            evaluation = await evaluate_round(ctx.llm, ref_paths, model_images, round_num)
         project_store.save_round_evaluation(ctx.project, round_num, evaluation)
+        if thinking:
+            round_d = project_store.round_dir(ctx.project, round_num)
+            project_store.save_thinking(round_d / "evaluation.json", thinking)
         generate_style_refine_report(ctx.project, round_num)
 
         passed = evaluation.should_approve()
         scores_msg = ", ".join(
             f"{e.model}={e.total:.1f}" for e in evaluation.evaluations
         )
-        return StepResult(
-            ok=True,
-            message=f"Scores: [{scores_msg}] {'PASS' if passed else 'needs refinement'}",
-            data={"passed": passed},
-        )
+        msg = f"Scores: [{scores_msg}] {'PASS' if passed else 'needs refinement'}"
+        if thinking:
+            msg += f" | thinking saved ({len(thinking)} chars)"
+        return StepResult(ok=True, message=msg, data={"passed": passed})
 
     return StepResult(ok=False, message=f"Cannot evaluate in {state.phase}")
 
@@ -214,7 +256,7 @@ async def do_select_model(ctx: ExecutionContext, args: dict[str, Any]) -> StepRe
 
 
 async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
-    from styleclaw.agents.refine_prompt import refine_prompt
+    from styleclaw.agents.refine_prompt import refine_prompt, refine_prompt_with_thinking
     from styleclaw.core.models import RoundEvaluation
 
     state = project_store.load_state(ctx.project)
@@ -242,16 +284,31 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
         current_trigger = prev_prompt.trigger_phrase
 
     direction = args.get("direction", "")
-    prompt_config = await refine_prompt(
-        ctx.llm, ref_paths, current_trigger, round_num,
-        config.ip_info, evaluations, direction,
-    )
+    thinking = ""
+    if ctx.show_thinking:
+        prompt_config, thinking = await refine_prompt_with_thinking(
+            ctx.llm, ref_paths, current_trigger, round_num,
+            config.ip_info, evaluations, direction,
+            thinking_budget=ctx.thinking_budget,
+        )
+    else:
+        prompt_config = await refine_prompt(
+            ctx.llm, ref_paths, current_trigger, round_num,
+            config.ip_info, evaluations, direction,
+        )
     project_store.save_prompt_config(ctx.project, round_num, prompt_config)
+
+    if thinking:
+        round_d = project_store.round_dir(ctx.project, round_num)
+        project_store.save_thinking(round_d / "prompt.json", thinking)
 
     new_state = state.with_round(round_num)
     project_store.save_state(ctx.project, new_state)
 
-    return StepResult(ok=True, message=f"Round {round_num}: {prompt_config.trigger_phrase}")
+    msg = f"Round {round_num}: {prompt_config.trigger_phrase}"
+    if thinking:
+        msg += f" | thinking saved ({len(thinking)} chars)"
+    return StepResult(ok=True, message=msg)
 
 
 async def do_approve(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
