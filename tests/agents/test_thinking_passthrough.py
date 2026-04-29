@@ -76,3 +76,58 @@ class TestRefinePromptWithThinking:
         assert config.trigger_phrase == "new trigger"
         assert config.round == 2
         assert thinking.startswith("Color scored low")
+
+
+from styleclaw.agents.evaluate_result import (
+    evaluate_round,
+    evaluate_round_with_thinking,
+)
+from styleclaw.agents.select_model import (
+    evaluate_models,
+    evaluate_models_with_thinking,
+)
+from styleclaw.core.models import ModelEvaluation, RoundEvaluation
+
+
+class TestEvaluateRoundWithThinking:
+    async def test_returns_evaluation_and_thinking(self, ref_image, tmp_path):
+        gen = tmp_path / "gen.png"
+        from PIL import Image
+        Image.new("RGB", (32, 32), "blue").save(gen)
+
+        fake_llm = AsyncMock()
+        fake_llm.invoke_with_thinking = AsyncMock(
+            return_value=LLMResponse(
+                text='{"evaluations": [], "recommendation": "keep refining"}',
+                thinking="I compared color palettes...",
+            )
+        )
+        evaluation, thinking = await evaluate_round_with_thinking(
+            fake_llm, [ref_image], {"mj-v7": [gen]}, round_num=1,
+            thinking_budget=3000,
+        )
+        assert isinstance(evaluation, RoundEvaluation)
+        assert evaluation.round == 1
+        assert thinking.startswith("I compared")
+
+
+class TestEvaluateModelsWithThinking:
+    async def test_returns_evaluation_and_thinking(self, ref_image, tmp_path):
+        gen = tmp_path / "gen.png"
+        from PIL import Image
+        Image.new("RGB", (32, 32), "green").save(gen)
+
+        fake_llm = AsyncMock()
+        fake_llm.invoke_with_thinking = AsyncMock(
+            return_value=LLMResponse(
+                text='{"evaluations": [], "recommendation": "mj-v7"}',
+                thinking="mj-v7 reproduced linework best.",
+            )
+        )
+        evaluation, thinking = await evaluate_models_with_thinking(
+            fake_llm, [ref_image], {"mj-v7/prompt-only": [gen]},
+            thinking_budget=3000,
+        )
+        assert isinstance(evaluation, ModelEvaluation)
+        assert evaluation.recommendation == "mj-v7"
+        assert thinking.startswith("mj-v7 reproduced")
