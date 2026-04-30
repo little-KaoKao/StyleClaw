@@ -80,7 +80,7 @@ class TestCreateProject:
         assert (root / "config.json").exists()
         assert (root / "state.json").exists()
         assert (root / "refs").is_dir()
-        assert (root / "model-select" / "results").is_dir()
+        assert (root / "model-select").is_dir()
 
     def test_duplicate_project_raises(self, sample_config):
         project_store.create_project(sample_config)
@@ -155,9 +155,9 @@ class TestGenericHelpers:
         project_store.create_project(sample_config)
         r1 = TaskRecord(task_id="t-1", model_id="mj-v7")
         r2 = TaskRecord(task_id="t-2", model_id="niji7")
-        project_store.save_task_record("test-project", "mj-v7", r1)
-        project_store.save_task_record("test-project", "niji7", r2)
-        results_dir = project_store.project_dir("test-project") / "model-select" / "results"
+        project_store.save_task_record("test-project", "mj-v7", r1, pass_num=1)
+        project_store.save_task_record("test-project", "niji7", r2, pass_num=1)
+        results_dir = project_store.model_select_dir("test-project", 1) / "results"
         records = project_store._load_all_records(results_dir)
         assert len(records) == 2
         assert records["mj-v7"].task_id == "t-1"

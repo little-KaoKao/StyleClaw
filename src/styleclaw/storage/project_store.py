@@ -66,7 +66,7 @@ def create_project(config: ProjectConfig) -> Path:
 
     root.mkdir(parents=True)
     (root / "refs").mkdir()
-    (root / "model-select" / "results").mkdir(parents=True)
+    (root / "model-select").mkdir()
     (root / "style-refine").mkdir()
     (root / "batch-t2i").mkdir()
     (root / "batch-i2i").mkdir()
@@ -115,33 +115,80 @@ def save_uploads(name: str, records: list[UploadRecord]) -> None:
     )
 
 
-def save_analysis(name: str, analysis: StyleAnalysis) -> None:
-    _save_model(analysis, project_dir(name) / "model-select" / "initial-analysis.json")
-
-
-def load_analysis(name: str) -> StyleAnalysis:
-    return _load_model(StyleAnalysis, project_dir(name) / "model-select" / "initial-analysis.json")
-
-
-def model_results_dir(name: str, model_id: str, variant: str = "") -> Path:
-    if variant:
-        d = project_dir(name) / "model-select" / "results" / model_id / variant
-    else:
-        d = project_dir(name) / "model-select" / "results" / model_id
+def model_select_dir(name: str, pass_num: int) -> Path:
+    if pass_num < 1:
+        raise ValueError(f"pass_num must be >= 1, got {pass_num}")
+    d = project_dir(name) / "model-select" / f"pass-{pass_num:03d}"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def save_task_record(name: str, model_id: str, record: TaskRecord, variant: str = "") -> None:
-    _save_model(record, model_results_dir(name, model_id, variant) / "task.json")
+def _legacy_model_select_dir(name: str) -> Path:
+    return project_dir(name) / "model-select"
 
 
-def load_task_record(name: str, model_id: str, variant: str = "") -> TaskRecord:
-    return _load_model(TaskRecord, model_results_dir(name, model_id, variant) / "task.json")
+def _resolve_analysis_path(name: str, pass_num: int) -> Path:
+    pass_path = model_select_dir(name, pass_num) / "initial-analysis.json"
+    if pass_path.exists():
+        return pass_path
+    if pass_num == 1:
+        legacy = _legacy_model_select_dir(name) / "initial-analysis.json"
+        if legacy.exists():
+            return legacy
+    return pass_path
+
+
+def save_analysis(name: str, analysis: StyleAnalysis, pass_num: int = 1) -> None:
+    _save_model(analysis, model_select_dir(name, pass_num) / "initial-analysis.json")
+
+
+def load_analysis(name: str, pass_num: int = 1) -> StyleAnalysis:
+    return _load_model(StyleAnalysis, _resolve_analysis_path(name, pass_num))
+
+
+def model_results_dir(
+    name: str, model_id: str, variant: str = "", pass_num: int = 1,
+) -> Path:
+    base = model_select_dir(name, pass_num) / "results" / model_id
+    d = base / variant if variant else base
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _legacy_model_results_dir(
+    name: str, model_id: str, variant: str = "",
+) -> Path | None:
+    base = _legacy_model_select_dir(name) / "results" / model_id
+    candidate = base / variant if variant else base
+    return candidate if candidate.exists() else None
+
+
+def save_task_record(
+    name: str, model_id: str, record: TaskRecord,
+    variant: str = "", pass_num: int = 1,
+) -> None:
+    _save_model(
+        record,
+        model_results_dir(name, model_id, variant, pass_num) / "task.json",
+    )
+
+
+def load_task_record(
+    name: str, model_id: str, variant: str = "", pass_num: int = 1,
+) -> TaskRecord:
+    pass_path = model_results_dir(name, model_id, variant, pass_num) / "task.json"
+    if pass_path.exists():
+        return _load_model(TaskRecord, pass_path)
+    if pass_num == 1:
+        legacy = _legacy_model_results_dir(name, model_id, variant)
+        if legacy is not None:
+            legacy_file = legacy / "task.json"
+            if legacy_file.exists():
+                return _load_model(TaskRecord, legacy_file)
+    return _load_model(TaskRecord, pass_path)
 
 
 def _load_variant_records(results_dir: Path) -> dict[str, TaskRecord]:
-    """Load task records from variant sub-dirs: results/<model>/<variant>/task.json"""
     records: dict[str, TaskRecord] = {}
     if not results_dir.exists():
         return records
@@ -158,20 +205,41 @@ def _load_variant_records(results_dir: Path) -> dict[str, TaskRecord]:
     return records
 
 
-def load_all_task_records(name: str) -> dict[str, TaskRecord]:
-    results_dir = project_dir(name) / "model-select" / "results"
+def load_all_task_records(name: str, pass_num: int = 1) -> dict[str, TaskRecord]:
+    results_dir = model_select_dir(name, pass_num) / "results"
     records = _load_variant_records(results_dir)
     if records:
         return records
-    return _load_all_records(results_dir)
+    if not records and results_dir.exists():
+        records = _load_all_records(results_dir)
+    if records:
+        return records
+    if pass_num == 1:
+        legacy_results = _legacy_model_select_dir(name) / "results"
+        records = _load_variant_records(legacy_results)
+        if records:
+            return records
+        return _load_all_records(legacy_results)
+    return records
 
 
-def save_evaluation(name: str, evaluation: ModelEvaluation) -> None:
-    _save_model(evaluation, project_dir(name) / "model-select" / "evaluation.json")
+def _resolve_evaluation_path(name: str, pass_num: int) -> Path:
+    pass_path = model_select_dir(name, pass_num) / "evaluation.json"
+    if pass_path.exists():
+        return pass_path
+    if pass_num == 1:
+        legacy = _legacy_model_select_dir(name) / "evaluation.json"
+        if legacy.exists():
+            return legacy
+    return pass_path
 
 
-def load_evaluation(name: str) -> ModelEvaluation:
-    return _load_model(ModelEvaluation, project_dir(name) / "model-select" / "evaluation.json")
+def save_evaluation(name: str, evaluation: ModelEvaluation, pass_num: int = 1) -> None:
+    _save_model(evaluation, model_select_dir(name, pass_num) / "evaluation.json")
+
+
+def load_evaluation(name: str, pass_num: int = 1) -> ModelEvaluation:
+    return _load_model(ModelEvaluation, _resolve_evaluation_path(name, pass_num))
 
 
 # --- Phase 3: style-refine round-level storage ---
