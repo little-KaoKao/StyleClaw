@@ -57,7 +57,7 @@ class TestDoAnalyzeThinking:
 
         thinking_md = (
             project_store.project_dir(project_with_ref)
-            / "model-select" / "initial-analysis.thinking.md"
+            / "model-select" / "pass-001" / "initial-analysis.thinking.md"
         )
         assert thinking_md.exists()
         assert "Reasoning text here." in thinking_md.read_text(encoding="utf-8")
@@ -71,6 +71,6 @@ class TestDoAnalyzeThinking:
 
         thinking_md = (
             project_store.project_dir(project_with_ref)
-            / "model-select" / "initial-analysis.thinking.md"
+            / "model-select" / "pass-001" / "initial-analysis.thinking.md"
         )
         assert not thinking_md.exists()

@@ -9,6 +9,7 @@ class TestActionRegistry:
         expected = {
             "analyze", "generate", "poll", "evaluate", "select-model",
             "refine", "approve", "design-cases", "batch-submit", "report",
+            "retest-models", "back-to-t2i",
         }
         assert set(ACTION_REGISTRY.keys()) == expected
 

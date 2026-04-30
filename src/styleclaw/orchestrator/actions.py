@@ -55,15 +55,17 @@ async def do_analyze(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
         )
     else:
         analysis = await analyze_style(ctx.llm, ref_paths, config.ip_info)
-    project_store.save_analysis(ctx.project, analysis)
 
+    pass_num = 1
+    project_store.save_analysis(ctx.project, analysis, pass_num=pass_num)
     if thinking:
         project_store.save_thinking(
-            root / "model-select" / "initial-analysis.json", thinking,
+            project_store.model_select_dir(ctx.project, pass_num) / "initial-analysis.json",
+            thinking,
         )
 
     state = project_store.load_state(ctx.project)
-    new_state = advance(state, Phase.MODEL_SELECT)
+    new_state = advance(state, Phase.MODEL_SELECT).with_model_select_pass(pass_num)
     project_store.save_state(ctx.project, new_state)
 
     msg = f"Trigger: {analysis.trigger_phrase}"
@@ -78,13 +80,20 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
     state = project_store.load_state(ctx.project)
 
     if state.phase == Phase.MODEL_SELECT:
-        analysis = project_store.load_analysis(ctx.project)
+        pass_num = state.current_model_select_pass or 1
+        if pass_num > 1 and state.current_round >= 1:
+            prompt_cfg = project_store.load_prompt_config(ctx.project, state.current_round)
+            trigger = prompt_cfg.trigger_phrase
+        else:
+            analysis = project_store.load_analysis(ctx.project, pass_num=pass_num)
+            trigger = analysis.trigger_phrase
         uploads = project_store.load_uploads(ctx.project)
         sref_url = uploads[0].url if uploads else ""
         records = await generate_model_select(
-            ctx.project, ctx.client, analysis.trigger_phrase, sref_url=sref_url,
+            ctx.project, ctx.client, trigger,
+            sref_url=sref_url, pass_num=pass_num,
         )
-        return StepResult(ok=True, message=f"Submitted {len(records)} model tasks")
+        return StepResult(ok=True, message=f"Submitted {len(records)} model tasks (pass {pass_num})")
 
     if state.phase == Phase.STYLE_REFINE:
         round_num = state.current_round
@@ -109,7 +118,8 @@ async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     for cycle in range(max_cycles):
         state = project_store.load_state(ctx.project)
         if state.phase == Phase.MODEL_SELECT:
-            records = await poll_model_select(ctx.project, ctx.client)
+            pass_num = state.current_model_select_pass or 1
+            records = await poll_model_select(ctx.project, ctx.client, pass_num=pass_num)
         elif state.phase == Phase.STYLE_REFINE:
             records = await poll_style_refine(ctx.project, ctx.client, state.current_round)
         elif state.phase in (Phase.BATCH_T2I, Phase.BATCH_I2I):
@@ -146,14 +156,20 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         )
         from styleclaw.scripts.report import generate_model_select_report
 
+        pass_num = state.current_model_select_pass or 1
+
         model_images: dict[str, list[Path]] = {}
-        records = project_store.load_all_task_records(ctx.project)
+        records = project_store.load_all_task_records(ctx.project, pass_num=pass_num)
         for key in records:
             if "/" in key:
                 model_id, variant = key.split("/", 1)
-                results_dir = project_store.model_results_dir(ctx.project, model_id, variant=variant)
+                results_dir = project_store.model_results_dir(
+                    ctx.project, model_id, variant=variant, pass_num=pass_num,
+                )
             else:
-                results_dir = project_store.model_results_dir(ctx.project, key)
+                results_dir = project_store.model_results_dir(
+                    ctx.project, key, pass_num=pass_num,
+                )
             images = sorted(results_dir.glob("output-*.png"))
             if images:
                 model_images[key] = images
@@ -168,19 +184,20 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
             )
         else:
             evaluation = await evaluate_models(ctx.llm, ref_paths, model_images)
-        project_store.save_evaluation(ctx.project, evaluation)
+        project_store.save_evaluation(ctx.project, evaluation, pass_num=pass_num)
         if thinking:
             project_store.save_thinking(
-                root / "model-select" / "evaluation.json", thinking,
+                project_store.model_select_dir(ctx.project, pass_num) / "evaluation.json",
+                thinking,
             )
-        generate_model_select_report(ctx.project)
+        generate_model_select_report(ctx.project, pass_num=pass_num)
 
-        msg = f"Recommendation: {evaluation.recommendation}"
+        msg = f"Recommendation: {evaluation.recommendation} (pass {pass_num})"
         if thinking:
             msg += f" | thinking saved ({len(thinking)} chars)"
         return StepResult(
             ok=True, message=msg,
-            data={"recommendation": evaluation.recommendation},
+            data={"recommendation": evaluation.recommendation, "pass_num": pass_num},
         )
 
     if state.phase == Phase.STYLE_REFINE:
@@ -392,25 +409,64 @@ async def do_report(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     return StepResult(ok=False, message=f"No report for {state.phase}")
 
 
+async def do_retest_models(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
+    from styleclaw.core.state_machine import advance
+
+    state = project_store.load_state(ctx.project)
+    if state.phase not in (Phase.STYLE_REFINE, Phase.BATCH_T2I):
+        return StepResult(
+            ok=False,
+            message=f"retest-models requires STYLE_REFINE or BATCH_T2I (current: {state.phase})",
+        )
+
+    new_pass = (state.current_model_select_pass or 0) + 1
+    new_state = (
+        advance(state, Phase.MODEL_SELECT)
+        .with_model_select_pass(new_pass)
+    )
+    project_store.save_state(ctx.project, new_state)
+    return StepResult(
+        ok=True,
+        message=f"Entered MODEL_SELECT pass {new_pass} for re-test",
+        data={"pass_num": new_pass},
+    )
+
+
+async def do_back_to_t2i(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
+    from styleclaw.core.state_machine import advance
+
+    state = project_store.load_state(ctx.project)
+    if state.phase != Phase.BATCH_I2I:
+        return StepResult(
+            ok=False,
+            message=f"back-to-t2i requires BATCH_I2I (current: {state.phase})",
+        )
+    new_state = advance(state, Phase.BATCH_T2I)
+    project_store.save_state(ctx.project, new_state)
+    return StepResult(ok=True, message="Returned to BATCH_T2I")
+
+
 ACTION_REGISTRY: dict[str, ActionDef] = {
-    "analyze":      ActionDef(fn=do_analyze,      needs_client=False, needs_llm=True),
-    "generate":     ActionDef(fn=do_generate,      needs_client=True,  needs_llm=False),
-    "poll":         ActionDef(fn=do_poll,          needs_client=True,  needs_llm=False),
-    "evaluate":     ActionDef(fn=do_evaluate,      needs_client=False, needs_llm=True),
-    "select-model": ActionDef(fn=do_select_model,  needs_client=False, needs_llm=False, requires_confirmation=True),
-    "refine":       ActionDef(fn=do_refine,        needs_client=False, needs_llm=True),
-    "approve":      ActionDef(fn=do_approve,       needs_client=False, needs_llm=False),
-    "design-cases": ActionDef(fn=do_design_cases,  needs_client=False, needs_llm=True),
-    "batch-submit": ActionDef(fn=do_batch_submit,  needs_client=True,  needs_llm=False),
-    "report":       ActionDef(fn=do_report,        needs_client=False, needs_llm=False),
+    "analyze":       ActionDef(fn=do_analyze,       needs_client=False, needs_llm=True),
+    "generate":      ActionDef(fn=do_generate,      needs_client=True,  needs_llm=False),
+    "poll":          ActionDef(fn=do_poll,          needs_client=True,  needs_llm=False),
+    "evaluate":      ActionDef(fn=do_evaluate,      needs_client=False, needs_llm=True),
+    "select-model":  ActionDef(fn=do_select_model,  needs_client=False, needs_llm=False, requires_confirmation=True),
+    "refine":        ActionDef(fn=do_refine,        needs_client=False, needs_llm=True),
+    "approve":       ActionDef(fn=do_approve,       needs_client=False, needs_llm=False),
+    "design-cases":  ActionDef(fn=do_design_cases,  needs_client=False, needs_llm=True),
+    "batch-submit":  ActionDef(fn=do_batch_submit,  needs_client=True,  needs_llm=False),
+    "report":        ActionDef(fn=do_report,        needs_client=False, needs_llm=False),
+    "retest-models": ActionDef(fn=do_retest_models, needs_client=False, needs_llm=False),
+    "back-to-t2i":   ActionDef(fn=do_back_to_t2i,   needs_client=False, needs_llm=False),
 }
 
 
 PHASE_ACTIONS: dict[Phase, list[str]] = {
     Phase.INIT:         ["analyze"],
     Phase.MODEL_SELECT: ["generate", "poll", "evaluate", "select-model"],
-    Phase.STYLE_REFINE: ["refine", "generate", "poll", "evaluate", "approve", "select-model"],
-    Phase.BATCH_T2I:    ["design-cases", "batch-submit", "poll", "report", "approve"],
-    Phase.BATCH_I2I:    ["batch-submit", "poll", "report", "approve"],
+    Phase.STYLE_REFINE: ["refine", "generate", "poll", "evaluate", "approve", "select-model", "retest-models"],
+    Phase.BATCH_T2I:    ["design-cases", "batch-submit", "poll", "report", "approve", "retest-models"],
+    Phase.BATCH_I2I:    ["batch-submit", "poll", "report", "approve", "back-to-t2i"],
     Phase.COMPLETED:    [],
 }
