@@ -167,6 +167,7 @@ class ProjectState(_FrozenModel):
     selected_models: list[str] = Field(default_factory=list)
     current_round: int = 0
     current_batch: int = 0
+    current_model_select_pass: int = 0
     last_updated: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     history: list[HistoryEntry] = Field(default_factory=list)
 
@@ -200,6 +201,12 @@ class ProjectState(_FrozenModel):
     def with_batch(self, batch_num: int) -> ProjectState:
         return self.model_copy(update={
             "current_batch": batch_num,
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        })
+
+    def with_model_select_pass(self, pass_num: int) -> ProjectState:
+        return self.model_copy(update={
+            "current_model_select_pass": pass_num,
             "last_updated": datetime.now(timezone.utc).isoformat(),
         })
 
