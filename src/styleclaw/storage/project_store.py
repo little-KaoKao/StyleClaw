@@ -131,6 +131,10 @@ def _resolve_analysis_path(name: str, pass_num: int) -> Path:
     pass_path = model_select_dir(name, pass_num) / "initial-analysis.json"
     if pass_path.exists():
         return pass_path
+    if pass_num >= 2:
+        pass1_path = model_select_dir(name, 1) / "initial-analysis.json"
+        if pass1_path.exists():
+            return pass1_path
     if pass_num == 1:
         legacy = _legacy_model_select_dir(name) / "initial-analysis.json"
         if legacy.exists():
