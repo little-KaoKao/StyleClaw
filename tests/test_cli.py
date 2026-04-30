@@ -438,3 +438,42 @@ class TestShowThinkingFlag:
         assert result.exit_code == 0, result.output
         assert captured_ctx["show_thinking"] is True
         assert captured_ctx["thinking_budget"] == 4000
+
+
+class TestRetestModelsCommand:
+    def test_retest_models_advances_to_model_select(self, setup_project) -> None:
+        _set_state(Phase.STYLE_REFINE, current_round=1, current_model_select_pass=1)
+        result = runner.invoke(app, ["retest-models", "test-proj"])
+        assert result.exit_code == 0
+        new_state = project_store.load_state("test-proj")
+        assert new_state.phase == Phase.MODEL_SELECT
+        assert new_state.current_model_select_pass == 2
+
+    def test_retest_wrong_phase(self, setup_project) -> None:
+        _set_state(Phase.INIT)
+        result = runner.invoke(app, ["retest-models", "test-proj"])
+        assert result.exit_code == 1
+        assert "STYLE_REFINE or BATCH_T2I" in result.output
+
+
+class TestBackToT2iCommand:
+    def test_back_to_t2i_from_batch_i2i(self, setup_project) -> None:
+        _set_state(Phase.BATCH_I2I, current_batch=1)
+        result = runner.invoke(app, ["back-to-t2i", "test-proj"])
+        assert result.exit_code == 0
+        assert project_store.load_state("test-proj").phase == Phase.BATCH_T2I
+
+    def test_back_to_t2i_wrong_phase(self, setup_project) -> None:
+        _set_state(Phase.STYLE_REFINE)
+        result = runner.invoke(app, ["back-to-t2i", "test-proj"])
+        assert result.exit_code == 1
+        assert "BATCH_I2I" in result.output
+
+
+class TestStatusShowsPass:
+    def test_status_includes_pass_number(self, setup_project) -> None:
+        _set_state(Phase.MODEL_SELECT, current_model_select_pass=2)
+        result = runner.invoke(app, ["status", "test-proj"])
+        assert result.exit_code == 0
+        assert "Pass:" in result.output
+        assert "2" in result.output

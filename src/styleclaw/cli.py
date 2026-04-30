@@ -142,6 +142,7 @@ def status(
     typer.echo(f"Phase:   {state.phase}")
     typer.echo(f"Models:  {', '.join(state.selected_models) or '(none)'}")
     typer.echo(f"Round:   {state.current_round}")
+    typer.echo(f"Pass:    {state.current_model_select_pass}")
     typer.echo(f"Updated: {state.last_updated}")
     if config.ip_info:
         typer.echo(f"IP Info: {config.ip_info[:100]}")
@@ -171,7 +172,7 @@ def analyze(
     if show_thinking:
         md = (
             project_store.project_dir(name)
-            / "model-select" / "initial-analysis.thinking.md"
+            / "model-select" / "pass-001" / "initial-analysis.thinking.md"
         )
         if md.exists():
             typer.echo("\n--- LLM thinking ---")
@@ -251,7 +252,8 @@ def evaluate(
     if show_thinking:
         project_dir = project_store.project_dir(name)
         if state.phase == Phase.MODEL_SELECT:
-            md = project_dir / "model-select" / "evaluation.thinking.md"
+            pass_num = state.current_model_select_pass or 1
+            md = project_dir / "model-select" / f"pass-{pass_num:03d}" / "evaluation.thinking.md"
         else:
             md = (
                 project_dir / "style-refine"
@@ -443,6 +445,50 @@ def rollback(
     project_store.save_state(name, new_state)
 
     typer.echo(f"Rolled back to {new_state.phase} (round={new_state.current_round})")
+
+
+@app.command(name="retest-models")
+def retest_models_cmd(
+    name: str = typer.Argument(..., help="Project name"),
+) -> None:
+    """Re-enter MODEL_SELECT to re-test all models with the current trigger."""
+    state = project_store.load_state(name)
+    if state.phase not in (Phase.STYLE_REFINE, Phase.BATCH_T2I):
+        typer.echo(
+            f"Error: retest-models requires STYLE_REFINE or BATCH_T2I "
+            f"(current: {state.phase})",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    result = _run_action(name, "retest-models")
+    if not result.ok:
+        typer.echo(f"Error: {result.message}", err=True)
+        raise typer.Exit(1)
+    typer.echo(result.message)
+    typer.echo(
+        "Next: run 'generate', 'poll', 'evaluate', then 'select-model' to pick a model."
+    )
+
+
+@app.command(name="back-to-t2i")
+def back_to_t2i_cmd(
+    name: str = typer.Argument(..., help="Project name"),
+) -> None:
+    """Return from BATCH_I2I to BATCH_T2I when i2i results are unsatisfying."""
+    state = project_store.load_state(name)
+    if state.phase != Phase.BATCH_I2I:
+        typer.echo(
+            f"Error: back-to-t2i requires BATCH_I2I phase (current: {state.phase})",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    result = _run_action(name, "back-to-t2i")
+    if not result.ok:
+        typer.echo(f"Error: {result.message}", err=True)
+        raise typer.Exit(1)
+    typer.echo(result.message)
 
 
 @app.command(name="design-cases")
