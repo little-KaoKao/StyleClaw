@@ -33,6 +33,7 @@ async def _poll_one_model_select(
     key: str,
     record: TaskRecord,
     client: RunningHubClient,
+    pass_num: int,
 ) -> tuple[str, TaskRecord]:
     if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
         logger.info("Task %s already terminal (%s), skipping.", record.task_id, record.status)
@@ -42,16 +43,20 @@ async def _poll_one_model_select(
         logger.warning("Skipping %s: no task_id (submission may have failed).", key)
         return key, record
 
-    logger.info("Polling task %s for %s...", record.task_id, key)
+    logger.info("Polling task %s for %s (pass %d)...", record.task_id, key, pass_num)
     new_record = await poll_and_update(client, record)
 
     if "/" in key:
         model_id, variant = key.split("/", 1)
-        project_store.save_task_record(name, model_id, new_record, variant=variant)
-        results_dir = project_store.model_results_dir(name, model_id, variant=variant)
+        project_store.save_task_record(
+            name, model_id, new_record, variant=variant, pass_num=pass_num,
+        )
+        results_dir = project_store.model_results_dir(
+            name, model_id, variant=variant, pass_num=pass_num,
+        )
     else:
-        project_store.save_task_record(name, key, new_record)
-        results_dir = project_store.model_results_dir(name, key)
+        project_store.save_task_record(name, key, new_record, pass_num=pass_num)
+        results_dir = project_store.model_results_dir(name, key, pass_num=pass_num)
 
     await _download_results(new_record.results, results_dir)
     return key, new_record
@@ -60,17 +65,20 @@ async def _poll_one_model_select(
 async def poll_model_select(
     name: str,
     client: RunningHubClient,
+    pass_num: int = 1,
 ) -> dict[str, TaskRecord]:
-    records = project_store.load_all_task_records(name)
+    records = project_store.load_all_task_records(name, pass_num=pass_num)
     if not records:
-        raise RuntimeError(f"No task records found for project '{name}'")
+        raise RuntimeError(
+            f"No task records found for project '{name}' pass {pass_num}"
+        )
 
     updated: dict[str, TaskRecord] = {}
 
     async with asyncio.TaskGroup() as tg:
         tasks = {
             key: tg.create_task(
-                _poll_one_model_select(name, key, record, client)
+                _poll_one_model_select(name, key, record, client, pass_num)
             )
             for key, record in records.items()
         }
@@ -79,7 +87,7 @@ async def poll_model_select(
         _, new_record = task.result()
         updated[key] = new_record
 
-    logger.info("Poll complete. %d tasks processed.", len(updated))
+    logger.info("Pass %d poll complete. %d tasks processed.", pass_num, len(updated))
     return updated
 
 

@@ -25,12 +25,12 @@ def _img_to_data_uri(path: Path) -> str:
     return f"data:{mt};base64,{data}"
 
 
-def generate_model_select_report(name: str) -> Path:
+def generate_model_select_report(name: str, pass_num: int = 1) -> Path:
 
     root = project_store.project_dir(name)
     config = project_store.load_config(name)
-    analysis = project_store.load_analysis(name)
-    evaluation = project_store.load_evaluation(name)
+    analysis = project_store.load_analysis(name, pass_num=pass_num)
+    evaluation = project_store.load_evaluation(name, pass_num=pass_num)
 
     ref_images = [
         _img_to_data_uri(root / r) for r in config.ref_images
@@ -39,9 +39,13 @@ def generate_model_select_report(name: str) -> Path:
     model_data: list[dict] = []
     for ev in evaluation.evaluations:
         if ev.variant:
-            results_dir = project_store.model_results_dir(name, ev.model, variant=ev.variant)
+            results_dir = project_store.model_results_dir(
+                name, ev.model, variant=ev.variant, pass_num=pass_num,
+            )
         else:
-            results_dir = project_store.model_results_dir(name, ev.model)
+            results_dir = project_store.model_results_dir(
+                name, ev.model, pass_num=pass_num,
+            )
         images = sorted(results_dir.glob("output-*.png"))
         model_data.append({
             "model": ev.model,
@@ -56,6 +60,7 @@ def generate_model_select_report(name: str) -> Path:
     template = _env.get_template("model_select.html")
     html = template.render(
         project_name=name,
+        pass_num=pass_num,
         trigger_phrase=analysis.trigger_phrase,
         recommendation=evaluation.recommendation,
         recommended_variant=evaluation.recommended_variant,
@@ -63,7 +68,7 @@ def generate_model_select_report(name: str) -> Path:
         models=model_data,
     )
 
-    dest = root / "model-select" / "report.html"
+    dest = project_store.model_select_dir(name, pass_num) / "report.html"
     dest.write_text(html, encoding="utf-8")
     logger.info("Model-select report saved: %s", dest)
     return dest

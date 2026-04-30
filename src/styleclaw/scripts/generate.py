@@ -24,10 +24,11 @@ async def generate_model_select(
     trigger_phrase: str,
     sref_url: str = "",
     models: list[str] | None = None,
+    pass_num: int = 1,
 ) -> dict[str, TaskRecord]:
     model_ids = models or list(MODEL_REGISTRY.keys())
 
-    existing = project_store.load_all_task_records(name)
+    existing = project_store.load_all_task_records(name, pass_num=pass_num)
 
     to_submit: list[tuple[str, str]] = []
     skipped: dict[str, TaskRecord] = {}
@@ -54,7 +55,9 @@ async def generate_model_select(
             sref_url=use_sref,
         )
         record = await submit_task(client, config.t2i_endpoint, params, model_id)
-        project_store.save_task_record(name, model_id, record, variant=variant)
+        project_store.save_task_record(
+            name, model_id, record, variant=variant, pass_num=pass_num,
+        )
         return record
 
     async with asyncio.TaskGroup() as tg:
@@ -67,8 +70,8 @@ async def generate_model_select(
         records[key] = task.result()
 
     logger.info(
-        "Submitted %d generation tasks for model-select (%d skipped).",
-        len(tasks), len(skipped),
+        "Submitted %d generation tasks for model-select pass %d (%d skipped).",
+        len(tasks), pass_num, len(skipped),
     )
     return records
 
