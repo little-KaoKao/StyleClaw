@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
+from PIL import Image
 
 from styleclaw.core.models import UploadRecord
 from styleclaw.scripts.init_project import init_project
@@ -20,7 +21,7 @@ def ref_images(tmp_path: Path) -> list[Path]:
     paths = []
     for i in range(3):
         p = tmp_path / f"input-{i}.png"
-        p.write_bytes(b"fake image")
+        Image.new("RGB", (16, 16), color=(i * 80, 100, 100)).save(p, "PNG")
         paths.append(p)
     return paths
 
@@ -64,3 +65,18 @@ class TestInitProject:
         config = project_store.load_config("test-proj")
         assert len(config.ref_images) == 3
         assert all(r.startswith("refs/ref-") for r in config.ref_images)
+
+    async def test_rejects_invalid_image_before_creating_project(
+        self, tmp_path: Path, mock_client,
+    ) -> None:
+        """Sec3: if any ref is not a valid image, fail fast without creating
+        the project directory or uploading anything."""
+        good = tmp_path / "good.png"
+        Image.new("RGB", (16, 16)).save(good, "PNG")
+        bad = tmp_path / "fake.png"
+        bad.write_bytes(b"not an image")
+
+        with pytest.raises(ValueError, match="Not a valid image"):
+            await init_project("test-proj", [good, bad], "ip", "desc", mock_client)
+
+        assert not (project_store.project_dir("test-proj")).exists()

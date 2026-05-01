@@ -25,7 +25,7 @@ Copy `.env.example` to `.env` and fill in:
 |----------|----------|-------------|
 | `RUNNINGHUB_API_KEY` | Yes | RunningHub API key for image generation |
 | `AWS_REGION` | Yes | AWS region for Bedrock (e.g. `us-east-1`) |
-| `AWS_BEARER_TOKEN_BEDROCK` | Yes | Bearer token for AWS Bedrock authentication |
+| `AWS_BEARER_TOKEN_BEDROCK` | Yes | Bearer token sent as `Authorization: Bearer ...` to `bedrock-runtime.<region>.amazonaws.com`. **This is not a standard AWS credential** — StyleClaw does not use SigV4 signing. The token comes from a pre-configured proxy/gateway (e.g. a Cloudflare Worker or API Gateway that forwards to Bedrock after signing). Treat it as a secret with the same blast radius as an IAM credential and do not check it into version control. |
 | `CLAUDE_MODEL` | No | Bedrock model ID (default: `anthropic.claude-sonnet-4-20250514`) |
 
 ## Tech Stack

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from styleclaw.core.image_utils import build_image_block
+from styleclaw.core.image_utils import build_image_blocks_async
 from styleclaw.core.models import StyleAnalysis
 from styleclaw.core.text_utils import parse_llm_response, sanitize_braces
 from styleclaw.providers.llm.base import LLMProvider
@@ -13,8 +13,9 @@ logger = logging.getLogger(__name__)
 PROMPT_TEMPLATE_PATH = Path(__file__).parent.parent / "providers" / "llm" / "prompts" / "analyze.md"
 
 
-def _build_messages(ref_image_paths: list[Path]) -> list[dict]:
-    content: list[dict] = [build_image_block(p) for p in ref_image_paths]
+async def _build_messages(ref_image_paths: list[Path]) -> list[dict]:
+    blocks = await build_image_blocks_async(list(ref_image_paths))
+    content: list[dict] = list(blocks)
     content.append({
         "type": "text",
         "text": "Analyze these reference images and generate a style trigger phrase.",
@@ -34,7 +35,7 @@ async def analyze_style(
 ) -> StyleAnalysis:
     raw = await llm.invoke(
         system=_build_system_prompt(ip_info),
-        messages=_build_messages(ref_image_paths),
+        messages=await _build_messages(ref_image_paths),
     )
     analysis = parse_llm_response(raw, StyleAnalysis, "style analysis")
     logger.info("Style analysis complete. Trigger: %s", analysis.trigger_phrase[:80])
@@ -49,7 +50,7 @@ async def analyze_style_with_thinking(
 ) -> tuple[StyleAnalysis, str]:
     response = await llm.invoke_with_thinking(
         system=_build_system_prompt(ip_info),
-        messages=_build_messages(ref_image_paths),
+        messages=await _build_messages(ref_image_paths),
         thinking_budget=thinking_budget,
     )
     analysis = parse_llm_response(response.text, StyleAnalysis, "style analysis")

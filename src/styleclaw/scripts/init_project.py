@@ -5,6 +5,7 @@ import logging
 import shutil
 from pathlib import Path
 
+from styleclaw.core.image_utils import verify_ref_image
 from styleclaw.core.models import ProjectConfig, UploadRecord
 from styleclaw.providers.runninghub.client import RunningHubClient
 from styleclaw.providers.runninghub.upload import upload_file
@@ -20,6 +21,9 @@ async def init_project(
     description: str,
     client: RunningHubClient,
 ) -> Path:
+    for img_path in ref_images:
+        verify_ref_image(img_path)
+
     config = ProjectConfig(
         name=name,
         description=description,

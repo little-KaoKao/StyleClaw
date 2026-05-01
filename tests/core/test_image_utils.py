@@ -10,6 +10,7 @@ from styleclaw.core.image_utils import (
     build_image_block,
     encode_image_for_llm,
     resize_for_llm,
+    verify_ref_image,
 )
 
 
@@ -96,3 +97,30 @@ class TestBuildImageBlock:
     def test_rgba_returns_png_block(self, rgba_image: Path) -> None:
         block = build_image_block(rgba_image)
         assert block["source"]["media_type"] == "image/png"
+
+
+class TestVerifyRefImage:
+    def test_accepts_valid_png(self, small_image: Path) -> None:
+        verify_ref_image(small_image)  # does not raise
+
+    def test_rejects_missing_file(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="not found"):
+            verify_ref_image(tmp_path / "nope.png")
+
+    def test_rejects_non_image(self, tmp_path: Path) -> None:
+        p = tmp_path / "secrets.txt"
+        p.write_bytes(b"KEY=deadbeef\n" * 100)
+        with pytest.raises(ValueError, match="Not a valid image"):
+            verify_ref_image(p)
+
+    def test_rejects_oversize(self, tmp_path: Path) -> None:
+        p = tmp_path / "big.png"
+        Image.new("RGB", (8, 8)).save(p, "PNG")
+        with pytest.raises(ValueError, match="too large"):
+            verify_ref_image(p, max_bytes=10)
+
+    def test_rejects_file_with_image_extension_but_garbage_bytes(self, tmp_path: Path) -> None:
+        p = tmp_path / "fake.png"
+        p.write_bytes(b"\x89PNG\r\n\x1a\n" + b"garbage" * 100)
+        with pytest.raises(ValueError, match="Not a valid image"):
+            verify_ref_image(p)

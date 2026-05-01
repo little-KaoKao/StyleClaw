@@ -4,7 +4,7 @@ import json
 import logging
 from pathlib import Path
 
-from styleclaw.core.image_utils import build_image_block
+from styleclaw.core.image_utils import build_image_blocks_async
 from styleclaw.core.models import PromptConfig, RoundEvaluation
 from styleclaw.core.text_utils import clean_json, parse_llm_response, sanitize_braces
 from styleclaw.providers.llm.base import LLMProvider
@@ -55,8 +55,9 @@ def _build_system_prompt(
     )
 
 
-def _build_messages(ref_image_paths: list[Path]) -> list[dict]:
-    content: list[dict] = [build_image_block(p) for p in ref_image_paths]
+async def _build_messages(ref_image_paths: list[Path]) -> list[dict]:
+    blocks = await build_image_blocks_async(list(ref_image_paths))
+    content: list[dict] = list(blocks)
     content.append({
         "type": "text",
         "text": "Refine the trigger phrase based on the evaluation history and reference images.",
@@ -92,7 +93,7 @@ async def refine_prompt(
     system_prompt = _build_system_prompt(
         current_trigger, round_num, ip_info, evaluations, human_direction,
     )
-    raw = await llm.invoke(system=system_prompt, messages=_build_messages(ref_image_paths))
+    raw = await llm.invoke(system=system_prompt, messages=await _build_messages(ref_image_paths))
     config = _parse_prompt_config(raw, round_num)
     logger.info("Refined trigger (round %d): %s", round_num, config.trigger_phrase[:80])
     return config
@@ -113,7 +114,7 @@ async def refine_prompt_with_thinking(
     )
     response = await llm.invoke_with_thinking(
         system=system_prompt,
-        messages=_build_messages(ref_image_paths),
+        messages=await _build_messages(ref_image_paths),
         thinking_budget=thinking_budget,
     )
     config = _parse_prompt_config(response.text, round_num)

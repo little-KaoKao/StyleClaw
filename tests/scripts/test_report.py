@@ -22,7 +22,7 @@ from styleclaw.core.models import (
     UploadRecord,
 )
 from styleclaw.scripts.report import (
-    _img_to_data_uri,
+    _relative_img_src,
     generate_batch_i2i_report,
     generate_batch_t2i_report,
     generate_model_select_report,
@@ -50,22 +50,26 @@ def setup_project(tmp_path):
     return root
 
 
-class TestImgToDataUri:
-    def test_returns_data_uri_for_png(self, tmp_path: Path) -> None:
-        p = tmp_path / "test.png"
-        Image.new("RGB", (10, 10)).save(p, "PNG")
-        uri = _img_to_data_uri(p)
-        assert uri.startswith("data:image/png;base64,")
+class TestRelativeImgSrc:
+    def test_returns_relative_path_with_forward_slashes(self, tmp_path: Path) -> None:
+        report_dir = tmp_path / "reports"
+        report_dir.mkdir()
+        img_dir = tmp_path / "assets"
+        img_dir.mkdir()
+        img = img_dir / "a.png"
+        Image.new("RGB", (4, 4)).save(img)
+        src = _relative_img_src(img, report_dir)
+        assert src == "../assets/a.png"
 
-    def test_returns_data_uri_for_jpg(self, tmp_path: Path) -> None:
-        p = tmp_path / "test.jpg"
-        Image.new("RGB", (10, 10)).save(p, "JPEG")
-        uri = _img_to_data_uri(p)
-        assert uri.startswith("data:image/jpeg;base64,")
+    def test_returns_same_dir_path(self, tmp_path: Path) -> None:
+        img = tmp_path / "a.png"
+        Image.new("RGB", (4, 4)).save(img)
+        src = _relative_img_src(img, tmp_path)
+        assert src == "a.png"
 
     def test_returns_empty_for_missing_file(self, tmp_path: Path) -> None:
         p = tmp_path / "missing.png"
-        assert _img_to_data_uri(p) == ""
+        assert _relative_img_src(p, tmp_path) == ""
 
 
 class TestGenerateModelSelectReport:
@@ -92,9 +96,13 @@ class TestGenerateModelSelectReport:
 
         path = generate_model_select_report("test-proj")
         assert path.exists()
-        html = path.read_text()
+        html = path.read_text(encoding="utf-8")
         assert "bold anime" in html
         assert "mj-v7" in html
+        # P1: images are relative paths, never data URIs
+        assert "data:image" not in html
+        assert 'src="results/mj-v7/output-001.png"' in html
+        assert 'src="../../refs/ref-001.png"' in html
 
 
 class TestGenerateStyleRefineReport:
@@ -115,8 +123,11 @@ class TestGenerateStyleRefineReport:
 
         path = generate_style_refine_report("test-proj", 1)
         assert path.exists()
-        html = path.read_text()
+        html = path.read_text(encoding="utf-8")
         assert "refined trigger" in html
+        assert "data:image" not in html
+        assert 'src="results/mj-v7/output-001.png"' in html
+        assert 'src="../../../refs/ref-001.png"' in html
 
 
 class TestGenerateBatchT2iReport:
@@ -135,9 +146,11 @@ class TestGenerateBatchT2iReport:
 
         path = generate_batch_t2i_report("test-proj", 1)
         assert path.exists()
-        html = path.read_text()
+        html = path.read_text(encoding="utf-8")
         assert "bold anime" in html
         assert "am-001" in html
+        assert "data:image" not in html
+        assert 'src="results/am-001/output-001.png"' in html
 
 
 class TestGenerateBatchI2iReport:
@@ -159,5 +172,8 @@ class TestGenerateBatchI2iReport:
 
         path = generate_batch_i2i_report("test-proj", 1)
         assert path.exists()
-        html = path.read_text()
+        html = path.read_text(encoding="utf-8")
         assert "i2i-001" in html
+        assert "data:image" not in html
+        assert 'src="source-images/source.png"' in html
+        assert 'src="results/i2i-001/output-001.png"' in html

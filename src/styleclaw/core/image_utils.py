@@ -1,12 +1,37 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
+
+MAX_REF_IMAGE_BYTES = 50 * 1024 * 1024
 
 MAX_LONG_EDGE = 1024
+
+
+def verify_ref_image(path: Path | str, max_bytes: int = MAX_REF_IMAGE_BYTES) -> None:
+    """Validate that a user-supplied reference image is safe to copy into the
+    project directory: it must exist, be under `max_bytes`, and be decodable
+    by Pillow. Raises ValueError with a human-readable message on failure.
+    """
+    p = Path(path)
+    if not p.is_file():
+        raise ValueError(f"Image not found: {p}")
+    size = p.stat().st_size
+    if size > max_bytes:
+        mb = size / (1024 * 1024)
+        limit_mb = max_bytes / (1024 * 1024)
+        raise ValueError(
+            f"Image too large: {p.name} is {mb:.1f} MB (limit: {limit_mb:.0f} MB)"
+        )
+    try:
+        with Image.open(p) as img:
+            img.verify()
+    except (UnidentifiedImageError, OSError, SyntaxError) as exc:
+        raise ValueError(f"Not a valid image: {p.name} ({exc})") from exc
 
 
 def _needs_alpha(img: Image.Image) -> bool:
@@ -62,3 +87,15 @@ def build_image_block(image_path: Path | str) -> dict:
         "type": "image",
         "source": {"type": "base64", "media_type": media_type, "data": b64_data},
     }
+
+
+async def build_image_block_async(image_path: Path | str) -> dict:
+    """Async variant that offloads Pillow decode/resize/encode to a worker
+    thread, so the event loop stays responsive while processing many images.
+    """
+    return await asyncio.to_thread(build_image_block, image_path)
+
+
+async def build_image_blocks_async(image_paths: list[Path | str]) -> list[dict]:
+    """Build image blocks for several paths concurrently (one thread each)."""
+    return list(await asyncio.gather(*(build_image_block_async(p) for p in image_paths)))
