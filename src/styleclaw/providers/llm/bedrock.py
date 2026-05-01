@@ -8,6 +8,7 @@ from typing import Any, Self
 
 import httpx
 
+from styleclaw.core.config import LLM_CONCURRENCY_LIMIT
 from styleclaw.providers.llm.base import LLMResponse
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ class BedrockProvider:
             },
             timeout=120,
         )
+        self._semaphore = asyncio.Semaphore(LLM_CONCURRENCY_LIMIT)
 
     async def __aenter__(self) -> Self:
         return self
@@ -110,7 +112,8 @@ class BedrockProvider:
         last_exc: Exception | None = None
         for attempt in range(MAX_RETRIES):
             try:
-                resp = await self._http.post(url, content=json.dumps(body))
+                async with self._semaphore:
+                    resp = await self._http.post(url, content=json.dumps(body))
                 resp.raise_for_status()
                 return resp.json()
             except httpx.TransportError as exc:

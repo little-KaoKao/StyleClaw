@@ -74,6 +74,34 @@ class TestPollTask:
         with pytest.raises(TimeoutError, match="timed out"):
             await poll_task(mock_client, "t1", interval=0.01, timeout=0.03)
 
+    async def test_aborts_on_consecutive_network_failures(self, mock_client: AsyncMock) -> None:
+        import httpx
+
+        mock_client.post.side_effect = httpx.ConnectError("refused")
+        with pytest.raises(RuntimeError, match="consecutive network failures"):
+            await poll_task(
+                mock_client, "t1", interval=0.01, timeout=10,
+                max_consecutive_failures=3,
+            )
+        assert mock_client.post.call_count == 3
+
+    async def test_resets_failure_counter_on_success(self, mock_client: AsyncMock) -> None:
+        import httpx
+
+        mock_client.post.side_effect = [
+            httpx.ConnectError("1"),
+            httpx.ConnectError("2"),
+            {"status": "RUNNING"},
+            httpx.ConnectError("3"),
+            httpx.ConnectError("4"),
+            {"status": "SUCCESS", "results": []},
+        ]
+        result = await poll_task(
+            mock_client, "t1", interval=0.01, timeout=10,
+            max_consecutive_failures=3,
+        )
+        assert result["status"] == "SUCCESS"
+
 
 class TestPollAndUpdate:
     async def test_skips_already_succeeded(self, mock_client: AsyncMock) -> None:

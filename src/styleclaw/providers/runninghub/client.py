@@ -47,7 +47,18 @@ class RunningHubClient:
                 resp = await self._client.post(path, json=json_data)
                 resp.raise_for_status()
                 return resp.json()
-            except (httpx.HTTPStatusError, httpx.TransportError) as exc:
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code < 500:
+                    raise
+                last_exc = exc
+                if attempt < MAX_RETRIES - 1:
+                    wait = 2**attempt
+                    logger.warning(
+                        "Request to %s failed (attempt %d/%d): %s. Retrying in %ds.",
+                        path, attempt + 1, MAX_RETRIES, exc, wait,
+                    )
+                    await asyncio.sleep(wait)
+            except httpx.TransportError as exc:
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:
                     wait = 2**attempt
@@ -73,7 +84,18 @@ class RunningHubClient:
                     )
                 resp.raise_for_status()
                 return resp.json()
-            except (httpx.HTTPStatusError, httpx.TransportError) as exc:
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code < 500:
+                    raise
+                last_exc = exc
+                if attempt < MAX_RETRIES - 1:
+                    wait = 2**attempt
+                    logger.warning(
+                        "Upload to %s failed (attempt %d/%d): %s. Retrying in %ds.",
+                        path, attempt + 1, MAX_RETRIES, exc, wait,
+                    )
+                    await asyncio.sleep(wait)
+            except httpx.TransportError as exc:
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:
                     wait = 2**attempt

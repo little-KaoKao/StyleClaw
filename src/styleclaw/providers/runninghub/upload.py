@@ -19,10 +19,19 @@ async def upload_file(client: RunningHubClient, file_path: Path) -> UploadRecord
 
     data = resp.get("data")
     if not isinstance(data, dict):
+        logger.warning(
+            "Upload response schema drift — expected dict under 'data', got %s. Full response: %r",
+            type(data).__name__, resp,
+        )
         raise RuntimeError(f"Upload response missing 'data' field: {resp}")
     url = data.get("download_url")
     file_name = data.get("fileName")
     if not url or not file_name:
+        logger.warning(
+            "Upload response schema drift — expected keys 'download_url' and 'fileName' in data. "
+            "Got keys: %s. Full data: %r",
+            sorted(data.keys()), data,
+        )
         raise RuntimeError(f"Upload response missing required fields in 'data': {data}")
     record = UploadRecord(
         local_path=str(file_path),

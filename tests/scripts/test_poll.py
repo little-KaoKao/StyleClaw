@@ -147,8 +147,37 @@ class TestDownloadResults:
 
     async def test_empty_results_list(self, tmp_path) -> None:
         with patch("styleclaw.scripts.poll.download_image", new_callable=AsyncMock) as mock_dl:
-            await _download_results([], tmp_path)
+            stats = await _download_results([], tmp_path)
             mock_dl.assert_not_called()
+            assert stats.attempted == 0 and stats.succeeded == 0
+
+    async def test_returns_stats_on_success(self, tmp_path) -> None:
+        results = [
+            {"url": "http://example.com/img1.png"},
+            {"url": "http://example.com/img2.png"},
+        ]
+        with patch("styleclaw.scripts.poll.download_image", new_callable=AsyncMock):
+            stats = await _download_results(results, tmp_path)
+        assert stats.attempted == 2 and stats.succeeded == 2 and stats.failed == 0
+
+    async def test_returns_stats_counting_failures(self, tmp_path) -> None:
+        results = [
+            {"url": "http://example.com/a.png"},
+            {"url": "http://example.com/b.png"},
+            {"url": "http://example.com/c.png"},
+        ]
+        side_effects = [tmp_path / "a.png", RuntimeError("boom"), tmp_path / "c.png"]
+        with patch("styleclaw.scripts.poll.download_image", new_callable=AsyncMock, side_effect=side_effects):
+            stats = await _download_results(results, tmp_path)
+        assert stats.attempted == 3
+        assert stats.succeeded == 2
+        assert stats.failed == 1
+
+    async def test_skipped_urls_not_counted_as_attempt(self, tmp_path) -> None:
+        results = [{"url": ""}, {"url": "http://example.com/ok.png"}]
+        with patch("styleclaw.scripts.poll.download_image", new_callable=AsyncMock):
+            stats = await _download_results(results, tmp_path)
+        assert stats.attempted == 1 and stats.succeeded == 1
 
 
 class TestConcurrentPoll:

@@ -3,13 +3,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 
-from styleclaw.core.config import POLL_INTERVAL, TASK_TIMEOUT
+from styleclaw.core.config import (
+    POLL_INTERVAL,
+    POLL_MAX_CONSECUTIVE_FAILURES,
+    TASK_TIMEOUT,
+)
 from styleclaw.core.models import TaskRecord, TaskStatus
+from styleclaw.core.time_utils import utcnow_iso
 from styleclaw.providers.runninghub.client import RunningHubClient
 
 logger = logging.getLogger(__name__)
@@ -74,15 +78,27 @@ async def poll_task(
     task_id: str,
     interval: float = POLL_INTERVAL,
     timeout: float = TASK_TIMEOUT,
+    max_consecutive_failures: int = POLL_MAX_CONSECUTIVE_FAILURES,
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
+    consecutive_failures = 0
     while time.monotonic() < deadline:
         try:
             result = await query_task(client, task_id)
         except (httpx.TransportError, httpx.HTTPStatusError) as exc:
-            logger.warning("Poll query for task %s failed: %s. Will retry.", task_id, exc)
+            consecutive_failures += 1
+            logger.warning(
+                "Poll query for task %s failed (%d/%d consecutive): %s.",
+                task_id, consecutive_failures, max_consecutive_failures, exc,
+            )
+            if consecutive_failures >= max_consecutive_failures:
+                raise RuntimeError(
+                    f"Task {task_id} polling aborted: "
+                    f"{max_consecutive_failures} consecutive network failures"
+                ) from exc
             await asyncio.sleep(interval)
             continue
+        consecutive_failures = 0
         status = result.get("status", "")
         if status == "SUCCESS":
             return result
@@ -109,11 +125,11 @@ async def poll_and_update(
         return record.model_copy(update={
             "status": TaskStatus.FAILED,
             "error_message": str(exc),
-            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": utcnow_iso(),
         })
 
     return record.model_copy(update={
         "status": TaskStatus.SUCCESS,
         "results": result.get("results", []),
-        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": utcnow_iso(),
     })

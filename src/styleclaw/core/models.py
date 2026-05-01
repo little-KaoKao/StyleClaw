@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from styleclaw.core.time_utils import utcnow_iso as _utcnow_iso
 
 
 class Phase(StrEnum):
@@ -36,7 +37,7 @@ class HistoryEntry(_FrozenModel):
 
 class ProjectConfig(_FrozenModel):
     name: str
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = Field(default_factory=_utcnow_iso)
     description: str = ""
     ip_info: str = ""
     ref_images: list[str] = Field(default_factory=list)
@@ -56,7 +57,7 @@ class TaskRecord(_FrozenModel):
     params: dict[str, Any] = Field(default_factory=dict)
     results: list[dict[str, Any]] = Field(default_factory=list)
     error_message: str = ""
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = Field(default_factory=_utcnow_iso)
     completed_at: str = ""
 
 
@@ -168,11 +169,11 @@ class ProjectState(_FrozenModel):
     current_round: int = 0
     current_batch: int = 0
     current_model_select_pass: int = 0
-    last_updated: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    last_updated: str = Field(default_factory=_utcnow_iso)
     history: list[HistoryEntry] = Field(default_factory=list)
 
     def with_phase(self, phase: Phase, metadata: dict[str, Any] | None = None) -> ProjectState:
-        now = datetime.now(timezone.utc).isoformat()
+        now = _utcnow_iso()
         return self.model_copy(update={
             "phase": phase,
             "last_updated": now,
@@ -189,25 +190,25 @@ class ProjectState(_FrozenModel):
     def with_selected_models(self, models: list[str]) -> ProjectState:
         return self.model_copy(update={
             "selected_models": models,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "last_updated": _utcnow_iso(),
         })
 
     def with_round(self, round_num: int) -> ProjectState:
         return self.model_copy(update={
             "current_round": round_num,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "last_updated": _utcnow_iso(),
         })
 
     def with_batch(self, batch_num: int) -> ProjectState:
         return self.model_copy(update={
             "current_batch": batch_num,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "last_updated": _utcnow_iso(),
         })
 
     def with_model_select_pass(self, pass_num: int) -> ProjectState:
         return self.model_copy(update={
             "current_model_select_pass": pass_num,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
+            "last_updated": _utcnow_iso(),
         })
 
 
