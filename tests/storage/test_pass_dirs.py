@@ -46,28 +46,14 @@ class TestPassScopedAnalysis:
         loaded = project_store.load_analysis(proj, pass_num=1)
         assert loaded.trigger_phrase == "bold ink"
 
-    def test_legacy_analysis_readable_at_pass_1(self, proj):
-        """A pre-existing `model-select/initial-analysis.json` is readable as pass 1."""
-        legacy_dir = project_store.project_dir(proj) / "model-select"
-        legacy_dir.mkdir(exist_ok=True)
-        legacy_path = legacy_dir / "initial-analysis.json"
-        legacy_path.write_text('{"trigger_phrase": "legacy"}', encoding="utf-8")
-
-        loaded = project_store.load_analysis(proj, pass_num=1)
-        assert loaded.trigger_phrase == "legacy"
-
-    def test_pass_specific_shadows_legacy(self, proj):
-        """If pass-001 has its own analysis, prefer it over legacy."""
-        legacy_dir = project_store.project_dir(proj) / "model-select"
-        legacy_dir.mkdir(exist_ok=True)
-        (legacy_dir / "initial-analysis.json").write_text(
-            '{"trigger_phrase": "legacy"}', encoding="utf-8",
+    def test_load_analysis_pass_2_falls_back_to_pass_1(self, proj):
+        """When a project enters a new pass, the analysis from pass 1 is the
+        starting point until retest-models seeds pass-N (F2)."""
+        project_store.save_analysis(
+            proj, StyleAnalysis(trigger_phrase="from pass 1"), pass_num=1,
         )
-        new = StyleAnalysis(trigger_phrase="pass1 override")
-        project_store.save_analysis(proj, new, pass_num=1)
-
-        loaded = project_store.load_analysis(proj, pass_num=1)
-        assert loaded.trigger_phrase == "pass1 override"
+        loaded = project_store.load_analysis(proj, pass_num=2)
+        assert loaded.trigger_phrase == "from pass 1"
 
 
 class TestPassScopedTaskRecords:
@@ -91,19 +77,6 @@ class TestPassScopedTaskRecords:
         pass2 = project_store.load_all_task_records(proj, pass_num=2)
         assert pass1["mj-v7/prompt-only"].task_id == "t-pass1"
         assert pass2["mj-v7/prompt-only"].task_id == "t-pass2"
-
-    def test_legacy_flat_records_readable_at_pass_1(self, proj):
-        legacy = (
-            project_store.project_dir(proj)
-            / "model-select" / "results" / "mj-v7" / "prompt-only"
-        )
-        legacy.mkdir(parents=True)
-        (legacy / "task.json").write_text(
-            '{"task_id": "legacy-t", "model_id": "mj-v7", "status": "SUCCESS"}',
-            encoding="utf-8",
-        )
-        records = project_store.load_all_task_records(proj, pass_num=1)
-        assert records["mj-v7/prompt-only"].task_id == "legacy-t"
 
 
 class TestPassScopedEvaluation:

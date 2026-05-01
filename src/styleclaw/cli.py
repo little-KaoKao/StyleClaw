@@ -19,7 +19,23 @@ from styleclaw.storage import project_store
 load_dotenv()
 
 app = typer.Typer(name="styleclaw", help="AI style trigger word exploration system")
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+# Log level is INFO by default; --verbose/-v on any command lifts it to DEBUG.
+# STYLECLAW_LOG_LEVEL can also set it (e.g. DEBUG, WARNING) for persistent
+# overrides in CI or scripts.
+_default_level_name = os.getenv("STYLECLAW_LOG_LEVEL", "INFO").upper()
+_default_level = getattr(logging, _default_level_name, logging.INFO)
+logging.basicConfig(level=_default_level, format="%(levelname)s: %(message)s")
+
+
+@app.callback()
+def _global_options(
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show DEBUG-level logs from all subsystems",
+    ),
+) -> None:
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
 
 
 def _get_api_key() -> str:
@@ -146,6 +162,35 @@ def status(
     typer.echo(f"Updated: {state.last_updated}")
     if config.ip_info:
         typer.echo(f"IP Info: {config.ip_info[:100]}")
+
+
+@app.command()
+def migrate(
+    name: str = typer.Argument(..., help="Project name"),
+) -> None:
+    """Migrate a project from pre-pass storage layout to pass-scoped layout.
+
+    Moves `model-select/{initial-analysis.json, evaluation.json, results/...}`
+    under `model-select/pass-001/`, and each `style-refine/round-NNN/` under
+    `style-refine/pass-001/round-NNN/`. Safe to re-run.
+    """
+    from styleclaw.scripts.migrate import migrate_project
+
+    try:
+        result = migrate_project(name)
+    except (FileNotFoundError, FileExistsError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    if not result.anything_migrated:
+        typer.echo(f"{name}: nothing to migrate.")
+        return
+
+    if result.model_select_migrated:
+        typer.echo(f"{name}: migrated model-select/ → model-select/pass-001/")
+    if result.style_refine_rounds_migrated:
+        rounds = ", ".join(f"round-{r:03d}" for r in result.style_refine_rounds_migrated if r > 0)
+        typer.echo(f"{name}: migrated style-refine rounds → pass-001/ ({rounds})")
 
 
 @app.command()
@@ -386,11 +431,14 @@ def approve(
 
 
 def _get_current_trigger(name: str, state: ProjectState) -> str:
+    pass_num = state.current_model_select_pass or 1
     if state.current_round >= 1:
-        prompt_config = project_store.load_prompt_config(name, state.current_round)
+        prompt_config = project_store.load_prompt_config(
+            name, state.current_round, pass_num=pass_num,
+        )
         return prompt_config.trigger_phrase
     try:
-        analysis = project_store.load_analysis(name)
+        analysis = project_store.load_analysis(name, pass_num=pass_num)
         return analysis.trigger_phrase
     except FileNotFoundError:
         logging.getLogger(__name__).warning("Analysis file not found for project '%s'", name)
@@ -437,10 +485,12 @@ def rollback(
         if round_num < 0:
             typer.echo(f"Error: Round number must be non-negative, got {round_num}", err=True)
             raise typer.Exit(1)
-        round_dir = project_store.project_dir(name) / "style-refine" / f"round-{round_num:03d}"
-        if target == Phase.STYLE_REFINE and round_num > 0 and not round_dir.exists():
-            typer.echo(f"Error: Round {round_num} does not exist on disk.", err=True)
-            raise typer.Exit(1)
+        if target == Phase.STYLE_REFINE and round_num > 0:
+            style_refine_root = project_store.project_dir(name) / "style-refine"
+            pass_dirs = sorted(style_refine_root.glob(f"pass-*/round-{round_num:03d}"))
+            if not pass_dirs:
+                typer.echo(f"Error: Round {round_num} does not exist on disk.", err=True)
+                raise typer.Exit(1)
         new_state = new_state.with_round(round_num)
     project_store.save_state(name, new_state)
 
@@ -578,12 +628,26 @@ def add_refs(
     """Add reference images for image-to-image batch testing."""
     import shutil
 
+    from styleclaw.core.models import UploadRecord
     from styleclaw.providers.runninghub.client import RunningHubClient
     from styleclaw.providers.runninghub.upload import upload_file
 
     state = project_store.load_state(name)
     if state.phase not in (Phase.BATCH_T2I, Phase.BATCH_I2I):
         typer.echo(f"Error: Must be in BATCH_T2I or BATCH_I2I phase (current: {state.phase})", err=True)
+        raise typer.Exit(1)
+
+    from styleclaw.core.image_utils import verify_ref_image
+
+    invalid: list[tuple[Path, str]] = []
+    for p in images:
+        try:
+            verify_ref_image(p)
+        except ValueError as exc:
+            invalid.append((p, str(exc)))
+    if invalid:
+        for _, msg in invalid:
+            typer.echo(f"Error: {msg}", err=True)
         raise typer.Exit(1)
 
     if state.phase == Phase.BATCH_T2I:
@@ -595,30 +659,50 @@ def add_refs(
     source_dir = project_store.batch_i2i_dir(name, batch_num) / "source-images"
     source_dir.mkdir(parents=True, exist_ok=True)
 
-    async def _upload_all() -> list:
-        async with RunningHubClient(api_key=_get_api_key()) as client:
-            records = []
-            for i, img_path in enumerate(images, 1):
-                if not img_path.exists():
-                    typer.echo(f"Error: Image not found: {img_path}", err=True)
-                    raise typer.Exit(1)
-                dest = source_dir / img_path.name
-                shutil.copy2(img_path, dest)
-                record = await upload_file(client, dest)
-                records.append(record)
-                typer.echo(f"  Uploaded {i}/{len(images)}: {img_path.name}")
-            return records
+    local_dests: list[Path] = []
+    for img_path in images:
+        dest = source_dir / img_path.name
+        shutil.copy2(img_path, dest)
+        local_dests.append(dest)
 
-    new_records = asyncio.run(_upload_all())
-    existing_records = project_store.load_i2i_uploads(name, batch_num)
-    upload_records = existing_records + new_records
-    project_store.save_i2i_uploads(name, batch_num, upload_records)
+    async def _upload_all() -> tuple[dict[int, UploadRecord], list[tuple[int, str]]]:
+        results: dict[int, UploadRecord] = {}
+        errors: list[tuple[int, str]] = []
+
+        async with RunningHubClient(api_key=_get_api_key()) as client:
+            async def _one(idx: int, dest: Path) -> None:
+                try:
+                    results[idx] = await upload_file(client, dest)
+                    typer.echo(f"  Uploaded {idx + 1}/{len(local_dests)}: {dest.name}")
+                except (RuntimeError, ValueError) as exc:
+                    errors.append((idx, str(exc)))
+                    typer.echo(f"  Failed   {idx + 1}/{len(local_dests)}: {dest.name} ({exc})", err=True)
+
+            async with asyncio.TaskGroup() as tg:
+                for idx, dest in enumerate(local_dests):
+                    tg.create_task(_one(idx, dest))
+        return results, errors
+
+    results, errors = asyncio.run(_upload_all())
+    new_records = [results[i] for i in sorted(results)]
+
+    if new_records:
+        existing_records = project_store.load_i2i_uploads(name, batch_num)
+        upload_records = existing_records + new_records
+        project_store.save_i2i_uploads(name, batch_num, upload_records)
+    else:
+        upload_records = project_store.load_i2i_uploads(name, batch_num)
 
     if state.current_batch != batch_num:
         new_state = state.with_batch(batch_num)
         project_store.save_state(name, new_state)
 
-    typer.echo(f"Added {len(upload_records)} reference images for i2i batch {batch_num}.")
+    typer.echo(
+        f"Added {len(new_records)}/{len(local_dests)} reference images for i2i batch {batch_num}."
+    )
+    if errors:
+        typer.echo(f"Warning: {len(errors)} uploads failed — see messages above.", err=True)
+        raise typer.Exit(1)
 
 
 def _confirm_select_model(

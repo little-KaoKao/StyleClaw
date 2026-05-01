@@ -57,12 +57,11 @@ class TestDoAnalyzeSetsPass1:
 
 class TestDoGenerateUsesCurrentPass:
     async def test_pass_2_picks_refined_trigger(self, project_with_ref):
+        """After retest-models, do_generate should see the current trigger
+        that retest-models persisted into pass-N/initial-analysis.json."""
         project_store.save_analysis(
-            project_with_ref, StyleAnalysis(trigger_phrase="initial"), pass_num=1,
-        )
-        project_store.save_prompt_config(
-            project_with_ref, 1,
-            PromptConfig(round=1, trigger_phrase="refined-after-round-1"),
+            project_with_ref, StyleAnalysis(trigger_phrase="refined-after-round-1"),
+            pass_num=2,
         )
         state = ProjectState(
             phase=Phase.MODEL_SELECT,
@@ -84,7 +83,6 @@ class TestDoGenerateUsesCurrentPass:
 
         assert result.ok
         assert any("refined-after-round-1" in p for p in captured)
-        assert not any("initial" in p for p in captured)
 
 
 class TestDoRetestModels:
@@ -130,6 +128,52 @@ class TestDoRetestModels:
         result = await do_retest_models(ctx, {})
         assert result.ok is False
         assert "INIT" in result.message
+
+    async def test_retest_writes_pass_n_analysis_from_prompt(self, project_with_ref):
+        """F2: retest-models seeds pass-N/initial-analysis.json with the
+        current trigger, so do_generate in pass-N can read from analysis
+        uniformly regardless of pass."""
+        from styleclaw.orchestrator.actions import do_retest_models
+
+        project_store.save_analysis(
+            project_with_ref, StyleAnalysis(trigger_phrase="old-trigger"), pass_num=1,
+        )
+        project_store.save_prompt_config(
+            project_with_ref, 2,
+            PromptConfig(round=2, trigger_phrase="refined-after-round-2"),
+            pass_num=1,
+        )
+        state = ProjectState(
+            phase=Phase.STYLE_REFINE, current_round=2, current_model_select_pass=1,
+        )
+        project_store.save_state(project_with_ref, state)
+
+        ctx = ExecutionContext(project=project_with_ref)
+        result = await do_retest_models(ctx, {})
+        assert result.ok
+
+        pass2_analysis = project_store.load_analysis(project_with_ref, pass_num=2)
+        assert pass2_analysis.trigger_phrase == "refined-after-round-2"
+
+    async def test_retest_falls_back_to_analysis_when_no_rounds(self, project_with_ref):
+        """If a user somehow retests without any refine rounds, fall back to
+        the pass-N-1 analysis trigger."""
+        from styleclaw.orchestrator.actions import do_retest_models
+
+        project_store.save_analysis(
+            project_with_ref, StyleAnalysis(trigger_phrase="only-analysis"), pass_num=1,
+        )
+        state = ProjectState(
+            phase=Phase.STYLE_REFINE, current_round=0, current_model_select_pass=1,
+        )
+        project_store.save_state(project_with_ref, state)
+
+        ctx = ExecutionContext(project=project_with_ref)
+        result = await do_retest_models(ctx, {})
+        assert result.ok
+
+        pass2_analysis = project_store.load_analysis(project_with_ref, pass_num=2)
+        assert pass2_analysis.trigger_phrase == "only-analysis"
 
 
 class TestDoBackToT2i:

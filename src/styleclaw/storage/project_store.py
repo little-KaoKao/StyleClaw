@@ -123,31 +123,20 @@ def model_select_dir(name: str, pass_num: int) -> Path:
     return d
 
 
-def _legacy_model_select_dir(name: str) -> Path:
-    return project_dir(name) / "model-select"
-
-
-def _resolve_analysis_path(name: str, pass_num: int) -> Path:
-    pass_path = model_select_dir(name, pass_num) / "initial-analysis.json"
-    if pass_path.exists():
-        return pass_path
-    if pass_num >= 2:
-        pass1_path = model_select_dir(name, 1) / "initial-analysis.json"
-        if pass1_path.exists():
-            return pass1_path
-    if pass_num == 1:
-        legacy = _legacy_model_select_dir(name) / "initial-analysis.json"
-        if legacy.exists():
-            return legacy
-    return pass_path
-
-
 def save_analysis(name: str, analysis: StyleAnalysis, pass_num: int = 1) -> None:
     _save_model(analysis, model_select_dir(name, pass_num) / "initial-analysis.json")
 
 
 def load_analysis(name: str, pass_num: int = 1) -> StyleAnalysis:
-    return _load_model(StyleAnalysis, _resolve_analysis_path(name, pass_num))
+    # pass_num >= 2 falls back to pass-1 so that a fresh retest-models pass
+    # can still see the analysis that F2 seeded into the target pass directly.
+    pass_path = model_select_dir(name, pass_num) / "initial-analysis.json"
+    if pass_path.exists() or pass_num == 1:
+        return _load_model(StyleAnalysis, pass_path)
+    fallback = model_select_dir(name, 1) / "initial-analysis.json"
+    if fallback.exists():
+        return _load_model(StyleAnalysis, fallback)
+    return _load_model(StyleAnalysis, pass_path)
 
 
 def model_results_dir(
@@ -157,14 +146,6 @@ def model_results_dir(
     d = base / variant if variant else base
     d.mkdir(parents=True, exist_ok=True)
     return d
-
-
-def _legacy_model_results_dir(
-    name: str, model_id: str, variant: str = "",
-) -> Path | None:
-    base = _legacy_model_select_dir(name) / "results" / model_id
-    candidate = base / variant if variant else base
-    return candidate if candidate.exists() else None
 
 
 def save_task_record(
@@ -180,16 +161,10 @@ def save_task_record(
 def load_task_record(
     name: str, model_id: str, variant: str = "", pass_num: int = 1,
 ) -> TaskRecord:
-    pass_path = model_results_dir(name, model_id, variant, pass_num) / "task.json"
-    if pass_path.exists():
-        return _load_model(TaskRecord, pass_path)
-    if pass_num == 1:
-        legacy = _legacy_model_results_dir(name, model_id, variant)
-        if legacy is not None:
-            legacy_file = legacy / "task.json"
-            if legacy_file.exists():
-                return _load_model(TaskRecord, legacy_file)
-    return _load_model(TaskRecord, pass_path)
+    return _load_model(
+        TaskRecord,
+        model_results_dir(name, model_id, variant, pass_num) / "task.json",
+    )
 
 
 def _load_variant_records(results_dir: Path) -> dict[str, TaskRecord]:
@@ -214,28 +189,7 @@ def load_all_task_records(name: str, pass_num: int = 1) -> dict[str, TaskRecord]
     records = _load_variant_records(results_dir)
     if records:
         return records
-    if not records and results_dir.exists():
-        records = _load_all_records(results_dir)
-    if records:
-        return records
-    if pass_num == 1:
-        legacy_results = _legacy_model_select_dir(name) / "results"
-        records = _load_variant_records(legacy_results)
-        if records:
-            return records
-        return _load_all_records(legacy_results)
-    return records
-
-
-def _resolve_evaluation_path(name: str, pass_num: int) -> Path:
-    pass_path = model_select_dir(name, pass_num) / "evaluation.json"
-    if pass_path.exists():
-        return pass_path
-    if pass_num == 1:
-        legacy = _legacy_model_select_dir(name) / "evaluation.json"
-        if legacy.exists():
-            return legacy
-    return pass_path
+    return _load_all_records(results_dir)
 
 
 def save_evaluation(name: str, evaluation: ModelEvaluation, pass_num: int = 1) -> None:
@@ -243,56 +197,124 @@ def save_evaluation(name: str, evaluation: ModelEvaluation, pass_num: int = 1) -
 
 
 def load_evaluation(name: str, pass_num: int = 1) -> ModelEvaluation:
-    return _load_model(ModelEvaluation, _resolve_evaluation_path(name, pass_num))
+    return _load_model(
+        ModelEvaluation,
+        model_select_dir(name, pass_num) / "evaluation.json",
+    )
 
 
 # --- Phase 3: style-refine round-level storage ---
+#
+# Rounds are pass-scoped: writes always go to pass-{current}/round-{r}/. Reads
+# start at the current pass and walk down toward pass-1 so that a round
+# created in an earlier pass is still visible after `retest-models` advances
+# the project to a new pass (current_round is shared across passes).
 
 
-def round_dir(name: str, round_num: int) -> Path:
-    d = project_dir(name) / "style-refine" / f"round-{round_num:03d}"
+def round_dir(name: str, round_num: int, pass_num: int = 1) -> Path:
+    if pass_num < 1:
+        raise ValueError(f"pass_num must be >= 1, got {pass_num}")
+    d = (
+        project_dir(name) / "style-refine"
+        / f"pass-{pass_num:03d}" / f"round-{round_num:03d}"
+    )
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def round_results_dir(name: str, round_num: int, model_id: str) -> Path:
-    d = round_dir(name, round_num) / "results" / model_id
+def round_results_dir(
+    name: str, round_num: int, model_id: str, pass_num: int = 1,
+) -> Path:
+    d = round_dir(name, round_num, pass_num) / "results" / model_id
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def save_prompt_config(name: str, round_num: int, config: PromptConfig) -> None:
-    _save_model(config, round_dir(name, round_num) / "prompt.json")
+def _resolve_round_file(
+    name: str, round_num: int, pass_num: int, filename: str,
+) -> Path:
+    """Find a round-scoped file by walking passes from `pass_num` down to 1.
+    Returns the pass-`pass_num` path (not yet existing) when nothing is found,
+    so callers get a sensible error location.
+    """
+    for p in range(pass_num, 0, -1):
+        candidate = round_dir(name, round_num, p) / filename
+        if candidate.exists():
+            return candidate
+    return round_dir(name, round_num, pass_num) / filename
 
 
-def load_prompt_config(name: str, round_num: int) -> PromptConfig:
-    return _load_model(PromptConfig, round_dir(name, round_num) / "prompt.json")
+def _resolve_round_subdir(
+    name: str, round_num: int, pass_num: int, subdir: str,
+) -> Path:
+    for p in range(pass_num, 0, -1):
+        candidate = round_dir(name, round_num, p) / subdir
+        if candidate.exists():
+            return candidate
+    return round_dir(name, round_num, pass_num) / subdir
+
+
+def save_prompt_config(
+    name: str, round_num: int, config: PromptConfig, pass_num: int = 1,
+) -> None:
+    _save_model(config, round_dir(name, round_num, pass_num) / "prompt.json")
+
+
+def load_prompt_config(
+    name: str, round_num: int, pass_num: int = 1,
+) -> PromptConfig:
+    return _load_model(
+        PromptConfig, _resolve_round_file(name, round_num, pass_num, "prompt.json"),
+    )
 
 
 def save_round_task_record(
     name: str, round_num: int, model_id: str, record: TaskRecord,
+    pass_num: int = 1,
 ) -> None:
-    _save_model(record, round_results_dir(name, round_num, model_id) / "task.json")
+    _save_model(
+        record,
+        round_results_dir(name, round_num, model_id, pass_num) / "task.json",
+    )
 
 
 def load_round_task_record(
-    name: str, round_num: int, model_id: str,
+    name: str, round_num: int, model_id: str, pass_num: int = 1,
 ) -> TaskRecord:
-    return _load_model(TaskRecord, round_results_dir(name, round_num, model_id) / "task.json")
+    pass_path = (
+        round_results_dir(name, round_num, model_id, pass_num) / "task.json"
+    )
+    if pass_path.exists():
+        return _load_model(TaskRecord, pass_path)
+    for p in range(pass_num - 1, 0, -1):
+        candidate = round_dir(name, round_num, p) / "results" / model_id / "task.json"
+        if candidate.exists():
+            return _load_model(TaskRecord, candidate)
+    return _load_model(TaskRecord, pass_path)
 
 
 def load_all_round_task_records(
-    name: str, round_num: int,
+    name: str, round_num: int, pass_num: int = 1,
 ) -> dict[str, TaskRecord]:
-    return _load_all_records(round_dir(name, round_num) / "results")
+    results_dir = _resolve_round_subdir(name, round_num, pass_num, "results")
+    return _load_all_records(results_dir)
 
 
-def save_round_evaluation(name: str, round_num: int, evaluation: RoundEvaluation) -> None:
-    _save_model(evaluation, round_dir(name, round_num) / "evaluation.json")
+def save_round_evaluation(
+    name: str, round_num: int, evaluation: RoundEvaluation, pass_num: int = 1,
+) -> None:
+    _save_model(
+        evaluation, round_dir(name, round_num, pass_num) / "evaluation.json",
+    )
 
 
-def load_round_evaluation(name: str, round_num: int) -> RoundEvaluation:
-    return _load_model(RoundEvaluation, round_dir(name, round_num) / "evaluation.json")
+def load_round_evaluation(
+    name: str, round_num: int, pass_num: int = 1,
+) -> RoundEvaluation:
+    return _load_model(
+        RoundEvaluation,
+        _resolve_round_file(name, round_num, pass_num, "evaluation.json"),
+    )
 
 
 # --- Phase 4: batch-t2i storage ---

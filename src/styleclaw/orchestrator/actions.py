@@ -81,12 +81,8 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
 
     if state.phase == Phase.MODEL_SELECT:
         pass_num = state.current_model_select_pass or 1
-        if pass_num > 1 and state.current_round >= 1:
-            prompt_cfg = project_store.load_prompt_config(ctx.project, state.current_round)
-            trigger = prompt_cfg.trigger_phrase
-        else:
-            analysis = project_store.load_analysis(ctx.project, pass_num=pass_num)
-            trigger = analysis.trigger_phrase
+        analysis = project_store.load_analysis(ctx.project, pass_num=pass_num)
+        trigger = analysis.trigger_phrase
         uploads = project_store.load_uploads(ctx.project)
         sref_url = uploads[0].url if uploads else ""
         records = await generate_model_select(
@@ -96,13 +92,17 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         return StepResult(ok=True, message=f"Submitted {len(records)} model tasks (pass {pass_num})")
 
     if state.phase == Phase.STYLE_REFINE:
+        pass_num = state.current_model_select_pass or 1
         round_num = state.current_round
-        prompt_config = project_store.load_prompt_config(ctx.project, round_num)
+        prompt_config = project_store.load_prompt_config(
+            ctx.project, round_num, pass_num=pass_num,
+        )
         uploads = project_store.load_uploads(ctx.project)
         sref_url = uploads[0].url if uploads else ""
         records = await generate_style_refine(
             ctx.project, ctx.client, round_num, prompt_config.trigger_phrase,
             sref_url=sref_url, extra_model_params=prompt_config.model_params,
+            pass_num=pass_num,
         )
         return StepResult(ok=True, message=f"Submitted {len(records)} refine tasks")
 
@@ -121,7 +121,10 @@ async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
             pass_num = state.current_model_select_pass or 1
             records = await poll_model_select(ctx.project, ctx.client, pass_num=pass_num)
         elif state.phase == Phase.STYLE_REFINE:
-            records = await poll_style_refine(ctx.project, ctx.client, state.current_round)
+            pass_num = state.current_model_select_pass or 1
+            records = await poll_style_refine(
+                ctx.project, ctx.client, state.current_round, pass_num=pass_num,
+            )
         elif state.phase in (Phase.BATCH_T2I, Phase.BATCH_I2I):
             phase_str = "i2i" if state.phase == Phase.BATCH_I2I else "t2i"
             records = await poll_batch(ctx.project, ctx.client, state.current_batch, phase=phase_str)
@@ -155,6 +158,7 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
             evaluate_models_with_thinking,
         )
         from styleclaw.scripts.report import generate_model_select_report
+        from styleclaw.storage.image_store import list_output_images
 
         pass_num = state.current_model_select_pass or 1
 
@@ -170,7 +174,7 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
                 results_dir = project_store.model_results_dir(
                     ctx.project, key, pass_num=pass_num,
                 )
-            images = sorted(results_dir.glob("output-*.png"))
+            images = list_output_images(results_dir)
             if images:
                 model_images[key] = images
 
@@ -206,13 +210,19 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
             evaluate_round_with_thinking,
         )
         from styleclaw.scripts.report import generate_style_refine_report
+        from styleclaw.storage.image_store import list_output_images
 
+        pass_num = state.current_model_select_pass or 1
         round_num = state.current_round
         model_images = {}
-        records = project_store.load_all_round_task_records(ctx.project, round_num)
+        records = project_store.load_all_round_task_records(
+            ctx.project, round_num, pass_num=pass_num,
+        )
         for mid in records:
-            results_dir = project_store.round_results_dir(ctx.project, round_num, mid)
-            images = sorted(results_dir.glob("output-*.png"))
+            results_dir = project_store.round_results_dir(
+                ctx.project, round_num, mid, pass_num=pass_num,
+            )
+            images = list_output_images(results_dir)
             if images:
                 model_images[mid] = images
 
@@ -227,11 +237,13 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
             )
         else:
             evaluation = await evaluate_round(ctx.llm, ref_paths, model_images, round_num)
-        project_store.save_round_evaluation(ctx.project, round_num, evaluation)
+        project_store.save_round_evaluation(
+            ctx.project, round_num, evaluation, pass_num=pass_num,
+        )
         if thinking:
-            round_d = project_store.round_dir(ctx.project, round_num)
+            round_d = project_store.round_dir(ctx.project, round_num, pass_num=pass_num)
             project_store.save_thinking(round_d / "evaluation.json", thinking)
-        generate_style_refine_report(ctx.project, round_num)
+        generate_style_refine_report(ctx.project, round_num, pass_num=pass_num)
 
         passed = evaluation.should_approve()
         scores_msg = ", ".join(
@@ -281,6 +293,7 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     root = project_store.project_dir(ctx.project)
     ref_paths = [root / r for r in config.ref_images]
 
+    pass_num = state.current_model_select_pass or 1
     round_num = state.current_round + 1
     if round_num > MAX_AUTO_ROUNDS:
         return StepResult(ok=False, message=f"Max rounds ({MAX_AUTO_ROUNDS}) reached")
@@ -288,16 +301,18 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     evaluations: list[RoundEvaluation] = []
     for r in range(1, round_num):
         try:
-            ev = project_store.load_round_evaluation(ctx.project, r)
+            ev = project_store.load_round_evaluation(ctx.project, r, pass_num=pass_num)
             evaluations.append(ev)
         except FileNotFoundError:
             logger.warning("Evaluation for round %d not found, skipping history entry.", r)
 
     if round_num == 1:
-        analysis = project_store.load_analysis(ctx.project)
+        analysis = project_store.load_analysis(ctx.project, pass_num=pass_num)
         current_trigger = analysis.trigger_phrase
     else:
-        prev_prompt = project_store.load_prompt_config(ctx.project, round_num - 1)
+        prev_prompt = project_store.load_prompt_config(
+            ctx.project, round_num - 1, pass_num=pass_num,
+        )
         current_trigger = prev_prompt.trigger_phrase
 
     direction = args.get("direction", "")
@@ -313,10 +328,12 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
             ctx.llm, ref_paths, current_trigger, round_num,
             config.ip_info, evaluations, direction,
         )
-    project_store.save_prompt_config(ctx.project, round_num, prompt_config)
+    project_store.save_prompt_config(
+        ctx.project, round_num, prompt_config, pass_num=pass_num,
+    )
 
     if thinking:
-        round_d = project_store.round_dir(ctx.project, round_num)
+        round_d = project_store.round_dir(ctx.project, round_num, pass_num=pass_num)
         project_store.save_thinking(round_d / "prompt.json", thinking)
 
     new_state = state.with_round(round_num)
@@ -354,7 +371,10 @@ async def do_design_cases(ctx: ExecutionContext, args: dict[str, Any]) -> StepRe
     config = project_store.load_config(ctx.project)
     batch_num = state.current_batch + 1
 
-    prompt_config = project_store.load_prompt_config(ctx.project, state.current_round)
+    pass_num = state.current_model_select_pass or 1
+    prompt_config = project_store.load_prompt_config(
+        ctx.project, state.current_round, pass_num=pass_num,
+    )
     batch_config = await design_cases(
         ctx.llm, config.ip_info, prompt_config.trigger_phrase, batch_num,
     )
@@ -383,7 +403,10 @@ async def do_batch_submit(ctx: ExecutionContext, args: dict[str, Any]) -> StepRe
         return StepResult(ok=True, message=f"Submitted {len(records)} t2i tasks")
 
     if state.phase == Phase.BATCH_I2I:
-        prompt_config = project_store.load_prompt_config(ctx.project, state.current_round)
+        pass_num = state.current_model_select_pass or 1
+        prompt_config = project_store.load_prompt_config(
+            ctx.project, state.current_round, pass_num=pass_num,
+        )
         records = await batch_submit_i2i(
             ctx.project, ctx.client, state.current_batch, model_id, prompt_config.trigger_phrase,
         )
@@ -410,6 +433,7 @@ async def do_report(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
 
 
 async def do_retest_models(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
+    from styleclaw.core.models import StyleAnalysis
     from styleclaw.core.state_machine import advance
 
     state = project_store.load_state(ctx.project)
@@ -419,7 +443,28 @@ async def do_retest_models(ctx: ExecutionContext, args: dict[str, Any]) -> StepR
             message=f"retest-models requires STYLE_REFINE or BATCH_T2I (current: {state.phase})",
         )
 
-    new_pass = (state.current_model_select_pass or 0) + 1
+    old_pass = state.current_model_select_pass or 1
+    current_trigger = ""
+    if state.current_round >= 1:
+        try:
+            prompt_cfg = project_store.load_prompt_config(
+                ctx.project, state.current_round, pass_num=old_pass,
+            )
+            current_trigger = prompt_cfg.trigger_phrase
+        except FileNotFoundError:
+            pass
+    if not current_trigger:
+        try:
+            prev_analysis = project_store.load_analysis(ctx.project, pass_num=old_pass)
+            current_trigger = prev_analysis.trigger_phrase
+        except FileNotFoundError:
+            pass
+
+    new_pass = old_pass + 1
+    project_store.save_analysis(
+        ctx.project, StyleAnalysis(trigger_phrase=current_trigger), pass_num=new_pass,
+    )
+
     new_state = (
         advance(state, Phase.MODEL_SELECT)
         .with_model_select_pass(new_pass)

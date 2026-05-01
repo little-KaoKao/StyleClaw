@@ -86,11 +86,14 @@ async def generate_style_refine(
     trigger_phrase: str,
     sref_url: str = "",
     extra_model_params: dict[str, dict[str, Any]] | None = None,
+    pass_num: int = 1,
 ) -> dict[str, TaskRecord]:
     state = project_store.load_state(name)
     model_ids = state.selected_models
 
-    existing = project_store.load_all_round_task_records(name, round_num)
+    existing = project_store.load_all_round_task_records(
+        name, round_num, pass_num=pass_num,
+    )
 
     to_submit: list[str] = []
     skipped: dict[str, TaskRecord] = {}
@@ -106,7 +109,7 @@ async def generate_style_refine(
 
     async def _submit_one(model_id: str) -> TaskRecord:
         config = get_model(model_id)
-        extra = (extra_model_params or {}).get(model_id, {})
+        extra = dict((extra_model_params or {}).get(model_id, {}))
         if config.sref_mode != SrefMode.PARAM:
             extra.setdefault("maxImages", IMAGES_PER_MODEL_REFINE)
         params = build_params(
@@ -117,7 +120,9 @@ async def generate_style_refine(
             extra_params=extra,
         )
         record = await submit_task(client, config.t2i_endpoint, params, model_id)
-        project_store.save_round_task_record(name, round_num, model_id, record)
+        project_store.save_round_task_record(
+            name, round_num, model_id, record, pass_num=pass_num,
+        )
         return record
 
     async with asyncio.TaskGroup() as tg:

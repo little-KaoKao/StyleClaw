@@ -18,10 +18,26 @@ _CONTENT_TYPE_TO_EXT: dict[str, str] = {
     "image/gif": ".gif",
 }
 
+OUTPUT_IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+
 
 def _ext_from_response(resp: httpx.Response, default: str = ".png") -> str:
     ct = resp.headers.get("content-type", "").split(";")[0].strip().lower()
     return _CONTENT_TYPE_TO_EXT.get(ct, default)
+
+
+def list_output_images(dir_path: Path, prefix: str = "output-") -> list[Path]:
+    """List generated output images in a directory, supporting all extensions
+    produced by `download_image` (png/jpg/jpeg/webp/gif).
+
+    Sorted by filename for stable ordering across formats.
+    """
+    if not dir_path.exists():
+        return []
+    images: list[Path] = []
+    for ext in OUTPUT_IMAGE_EXTENSIONS:
+        images.extend(dir_path.glob(f"{prefix}*{ext}"))
+    return sorted(images, key=lambda p: p.name)
 
 
 async def download_image(

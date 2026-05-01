@@ -303,7 +303,7 @@ class TestRollbackCommand:
             HistoryEntry(phase=Phase.STYLE_REFINE, completed_at="2024-01-01T00:00:02+00:00"),
         ]
         _set_state(Phase.BATCH_T2I, history=history, current_round=2)
-        rd = project_store.project_dir("test-proj") / "style-refine" / "round-002"
+        rd = project_store.round_dir("test-proj", 2, pass_num=1)
         rd.mkdir(parents=True, exist_ok=True)
         result = runner.invoke(app, ["rollback", "test-proj", "--to", "STYLE_REFINE", "--round", "2"])
         assert result.exit_code == 0

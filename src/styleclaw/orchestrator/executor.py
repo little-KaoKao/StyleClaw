@@ -18,8 +18,11 @@ def _should_continue_loop(ctx: ExecutionContext) -> bool:
     state = project_store.load_state(ctx.project)
     if state.current_round < 1:
         return False
+    pass_num = state.current_model_select_pass or 1
     try:
-        evaluation = project_store.load_round_evaluation(ctx.project, state.current_round)
+        evaluation = project_store.load_round_evaluation(
+            ctx.project, state.current_round, pass_num=pass_num,
+        )
     except FileNotFoundError:
         logger.warning("No evaluation found for round %d, stopping loop.", state.current_round)
         return False
