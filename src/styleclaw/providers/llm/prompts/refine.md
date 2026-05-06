@@ -14,8 +14,8 @@ You are an expert at crafting trigger phrases for AI image generation. Your task
 
 1. Each round should modify at most 30% of the trigger phrase — preserve high-scoring descriptors.
 2. Focus adjustments on the lowest-scoring dimensions.
-3. Keep the phrase under 500 characters.
-4. Use English for the trigger phrase.
+3. Keep the phrase under 600 characters.
+4. Maintain the structured `[Label]: descriptors` format. Section labels may be Chinese or English; descriptor values must be English.
 5. If human direction is provided, prioritize it.
 
 ## Human Direction (if any)

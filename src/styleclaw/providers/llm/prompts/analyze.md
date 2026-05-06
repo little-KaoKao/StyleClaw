@@ -10,7 +10,7 @@ Analyze the reference images across 6 dimensions:
 5. **composition**: Layout tendency, perspective, framing
 6. **mood**: Overall atmosphere, emotional tone
 
-Then generate a trigger phrase that captures this style for AI image generation.
+Then generate a structured trigger phrase that captures this style for AI image generation.
 
 ## IP Information
 
@@ -28,10 +28,21 @@ Return ONLY valid JSON (no markdown fences):
   "texture": "description",
   "composition": "description",
   "mood": "description",
-  "trigger_phrase": "English trigger phrase for this style, include key visual descriptors",
+  "trigger_phrase": "structured trigger phrase — see format below",
   "trigger_variants": ["variant 1", "variant 2", "variant 3"],
   "model_suggestions": ["model-id-1", "model-id-2"]
 }
 ```
 
-Keep the trigger phrase under 500 characters. Focus on visual descriptors that AI image generators respond to well. Use English for the trigger phrase.
+## Trigger Phrase Format
+
+Use labeled sections to organize descriptors. Each section label should be in the language most natural for the style (Chinese or English), followed by a colon and English descriptors. Example structure:
+
+`[核心背景]: Shaw Brothers 1960s Hong Kong vintage film still aesthetic, [胶片质感]: vintage Technicolor process, heavy 35mm film grain, retro photochemical color grading, [光影美学]: theatrical studio lighting, soft halation glow on highlights, [服饰与构图]: Stylized wardrobe with rich textures, dramatic character positioning, cinematic composition, [色彩与氛围]: Bold and dense color palette, deep contrast, evocative atmosphere, high-fidelity vintage saturation.`
+
+Rules:
+- Section labels describe the dimension (e.g. 核心背景, 胶片质感, 光影美学, 色彩与氛围, 线条风格, 材质质感, 构图特征, 情绪氛围)
+- Descriptor values must be English — AI image generators respond to English tokens
+- Choose 4-6 sections that best capture the style; don't force all dimensions if they're not distinctive
+- Keep total length under 600 characters
+- `trigger_variants` should explore alternative phrasings or emphasis, using the same structured format
