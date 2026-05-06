@@ -26,6 +26,12 @@ def _should_continue_loop(ctx: ExecutionContext) -> bool:
     except FileNotFoundError:
         logger.warning("No evaluation found for round %d, stopping loop.", state.current_round)
         return False
+    if evaluation.needs_human():
+        typer.echo(
+            "\n  !! needs_human: 某维度得分 < 5，自动循环已停止。请查看报告后手动调整方向。\n",
+            err=True,
+        )
+        return False
     return not evaluation.should_approve()
 
 

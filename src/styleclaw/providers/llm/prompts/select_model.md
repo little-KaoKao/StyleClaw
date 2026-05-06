@@ -19,6 +19,10 @@ Score each model×variant combination across 5 dimensions (1-10 each):
 - Only recommend **prompt-sref** when prompt-only is clearly insufficient.
 - State your recommended variant in `recommended_variant`.
 
+## Important
+
+Your output is a recommendation only. The user will review your scores and reasoning before confirming which model(s) to proceed with. They may override your recommendation.
+
 ## Available Models
 
 - mj-v7: Midjourney V7 — photorealistic, precise anatomy

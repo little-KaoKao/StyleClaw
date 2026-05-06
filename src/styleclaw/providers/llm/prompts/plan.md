@@ -23,7 +23,7 @@ $available_actions
 - **generate**: Submit image generation tasks. In MODEL_SELECT: tests all models. In STYLE_REFINE: uses selected models with current trigger.
 - **poll**: Wait for all pending generation tasks to complete and download results. Blocks until done.
 - **evaluate**: LLM scores generated images. In MODEL_SELECT: compares models. In STYLE_REFINE: scores on 5 dimensions (color, line, lighting, texture, mood). Pass = all ≥ 7.0 and total ≥ 7.5.
-- **select-model**: Choose which model(s) to use. Requires `args.models` (comma-separated). In MODEL_SELECT: advances to STYLE_REFINE. In STYLE_REFINE: updates models without phase change.
+- **select-model**: Choose which model(s) to use. Requires `args.models` (comma-separated). In MODEL_SELECT: advances to STYLE_REFINE. In STYLE_REFINE: updates models without phase change. **Always pauses for user confirmation** before executing — the user reviews LLM scores and may override the model choice. Only skip confirmation if the user explicitly says to proceed without it.
 - **refine**: LLM refines trigger phrase based on previous evaluations. Increments round. Max 5 rounds. Optional `args.direction` for human guidance.
 - **approve**: Advance to next phase. From STYLE_REFINE → BATCH_T2I. With `args.target = "completed"`: BATCH_I2I → COMPLETED.
 - **design-cases**: LLM designs 100 diverse test cases across 10 categories. Creates batch config.
