@@ -46,6 +46,14 @@ def _get_api_key() -> str:
     return key
 
 
+def _build_llm_provider() -> Any:
+    if os.getenv("OPENAI_COMPAT_API_KEY"):
+        from styleclaw.providers.llm.openai_compat import OpenAICompatProvider
+        return OpenAICompatProvider()
+    from styleclaw.providers.llm.bedrock import BedrockProvider
+    return BedrockProvider()
+
+
 @asynccontextmanager
 async def _build_context(
     project: str,
@@ -54,7 +62,6 @@ async def _build_context(
     show_thinking: bool = False,
     thinking_budget: int = 5000,
 ) -> AsyncIterator[ExecutionContext]:
-    from styleclaw.providers.llm.bedrock import BedrockProvider
     from styleclaw.providers.runninghub.client import RunningHubClient
 
     client = None
@@ -63,7 +70,7 @@ async def _build_context(
         if needs_client:
             client = RunningHubClient(api_key=_get_api_key())
         if needs_llm:
-            llm = BedrockProvider()
+            llm = _build_llm_provider()
         yield ExecutionContext(
             project=project, client=client, llm=llm,
             show_thinking=show_thinking, thinking_budget=thinking_budget,

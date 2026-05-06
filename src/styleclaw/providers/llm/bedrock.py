@@ -26,7 +26,7 @@ class BedrockProvider:
         if not self._region:
             self._region = "us-east-1"
             logger.warning("AWS_REGION not set, defaulting to 'us-east-1'")
-        self._model_id = model_id or os.getenv(
+        self._model_id = model_id or os.getenv("LLM_MODEL") or os.getenv(
             "CLAUDE_MODEL", "anthropic.claude-sonnet-4-20250514"
         )
         bearer_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK", "")
