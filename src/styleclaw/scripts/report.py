@@ -47,6 +47,12 @@ def generate_model_select_report(name: str, pass_num: int = 1) -> Path:
         _relative_img_src(root / r, dest_dir) for r in config.ref_images
     ]
 
+    # sref uses first ref image
+    sref_image = ref_images[0] if ref_images else ""
+
+    # Import test subjects from generate.py
+    from styleclaw.scripts.generate import TEST_SUBJECTS
+
     model_data: list[dict] = []
     for ev in evaluation.evaluations:
         # Collect images from all gender variants (prompt-only-male, prompt-only-female, etc.)
@@ -82,6 +88,9 @@ def generate_model_select_report(name: str, pass_num: int = 1) -> Path:
         recommendation=evaluation.recommendation,
         recommended_variant=evaluation.recommended_variant,
         ref_images=ref_images,
+        sref_image=sref_image,
+        test_subject_male=TEST_SUBJECTS["male"],
+        test_subject_female=TEST_SUBJECTS["female"],
         models=model_data,
     )
 
@@ -106,6 +115,12 @@ def generate_style_refine_report(
         _relative_img_src(root / r, dest_dir) for r in config.ref_images
     ]
 
+    # sref uses first ref image
+    sref_image = ref_images[0] if ref_images else ""
+
+    # Import test subjects from generate.py
+    from styleclaw.scripts.generate import TEST_SUBJECTS
+
     model_data: list[dict] = []
     for ev in evaluation.evaluations:
         results_dir = project_store.round_results_dir(
@@ -127,6 +142,9 @@ def generate_style_refine_report(
         trigger_phrase=prompt_config.trigger_phrase,
         recommendation=evaluation.recommendation,
         ref_images=ref_images,
+        sref_image=sref_image,
+        test_subject_male=TEST_SUBJECTS["male"],
+        test_subject_female=TEST_SUBJECTS["female"],
         models=model_data,
     )
 

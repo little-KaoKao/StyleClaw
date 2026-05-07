@@ -20,6 +20,9 @@
   .images img { width: 200px; height: auto; border-radius: 4px; margin: 4px; }
   .recommendation { font-size: 1.1em; font-weight: bold; padding: 8px 16px; border-radius: 8px; display: inline-block; background: #d4edda; color: #155724; }
   .variant-rec { font-size: 0.95em; padding: 6px 12px; border-radius: 8px; display: inline-block; background: #cce5ff; color: #004085; margin-left: 8px; }
+  .sref-info { background: #fff3cd; padding: 8px 12px; border-radius: 4px; margin: 12px 0; font-size: 0.9em; }
+  .sref-info img { width: 100px; height: 100px; object-fit: cover; border-radius: 4px; vertical-align: middle; margin-right: 8px; }
+  .test-subjects { background: #e7f3ff; padding: 8px 12px; border-radius: 4px; margin: 12px 0; font-size: 0.9em; }
 </style>
 </head>
 <body>
@@ -38,6 +41,20 @@
   {% for img in ref_images %}
   <img src="{{ img }}" alt="ref">
   {% endfor %}
+</div>
+
+{% if sref_image %}
+<div class="sref-info">
+  <strong>Style Reference (sref):</strong>
+  <img src="{{ sref_image }}" alt="sref">
+  Used in "prompt-sref" variants
+</div>
+{% endif %}
+
+<div class="test-subjects">
+  <strong>Test Subjects:</strong><br>
+  Male: {{ test_subject_male }}<br>
+  Female: {{ test_subject_female }}
 </div>
 
 {% for m in models %}

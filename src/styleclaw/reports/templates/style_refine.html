@@ -20,6 +20,9 @@
   .recommendation.approve { background: #d4edda; color: #155724; }
   .recommendation.continue_refine { background: #fff3cd; color: #856404; }
   .recommendation.needs_human { background: #f8d7da; color: #721c24; }
+  .sref-info { background: #fff3cd; padding: 8px 12px; border-radius: 4px; margin: 12px 0; font-size: 0.9em; }
+  .sref-info img { width: 100px; height: 100px; object-fit: cover; border-radius: 4px; vertical-align: middle; margin-right: 8px; }
+  .test-subjects { background: #e7f3ff; padding: 8px 12px; border-radius: 4px; margin: 12px 0; font-size: 0.9em; }
 </style>
 </head>
 <body>
@@ -34,6 +37,20 @@
   {% for img in ref_images %}
   <img src="{{ img }}" alt="ref">
   {% endfor %}
+</div>
+
+{% if sref_image %}
+<div class="sref-info">
+  <strong>Style Reference (sref):</strong>
+  <img src="{{ sref_image }}" alt="sref">
+  Used in all generations
+</div>
+{% endif %}
+
+<div class="test-subjects">
+  <strong>Test Subjects:</strong><br>
+  Male: {{ test_subject_male }}<br>
+  Female: {{ test_subject_female }}
 </div>
 
 {% for m in models %}
