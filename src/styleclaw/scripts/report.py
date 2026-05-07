@@ -49,15 +49,21 @@ def generate_model_select_report(name: str, pass_num: int = 1) -> Path:
 
     model_data: list[dict] = []
     for ev in evaluation.evaluations:
-        if ev.variant:
-            results_dir = project_store.model_results_dir(
-                name, ev.model, variant=ev.variant, pass_num=pass_num,
-            )
-        else:
-            results_dir = project_store.model_results_dir(
-                name, ev.model, pass_num=pass_num,
-            )
-        images = list_output_images(results_dir)
+        # Collect images from all gender variants (prompt-only-male, prompt-only-female, etc.)
+        all_images: list[Path] = []
+        for gender_suffix in ["", "-male", "-female"]:
+            variant_name = f"{ev.variant}{gender_suffix}" if ev.variant else ""
+            if variant_name:
+                results_dir = project_store.model_results_dir(
+                    name, ev.model, variant=variant_name, pass_num=pass_num,
+                )
+            else:
+                results_dir = project_store.model_results_dir(
+                    name, ev.model, pass_num=pass_num,
+                )
+            if results_dir.exists():
+                all_images.extend(list_output_images(results_dir))
+
         model_data.append({
             "model": ev.model,
             "variant": ev.variant,
@@ -65,7 +71,7 @@ def generate_model_select_report(name: str, pass_num: int = 1) -> Path:
             "total": ev.total,
             "analysis": ev.analysis,
             "suggestions": ev.suggestions,
-            "images": [_relative_img_src(p, dest_dir) for p in images],
+            "images": [_relative_img_src(p, dest_dir) for p in all_images],
         })
 
     template = _env.get_template("model_select.html")

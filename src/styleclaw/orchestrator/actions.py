@@ -295,6 +295,11 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
 
     pass_num = state.current_model_select_pass or 1
     round_num = state.current_round + 1
+
+    # Auto-skip existing rounds (soft rollback support)
+    while project_store.round_dir(ctx.project, round_num, pass_num=pass_num).exists():
+        round_num += 1
+
     if round_num > MAX_AUTO_ROUNDS:
         return StepResult(ok=False, message=f"Max rounds ({MAX_AUTO_ROUNDS}) reached")
 

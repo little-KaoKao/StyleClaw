@@ -310,10 +310,10 @@ def poll(
 def evaluate(
     name: str = typer.Argument(..., help="Project name"),
     show_thinking: bool = typer.Option(
-        False, "--show-thinking", help="Capture and save LLM reasoning alongside output",
+        True, "--show-thinking/--no-show-thinking", help="Show LLM reasoning process (default: on)",
     ),
     thinking_budget: int = typer.Option(
-        5000, "--thinking-budget", help="Thinking token budget (when --show-thinking)",
+        5000, "--thinking-budget", help="Thinking token budget",
     ),
 ) -> None:
     """Evaluate generated images against reference style (auto-detects phase)."""
@@ -382,10 +382,10 @@ def refine(
     name: str = typer.Argument(..., help="Project name"),
     direction: str = typer.Option("", "--direction", help="Human direction for refinement"),
     show_thinking: bool = typer.Option(
-        False, "--show-thinking", help="Capture and save LLM reasoning alongside output",
+        True, "--show-thinking/--no-show-thinking", help="Show LLM reasoning process (default: on)",
     ),
     thinking_budget: int = typer.Option(
-        5000, "--thinking-budget", help="Thinking token budget (when --show-thinking)",
+        5000, "--thinking-budget", help="Thinking token budget",
     ),
 ) -> None:
     """Refine trigger phrase using LLM (one round)."""
@@ -488,10 +488,10 @@ def adjust(
     name: str = typer.Argument(..., help="Project name"),
     direction: str = typer.Option(..., "--direction", help="Adjustment direction"),
     show_thinking: bool = typer.Option(
-        False, "--show-thinking", help="Capture and save LLM reasoning alongside output",
+        True, "--show-thinking/--no-show-thinking", help="Show LLM reasoning process (default: on)",
     ),
     thinking_budget: int = typer.Option(
-        5000, "--thinking-budget", help="Thinking token budget (when --show-thinking)",
+        5000, "--thinking-budget", help="Thinking token budget",
     ),
 ) -> None:
     """Give adjustment direction then refine (shortcut for refine --direction)."""
@@ -793,10 +793,10 @@ def run(
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     show_thinking: bool = typer.Option(
-        False, "--show-thinking", help="Capture and save LLM reasoning alongside output",
+        True, "--show-thinking/--no-show-thinking", help="Show LLM reasoning process (default: on)",
     ),
     thinking_budget: int = typer.Option(
-        5000, "--thinking-budget", help="Thinking token budget (when --show-thinking)",
+        5000, "--thinking-budget", help="Thinking token budget",
     ),
 ) -> None:
     """Run actions from natural language intent (plan-then-execute)."""

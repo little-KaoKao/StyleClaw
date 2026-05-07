@@ -47,8 +47,29 @@ def build_params(
         params["imageUrls"] = [sref_url]
 
     if extra_params:
+        # Map MJ CLI params to API params
+        param_mapping = {
+            "--s": "stylize",
+            "--style": "style",
+            "--sw": "sw",
+        }
         reserved = {"prompt", "width", "height", "sref", "sw", "imageUrls", config.aspect_ratio_key}
-        safe = {k: v for k, v in extra_params.items() if k not in reserved}
+        safe = {}
+        for k, v in extra_params.items():
+            # Map parameter name
+            api_key = param_mapping.get(k, k)
+            if api_key in reserved:
+                continue
+            # Convert string numbers to int/float
+            if isinstance(v, str) and v.isdigit():
+                safe[api_key] = int(v)
+            elif isinstance(v, str):
+                try:
+                    safe[api_key] = float(v)
+                except ValueError:
+                    safe[api_key] = v
+            else:
+                safe[api_key] = v
         params.update(safe)
 
     return params

@@ -202,8 +202,19 @@ styleclaw select-model <project-name> --models niji7,mj-v7
 # Give specific adjustment direction
 styleclaw adjust <project-name> --direction "warmer colors, less chromatic aberration"
 
-# Rollback to earlier phase if needed
+# Rollback to earlier round (soft rollback - preserves all data)
 styleclaw rollback <project-name> --to STYLE_REFINE --round 2
+# → Only changes state.json, keeps all round directories
+# → Next refine auto-skips to round-004 if round-003 exists
+```
+
+**Rollback behavior (non-destructive)**:
+- Only updates `state.json` (current_round pointer)
+- Preserves all existing round directories on disk
+- Next `refine` auto-detects existing directories and skips to next available number
+- Example: rollback to round 2 → refine creates round 4 (skips existing round 3)
+- All history preserved for comparison
+
 ```
 
 ### Phase 4: BATCH_T2I (100-case generalization test)
