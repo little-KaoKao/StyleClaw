@@ -41,7 +41,8 @@ def _needs_alpha(img: Image.Image) -> bool:
 
 
 def _output_format(img: Image.Image) -> str:
-    return "PNG" if _needs_alpha(img) else "JPEG"
+    # Always use WebP for better compression
+    return "WEBP"
 
 
 def resize_for_llm(image_path: Path | str) -> tuple[bytes, str]:
@@ -63,7 +64,13 @@ def resize_for_llm(image_path: Path | str) -> tuple[bytes, str]:
             img = resized
 
         fmt = _output_format(img)
-        if fmt == "JPEG" and img.mode not in ("RGB", "L"):
+        if fmt == "WEBP":
+            # Convert to RGB for WebP (no alpha support in quality mode)
+            if img.mode not in ("RGB", "L"):
+                converted = img.convert("RGB")
+                img.close()
+                img = converted
+        elif fmt == "JPEG" and img.mode not in ("RGB", "L"):
             converted = img.convert("RGB")
             img.close()
             img = converted
@@ -71,7 +78,12 @@ def resize_for_llm(image_path: Path | str) -> tuple[bytes, str]:
         img.save(buf, format=fmt, quality=85)
     finally:
         img.close()
-    media_type = "image/png" if fmt == "PNG" else "image/jpeg"
+    if fmt == "WEBP":
+        media_type = "image/webp"
+    elif fmt == "PNG":
+        media_type = "image/png"
+    else:
+        media_type = "image/jpeg"
     return buf.getvalue(), media_type
 
 

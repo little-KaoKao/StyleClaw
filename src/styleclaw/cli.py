@@ -123,15 +123,45 @@ def _run_action(
 @app.command()
 def init(
     name: str = typer.Argument(..., help="Project name"),
-    ref: list[Path] = typer.Option(..., "--ref", help="Reference image paths"),
-    info: str = typer.Option("", "--info", help="IP/style description"),
+    ref: list[Path] = typer.Option(None, "--ref", help="Reference image paths"),
+    ref_dir: Path = typer.Option(None, "--ref-dir", help="Directory containing reference images"),
+    info: str = typer.Option(None, "--info", help="IP/style description"),
     description: str = typer.Option("", "--desc", help="Project description"),
+    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing project"),
 ) -> None:
     """Initialize a new project with reference images."""
+    # Handle --force: delete existing project
+    if force:
+        from shutil import rmtree
+        project_path = project_store.project_dir(name)
+        if project_path.exists():
+            rmtree(project_path)
+            typer.echo(f"Removed existing project: {project_path}")
+
+    # Auto-discover images
+    if not ref:
+        image_exts = {".png", ".jpg", ".jpeg", ".webp"}
+        search_dir = ref_dir if ref_dir else Path.cwd()
+
+        if ref_dir and not ref_dir.is_dir():
+            typer.echo(f"Error: Directory not found: {ref_dir}", err=True)
+            raise typer.Exit(1)
+
+        discovered = [p for p in search_dir.iterdir() if p.suffix.lower() in image_exts]
+        if not discovered:
+            typer.echo(f"Error: No images found in {search_dir}. Use --ref to specify paths.", err=True)
+            raise typer.Exit(1)
+        typer.echo(f"Auto-discovered {len(discovered)} images from {search_dir}: {', '.join(p.name for p in discovered)}")
+        ref = discovered
+
     for r in ref:
         if not r.exists():
             typer.echo(f"Error: Reference image not found: {r}", err=True)
             raise typer.Exit(1)
+
+    # Prompt for info if not provided
+    if not info:
+        info = typer.prompt("IP/style description (e.g., 'Spider-Verse animation style')")
 
     from styleclaw.providers.runninghub.client import RunningHubClient
     from styleclaw.scripts.init_project import init_project
@@ -204,10 +234,10 @@ def migrate(
 def analyze(
     name: str = typer.Argument(..., help="Project name"),
     show_thinking: bool = typer.Option(
-        False, "--show-thinking", help="Capture and save LLM reasoning alongside output",
+        True, "--show-thinking/--no-show-thinking", help="Show LLM reasoning process (default: on)",
     ),
     thinking_budget: int = typer.Option(
-        5000, "--thinking-budget", help="Thinking token budget (when --show-thinking)",
+        5000, "--thinking-budget", help="Thinking token budget",
     ),
 ) -> None:
     """Analyze reference images and generate initial trigger phrase."""
@@ -237,6 +267,7 @@ def analyze(
 @app.command()
 def generate(
     name: str = typer.Argument(..., help="Project name"),
+    retry_failed: bool = typer.Option(False, "--retry-failed", help="Retry only failed tasks"),
 ) -> None:
     """Submit generation tasks (auto-detects phase)."""
     state = project_store.load_state(name)
@@ -249,7 +280,7 @@ def generate(
         typer.echo(f"Error: Cannot generate in {state.phase} phase.", err=True)
         raise typer.Exit(1)
 
-    result = _run_action(name, "generate")
+    result = _run_action(name, "generate", {"retry_failed": retry_failed})
     if not result.ok:
         typer.echo(f"Error: {result.message}", err=True)
         raise typer.Exit(1)

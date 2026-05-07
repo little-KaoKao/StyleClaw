@@ -62,12 +62,15 @@ class TaskRecord(_FrozenModel):
 
 
 class StyleAnalysis(_FrozenModel):
-    color_palette: str = ""
-    line_style: str = ""
-    lighting: str = ""
-    texture: str = ""
-    composition: str = ""
-    mood: str = ""
+    # 7个核心维度
+    visual_style: str = ""
+    color_science: str = ""
+    lighting_quality: str = ""
+    material_texture: str = ""
+    post_processing: str = ""
+    spatial_perspective: str = ""
+    dynamic_state: str = ""
+    # 输出
     trigger_phrase: str = ""
     trigger_variants: list[str] = Field(default_factory=list)
     model_suggestions: list[str] = Field(default_factory=list)

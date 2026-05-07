@@ -33,6 +33,7 @@ async def analyze_style(
     ref_image_paths: list[Path],
     ip_info: str,
 ) -> StyleAnalysis:
+    logger.info("Analyzing %d reference images, please wait...", len(ref_image_paths))
     raw = await llm.invoke(
         system=_build_system_prompt(ip_info),
         messages=await _build_messages(ref_image_paths),
@@ -48,6 +49,7 @@ async def analyze_style_with_thinking(
     ip_info: str,
     thinking_budget: int = 5000,
 ) -> tuple[StyleAnalysis, str]:
+    logger.info("Analyzing %d reference images (with thinking), please wait...", len(ref_image_paths))
     response = await llm.invoke_with_thinking(
         system=_build_system_prompt(ip_info),
         messages=await _build_messages(ref_image_paths),

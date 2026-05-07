@@ -14,6 +14,11 @@ from styleclaw.storage import project_store
 logger = logging.getLogger(__name__)
 
 
+TEST_SUBJECTS = {
+    "male": "a young man with short hair wearing casual streetwear",
+    "female": "a young woman with long hair wearing casual streetwear",
+}
+
 VARIANT_PROMPT_ONLY = "prompt-only"
 VARIANT_PROMPT_SREF = "prompt-sref"
 
@@ -30,40 +35,42 @@ async def generate_model_select(
 
     existing = project_store.load_all_task_records(name, pass_num=pass_num)
 
-    to_submit: list[tuple[str, str]] = []
+    to_submit: list[tuple[str, str, str]] = []  # (model_id, variant, gender)
     skipped: dict[str, TaskRecord] = {}
 
     for mid in model_ids:
         for variant in (VARIANT_PROMPT_ONLY, VARIANT_PROMPT_SREF):
-            key = f"{mid}/{variant}"
-            prev = existing.get(key)
-            if prev and prev.status != TaskStatus.FAILED:
-                logger.info("Skipping %s: already has %s record.", key, prev.status)
-                skipped[key] = prev
-            else:
-                to_submit.append((mid, variant))
+            for gender in TEST_SUBJECTS:
+                key = f"{mid}/{variant}-{gender}"
+                prev = existing.get(key)
+                if prev and prev.status != TaskStatus.FAILED:
+                    logger.info("Skipping %s: already has %s record.", key, prev.status)
+                    skipped[key] = prev
+                else:
+                    to_submit.append((mid, variant, gender))
 
     tasks: dict[str, asyncio.Task[TaskRecord]] = {}
 
-    async def _submit_one(model_id: str, variant: str) -> TaskRecord:
+    async def _submit_one(model_id: str, variant: str, gender: str) -> TaskRecord:
         config = get_model(model_id)
         use_sref = sref_url if variant == VARIANT_PROMPT_SREF else ""
         params = build_params(
             model_id=model_id,
             trigger_phrase=trigger_phrase,
+            character_desc=TEST_SUBJECTS[gender],
             aspect_ratio="9:16",
             sref_url=use_sref,
         )
         record = await submit_task(client, config.t2i_endpoint, params, model_id)
         project_store.save_task_record(
-            name, model_id, record, variant=variant, pass_num=pass_num,
+            name, model_id, record, variant=f"{variant}-{gender}", pass_num=pass_num,
         )
         return record
 
     async with asyncio.TaskGroup() as tg:
-        for mid, variant in to_submit:
-            key = f"{mid}/{variant}"
-            tasks[key] = tg.create_task(_submit_one(mid, variant))
+        for mid, variant, gender in to_submit:
+            key = f"{mid}/{variant}-{gender}"
+            tasks[key] = tg.create_task(_submit_one(mid, variant, gender))
 
     records: dict[str, TaskRecord] = {**skipped}
     for key, task in tasks.items():
