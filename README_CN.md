@@ -99,11 +99,13 @@ uv run styleclaw run "<意图>" --yes          # 跳过确认直接执行
 uv run styleclaw init spider-verse \
   --ref ref1.png --ref ref2.png --ref ref3.png \
   --info "蜘蛛侠：平行宇宙动画风格"
+# 或从目录自动发现图片：
+uv run styleclaw init spider-verse --ref-dir /path/to/refs --info "蜘蛛侠：平行宇宙动画风格"
 
 # 2. 分析参考图片（LLM 提取风格特征 + 初始触发短语）
 uv run styleclaw analyze spider-verse
 
-# 3. 生成测试图片，对比所有模型
+# 3. 生成测试图片，对比所有模型（2 种变体 × 2 种性别）
 uv run styleclaw generate spider-verse
 uv run styleclaw poll spider-verse
 
@@ -158,7 +160,9 @@ uv run styleclaw report spider-verse
 | `status` | 列出所有项目 |
 | `status <name>` | 查看项目详细状态 |
 | `adjust <name> --direction <text>` | 手动提供精炼方向 |
-| `rollback <name> --to <phase> --round <n>` | 回退到之前的阶段 |
+| `rollback <name> --to <phase> --round <n>` | 回退到之前的阶段/轮次（非破坏性） |
+| `set-sref <name> <index>` | 设置用作风格参考的图片（0 起始索引） |
+| `set-pass <name> <pass>` | 切换当前活跃的模型选择 pass 编号 |
 | `add-refs <name> --images <img>...` | 为图生图测试添加参考图片 |
 
 ### 常用参数
@@ -166,8 +170,14 @@ uv run styleclaw report spider-verse
 ```bash
 uv run styleclaw init <name> \
   --ref <图片路径>            # 参考图片（可重复指定多张）
+  --ref-dir <目录>            # 从目录自动发现图片
   --info <文本>               # IP 描述信息
   --desc <文本>               # 项目描述
+  --force                     # 覆盖已有项目
+
+uv run styleclaw generate <name> \
+  --force                     # 强制重新提交（即使已有 SUCCESS 记录）
+  --retry-failed              # 只重试失败的任务
 
 uv run styleclaw refine <name> \
   --direction <文本>          # 可选：人工指定精炼方向
