@@ -153,19 +153,50 @@ Each model is tested under two conditions (variants):
 If prompt-only is sufficient (total ≥ 7.0), prefer it for flexibility.
 
 ```bash
-# Generate test images across all models (2 variants each)
+# Generate test images across all models (2 variants × 2 genders each)
 styleclaw generate <project-name>
+# → Skips SUCCESS tasks, retries FAILED tasks automatically
+
+# Force re-submit all tasks (e.g. after changing sref image)
+styleclaw generate <project-name> --force
 
 # Poll until images are ready
 styleclaw poll <project-name>
 
 # LLM evaluates which models best reproduce the style (compares both variants)
 styleclaw evaluate <project-name>
-# → Outputs scores + HTML report with variant comparison
+# → Outputs scores + HTML report with sref image and test subject descriptions
 
 # Confirm model selection (advances to STYLE_REFINE)
-# In full-pipeline `run` mode, this step pauses for user confirmation
 styleclaw select-model <project-name> --models mj-v7
+```
+
+**Changing the sref image:**
+```bash
+# List ref images (0-based index)
+styleclaw status <project-name>
+
+# Switch sref to a different ref image (e.g. ref-003 = index 2)
+styleclaw set-sref <project-name> 2
+
+# Re-run generation with new sref
+styleclaw generate <project-name> --force
+styleclaw poll <project-name>
+```
+
+**Re-running model selection (non-destructive):**
+```bash
+# Rollback to MODEL_SELECT — only changes state pointer, keeps all pass data
+styleclaw rollback <project-name> --to MODEL_SELECT
+
+# Generate creates a new pass (pass-002, pass-003, etc.)
+styleclaw generate <project-name>
+styleclaw poll <project-name>
+styleclaw evaluate <project-name>
+
+# If a bad pass was created and needs to be removed:
+rm -rf data/projects/<name>/model-select/pass-003
+styleclaw set-pass <project-name> 2   # switch active pass back
 ```
 
 ### Phase 3: STYLE_REFINE (iterative loop)
@@ -204,18 +235,16 @@ styleclaw adjust <project-name> --direction "warmer colors, less chromatic aberr
 
 # Rollback to earlier round (soft rollback - preserves all data)
 styleclaw rollback <project-name> --to STYLE_REFINE --round 2
-# → Only changes state.json, keeps all round directories
-# → Next refine auto-skips to round-004 if round-003 exists
+# → Only changes state.json (current_round pointer), keeps all round directories
+# → Next refine auto-skips rounds that already have a prompt, creates new round
 ```
 
 **Rollback behavior (non-destructive)**:
 - Only updates `state.json` (current_round pointer)
 - Preserves all existing round directories on disk
-- Next `refine` auto-detects existing directories and skips to next available number
+- Next `refine` skips rounds that already have a prompt config, creates next available round
 - Example: rollback to round 2 → refine creates round 4 (skips existing round 3)
 - All history preserved for comparison
-
-```
 
 ### Phase 4: BATCH_T2I (100-case generalization test)
 

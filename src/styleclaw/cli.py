@@ -551,6 +551,18 @@ def set_sref(
     typer.echo(f"sref set to ref-{index+1:03d}: {config.ref_images[index]}")
 
 
+@app.command(name="set-pass")
+def set_pass(
+    name: str = typer.Argument(..., help="Project name"),
+    pass_num: int = typer.Argument(..., help="Pass number to switch to (1-based)"),
+) -> None:
+    """Switch the active model-select pass (e.g. after deleting a bad pass)."""
+    state = project_store.load_state(name)
+    new_state = state.with_model_select_pass(pass_num)
+    project_store.save_state(name, new_state)
+    typer.echo(f"Active pass set to {pass_num}")
+
+
 @app.command(name="retest-models")
 def retest_models_cmd(
     name: str = typer.Argument(..., help="Project name"),

@@ -99,11 +99,13 @@ You can also run each command manually for finer control:
 uv run styleclaw init spider-verse \
   --ref ref1.png --ref ref2.png --ref ref3.png \
   --info "Spider-Verse animation style"
+# Or auto-discover from a directory:
+uv run styleclaw init spider-verse --ref-dir /path/to/refs --info "Spider-Verse animation style"
 
 # 2. Analyze references (LLM extracts style + initial trigger)
 uv run styleclaw analyze spider-verse
 
-# 3. Generate test images across all models
+# 3. Generate test images across all models (2 variants × 2 genders)
 uv run styleclaw generate spider-verse
 uv run styleclaw poll spider-verse
 
@@ -158,7 +160,9 @@ uv run styleclaw report spider-verse
 | `status` | List all projects |
 | `status <name>` | Show detailed project status |
 | `adjust <name> --direction <text>` | Provide manual direction for refinement |
-| `rollback <name> --to <phase> --round <n>` | Roll back to an earlier phase |
+| `rollback <name> --to <phase> --round <n>` | Roll back to an earlier phase/round (non-destructive) |
+| `set-sref <name> <index>` | Set which ref image to use as style reference (0-based) |
+| `set-pass <name> <pass>` | Switch active model-select pass number |
 | `add-refs <name> --images <img>...` | Add reference images for i2i testing |
 
 ### Options
@@ -166,8 +170,14 @@ uv run styleclaw report spider-verse
 ```bash
 uv run styleclaw init <name> \
   --ref <image-path>         # Reference image (repeatable)
+  --ref-dir <dir>            # Auto-discover images from directory
   --info <text>              # IP description
   --desc <text>              # Project description
+  --force                    # Overwrite existing project
+
+uv run styleclaw generate <name> \
+  --force                    # Re-submit even if SUCCESS record exists
+  --retry-failed             # Retry only failed tasks
 
 uv run styleclaw refine <name> \
   --direction <text>         # Optional: human guidance for refinement
