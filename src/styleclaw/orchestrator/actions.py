@@ -81,7 +81,24 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
 
     if state.phase == Phase.MODEL_SELECT:
         pass_num = state.current_model_select_pass or 1
-        analysis = project_store.load_analysis(ctx.project, pass_num=pass_num)
+
+        # Auto-skip existing passes unless --force (soft rollback support)
+        if not args.get("force", False):
+            ms_root = project_store.project_dir(ctx.project) / "model-select"
+            while (ms_root / f"pass-{pass_num:03d}").exists():
+                pass_num += 1
+
+        if pass_num != (state.current_model_select_pass or 1):
+            state = state.with_model_select_pass(pass_num)
+            project_store.save_state(ctx.project, state)
+
+        # Ensure analysis exists for this pass (copy from previous if needed)
+        try:
+            analysis = project_store.load_analysis(ctx.project, pass_num=pass_num)
+        except FileNotFoundError:
+            prev_analysis = project_store.load_analysis(ctx.project, pass_num=pass_num - 1)
+            project_store.save_analysis(ctx.project, prev_analysis, pass_num=pass_num)
+            analysis = prev_analysis
         trigger = analysis.trigger_phrase
         uploads = project_store.load_uploads(ctx.project)
         config = project_store.load_config(ctx.project)
