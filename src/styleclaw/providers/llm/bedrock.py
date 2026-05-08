@@ -7,6 +7,7 @@ import os
 from typing import Any, Self
 
 import httpx
+from pydantic import SecretStr
 
 from styleclaw.core.config import LLM_CONCURRENCY_LIMIT
 from styleclaw.providers.llm.base import LLMResponse
@@ -29,20 +30,26 @@ class BedrockProvider:
         self._model_id = model_id or os.getenv("LLM_MODEL") or os.getenv(
             "CLAUDE_MODEL", "anthropic.claude-sonnet-4-20250514"
         )
-        bearer_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK", "")
-        if not bearer_token:
+        raw_token = os.getenv("AWS_BEARER_TOKEN_BEDROCK", "")
+        if not raw_token:
             raise ValueError(
                 "AWS_BEARER_TOKEN_BEDROCK is not set. "
                 "Please set it in your .env file or environment."
             )
+        self._token = SecretStr(raw_token)
         base_url = f"https://bedrock-runtime.{self._region}.amazonaws.com"
         self._http = httpx.AsyncClient(
             base_url=base_url,
             headers={
-                "Authorization": f"Bearer {bearer_token}",
+                "Authorization": f"Bearer {self._token.get_secret_value()}",
                 "Content-Type": "application/json",
             },
             timeout=120,
+            limits=httpx.Limits(
+                max_connections=200,
+                max_keepalive_connections=50,
+                keepalive_expiry=30.0,
+            ),
         )
         self._semaphore = asyncio.Semaphore(LLM_CONCURRENCY_LIMIT)
 

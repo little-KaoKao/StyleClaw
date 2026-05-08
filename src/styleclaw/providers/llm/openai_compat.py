@@ -7,6 +7,7 @@ import os
 from typing import Any, Self
 
 import httpx
+from pydantic import SecretStr
 
 from styleclaw.core.config import LLM_CONCURRENCY_LIMIT
 from styleclaw.providers.llm.base import LLMResponse
@@ -32,10 +33,11 @@ class OpenAICompatProvider:
         _api_key = api_key or os.getenv("OPENAI_COMPAT_API_KEY", "")
         if not _api_key:
             raise ValueError("OPENAI_COMPAT_API_KEY is not set.")
+        self._api_key = SecretStr(_api_key)
         self._http = httpx.AsyncClient(
             base_url=self._base_url.rstrip("/"),
             headers={
-                "Authorization": f"Bearer {_api_key}",
+                "Authorization": f"Bearer {self._api_key.get_secret_value()}",
                 "Content-Type": "application/json",
             },
             timeout=httpx.Timeout(300.0, connect=30.0, write=60.0),

@@ -56,13 +56,26 @@ def _load_all_records(results_dir: Path) -> dict[str, TaskRecord]:
 
 def project_dir(name: str) -> Path:
     _validate_project_name(name)
-    return DATA_ROOT / name
+    candidate = (DATA_ROOT / name).resolve()
+    root = DATA_ROOT.resolve()
+    if not candidate.is_relative_to(root):
+        raise ValueError(
+            f"Project path escapes data root: {candidate} is not under {root}"
+        )
+    return candidate
 
 
-def create_project(config: ProjectConfig) -> Path:
+def create_project(config: ProjectConfig, force: bool = False) -> Path:
     root = project_dir(config.name)
     if root.exists():
-        raise FileExistsError(f"Project '{config.name}' already exists at {root}")
+        if not force:
+            raise FileExistsError(f"Project '{config.name}' already exists at {root}")
+        # Back up the existing project before recreating, so manual recovery
+        # remains possible if the new run fails.
+        from datetime import datetime
+        from shutil import move
+        backup = root.with_name(f"{root.name}.bak-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+        move(str(root), str(backup))
 
     root.mkdir(parents=True)
     (root / "refs").mkdir()

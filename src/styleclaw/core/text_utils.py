@@ -41,7 +41,17 @@ def parse_llm_response(raw: str, model_cls: type[T], label: str = "") -> T:
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"LLM returned invalid JSON for {desc}: {exc}") from exc
+        preview = cleaned[:200].replace("\n", " ")
+        hint = (
+            "Hint: the LLM may have wrapped JSON in extra prose, "
+            "truncated mid-output, or used single quotes. "
+            "Re-running often resolves transient issues."
+        )
+        raise ValueError(
+            f"LLM returned invalid JSON for {desc}: {exc}\n"
+            f"Cleaned preview ({len(cleaned)} chars): {preview!r}\n"
+            f"{hint}"
+        ) from exc
     try:
         return model_cls.model_validate(data)
     except ValidationError as exc:

@@ -20,6 +20,7 @@ async def init_project(
     ip_info: str,
     description: str,
     client: RunningHubClient,
+    force: bool = False,
 ) -> Path:
     for img_path in ref_images:
         verify_ref_image(img_path)
@@ -30,7 +31,7 @@ async def init_project(
         ip_info=ip_info,
     )
 
-    root = project_store.create_project(config)
+    root = project_store.create_project(config, force=force)
     refs_dir = root / "refs"
 
     ref_local_names: list[str] = []

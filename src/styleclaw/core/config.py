@@ -27,3 +27,21 @@ POLL_INTERVAL: float = _float_env("STYLECLAW_POLL_INTERVAL", "3")
 POLL_MAX_CONSECUTIVE_FAILURES: int = _int_env("STYLECLAW_POLL_MAX_CONSEC_FAIL", "5")
 ORCHESTRATOR_POLL_INTERVAL: float = _float_env("STYLECLAW_ORCH_POLL_INTERVAL", "30")
 MAX_POLL_CYCLES: int = _int_env("STYLECLAW_MAX_POLL_CYCLES", "60")
+
+
+def validate_env() -> list[str]:
+    """Check that required environment variables are present.
+
+    Returns a list of human-readable error messages (empty if all checks pass).
+    """
+    errors: list[str] = []
+    if not os.getenv("RUNNINGHUB_API_KEY"):
+        errors.append("RUNNINGHUB_API_KEY is not set (required for image generation).")
+    has_bedrock = bool(os.getenv("AWS_BEARER_TOKEN_BEDROCK"))
+    has_openai = bool(os.getenv("OPENAI_COMPAT_API_KEY"))
+    if not (has_bedrock or has_openai):
+        errors.append(
+            "No LLM credentials found. Set AWS_BEARER_TOKEN_BEDROCK "
+            "or OPENAI_COMPAT_API_KEY."
+        )
+    return errors

@@ -4,6 +4,8 @@ import asyncio
 import logging
 from typing import Any
 
+from tqdm import tqdm
+
 from styleclaw.core.models import TaskRecord, TaskStatus
 from styleclaw.core.prompt_builder import build_params
 from styleclaw.providers.runninghub.client import RunningHubClient
@@ -45,7 +47,7 @@ async def generate_model_select(
                 key = f"{mid}/{variant}-{gender}"
                 prev = existing.get(key)
                 if not force and prev and prev.status != TaskStatus.FAILED:
-                    logger.info("Skipping %s: already has %s record.", key, prev.status)
+                    logger.debug("Skipping %s: already has %s record.", key, prev.status)
                     skipped[key] = prev
                 else:
                     to_submit.append((mid, variant, gender))
@@ -69,9 +71,15 @@ async def generate_model_select(
         return record
 
     async with asyncio.TaskGroup() as tg:
+        progress = tqdm(total=len(to_submit), desc="Submitting model-select", unit="task") if to_submit else None
         for mid, variant, gender in to_submit:
             key = f"{mid}/{variant}-{gender}"
-            tasks[key] = tg.create_task(_submit_one(mid, variant, gender))
+            t = tg.create_task(_submit_one(mid, variant, gender))
+            if progress is not None:
+                t.add_done_callback(lambda _t, p=progress: p.update(1))
+            tasks[key] = t
+    if to_submit and progress is not None:
+        progress.close()
 
     records: dict[str, TaskRecord] = {**skipped}
     for key, task in tasks.items():
@@ -109,7 +117,7 @@ async def generate_style_refine(
     for mid in model_ids:
         prev = existing.get(mid)
         if not force and prev and prev.status != TaskStatus.FAILED:
-            logger.info("Skipping model %s round %d: already has %s record.", mid, round_num, prev.status)
+            logger.debug("Skipping model %s round %d: already has %s record.", mid, round_num, prev.status)
             skipped[mid] = prev
         else:
             to_submit.append(mid)
@@ -135,8 +143,14 @@ async def generate_style_refine(
         return record
 
     async with asyncio.TaskGroup() as tg:
+        progress = tqdm(total=len(to_submit), desc=f"Submitting refine round {round_num}", unit="task") if to_submit else None
         for mid in to_submit:
-            tasks[mid] = tg.create_task(_submit_one(mid))
+            t = tg.create_task(_submit_one(mid))
+            if progress is not None:
+                t.add_done_callback(lambda _t, p=progress: p.update(1))
+            tasks[mid] = t
+    if to_submit and progress is not None:
+        progress.close()
 
     records: dict[str, TaskRecord] = {**skipped}
     for mid, task in tasks.items():

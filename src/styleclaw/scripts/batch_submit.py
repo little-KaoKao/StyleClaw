@@ -4,6 +4,9 @@ import asyncio
 import logging
 from typing import Any
 
+from tqdm import tqdm
+
+from styleclaw.core.checkpoint import Checkpoint
 from styleclaw.core.models import BatchCase, BatchConfig, TaskRecord, TaskStatus
 from styleclaw.core.prompt_builder import build_params
 from styleclaw.providers.runninghub.client import RunningHubClient
@@ -27,7 +30,19 @@ async def batch_submit_t2i(
             f"No cases found in batch {batch_num}. Run 'design-cases' first."
         )
     model_config = get_model(model_id)
-    pending = [c for c in config.cases if c.status == "pending"]
+
+    checkpoint = Checkpoint(project_store.project_dir(name), f"batch-t2i-{batch_num:03d}")
+    submitted_ids = set(checkpoint.get("submitted", []))
+
+    pending = [
+        c for c in config.cases
+        if c.status == "pending" and c.id not in submitted_ids
+    ]
+    if submitted_ids:
+        logger.info(
+            "Resuming batch-t2i %d: skipping %d cases already in checkpoint.",
+            batch_num, len(submitted_ids),
+        )
 
     tasks: dict[str, asyncio.Task] = {}
 
@@ -41,11 +56,21 @@ async def batch_submit_t2i(
         )
         record = await submit_task(client, model_config.t2i_endpoint, params, model_id)
         project_store.save_batch_task_record(name, batch_num, case.id, record)
+        checkpoint.save(
+            "submitted",
+            sorted(set(checkpoint.get("submitted", [])) | {case.id}),
+        )
         return record
 
     async with asyncio.TaskGroup() as tg:
+        progress = tqdm(total=len(pending), desc=f"Submitting batch-t2i {batch_num}", unit="case") if pending else None
         for case in pending:
-            tasks[case.id] = tg.create_task(_submit_one(case))
+            t = tg.create_task(_submit_one(case))
+            if progress is not None:
+                t.add_done_callback(lambda _t, p=progress: p.update(1))
+            tasks[case.id] = t
+    if pending and progress is not None:
+        progress.close()
 
     records: dict[str, TaskRecord] = {}
     updated_cases: list[BatchCase] = []
@@ -58,6 +83,9 @@ async def batch_submit_t2i(
 
     updated_config = config.model_copy(update={"cases": updated_cases})
     project_store.save_batch_config(name, batch_num, updated_config)
+
+    if all(c.status != "pending" for c in updated_cases):
+        checkpoint.clear()
 
     logger.info("Submitted %d batch-t2i tasks for batch %d.", len(records), batch_num)
     return records
@@ -94,12 +122,22 @@ async def batch_submit_i2i(
         return record
 
     async with asyncio.TaskGroup() as tg:
+        to_submit = [
+            (i, upload) for i, upload in enumerate(uploads, 1)
+            if f"i2i-{i:03d}" not in submitted_case_ids
+        ]
+        progress = tqdm(total=len(to_submit), desc=f"Submitting batch-i2i {batch_num}", unit="case") if to_submit else None
         for i, upload in enumerate(uploads, 1):
             case_id = f"i2i-{i:03d}"
             if case_id in submitted_case_ids:
-                logger.info("Skipping already submitted case %s.", case_id)
+                logger.debug("Skipping already submitted case %s.", case_id)
                 continue
-            tasks[case_id] = tg.create_task(_submit_one(i, upload.url))
+            t = tg.create_task(_submit_one(i, upload.url))
+            if progress is not None:
+                t.add_done_callback(lambda _t, p=progress: p.update(1))
+            tasks[case_id] = t
+    if progress is not None:
+        progress.close()
 
     records: dict[str, TaskRecord] = {}
     new_cases: dict[str, BatchCase] = {}

@@ -10,7 +10,7 @@ from typing import Any, AsyncIterator, Optional
 import typer
 from dotenv import load_dotenv
 
-from styleclaw.core.config import MAX_AUTO_ROUNDS
+from styleclaw.core.config import MAX_AUTO_ROUNDS, validate_env
 from styleclaw.core.models import Phase, ProjectState, TaskStatus
 from styleclaw.core.state_machine import advance
 from styleclaw.orchestrator.actions import ExecutionContext, StepResult
@@ -30,12 +30,31 @@ logging.basicConfig(level=_default_level, format="%(levelname)s: %(message)s")
 
 @app.callback()
 def _global_options(
+    ctx: typer.Context,
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show DEBUG-level logs from all subsystems",
     ),
 ) -> None:
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
+
+    # Skip env validation for commands that don't touch any external service.
+    _skip_validation = {"status", "rollback", "set-sref", "set-pass", "migrate"}
+    if (
+        os.getenv("STYLECLAW_SKIP_ENV_CHECK")
+        or ctx.invoked_subcommand in _skip_validation
+        or ctx.resilient_parsing
+    ):
+        return
+    errors = validate_env()
+    if errors:
+        for err in errors:
+            typer.echo(f"Error: {err}", err=True)
+        typer.echo(
+            "Hint: copy .env.example to .env and fill in the required keys.",
+            err=True,
+        )
+        raise typer.Exit(1)
 
 
 def _get_api_key() -> str:
@@ -76,10 +95,19 @@ async def _build_context(
             show_thinking=show_thinking, thinking_budget=thinking_budget,
         )
     finally:
-        if client:
-            await client.close()
-        if llm:
-            await llm.close()
+        for label, resource in (("client", client), ("llm", llm)):
+            if resource is None:
+                continue
+            try:
+                await asyncio.wait_for(resource.close(), timeout=5.0)
+            except asyncio.TimeoutError:
+                logging.getLogger(__name__).warning(
+                    "Timed out closing %s after 5s.", label,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logging.getLogger(__name__).warning(
+                    "Error closing %s: %s", label, exc,
+                )
 
 
 def _run_action(
@@ -130,14 +158,6 @@ def init(
     force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing project"),
 ) -> None:
     """Initialize a new project with reference images."""
-    # Handle --force: delete existing project
-    if force:
-        from shutil import rmtree
-        project_path = project_store.project_dir(name)
-        if project_path.exists():
-            rmtree(project_path)
-            typer.echo(f"Removed existing project: {project_path}")
-
     # Auto-discover images
     if not ref:
         image_exts = {".png", ".jpg", ".jpeg", ".webp"}
@@ -168,7 +188,7 @@ def init(
 
     async def _exec() -> Path:
         async with RunningHubClient(api_key=_get_api_key()) as client:
-            return await init_project(name, ref, info, description, client)
+            return await init_project(name, ref, info, description, client, force=force)
 
     root = asyncio.run(_exec())
     typer.echo(f"Project initialized at {root}")
@@ -269,6 +289,7 @@ def generate(
     name: str = typer.Argument(..., help="Project name"),
     retry_failed: bool = typer.Option(False, "--retry-failed", help="Retry only failed tasks"),
     force: bool = typer.Option(False, "--force", "-f", help="Re-submit even if SUCCESS record exists"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show planned operations and exit"),
 ) -> None:
     """Submit generation tasks (auto-detects phase)."""
     state = project_store.load_state(name)
@@ -280,6 +301,22 @@ def generate(
     if state.phase not in (Phase.MODEL_SELECT, Phase.STYLE_REFINE):
         typer.echo(f"Error: Cannot generate in {state.phase} phase.", err=True)
         raise typer.Exit(1)
+
+    if dry_run:
+        from styleclaw.providers.runninghub.models import MODEL_REGISTRY
+        if state.phase == Phase.MODEL_SELECT:
+            models = list(MODEL_REGISTRY.keys())
+            # 2 variants × 2 genders per model
+            est_tasks = len(models) * 2 * 2
+            typer.echo("[dry-run] generate (MODEL_SELECT)")
+            typer.echo(f"  Models: {', '.join(models)}")
+            typer.echo(f"  Estimated tasks: {est_tasks}")
+        else:
+            typer.echo("[dry-run] generate (STYLE_REFINE)")
+            typer.echo(f"  Models: {', '.join(state.selected_models) or '(none)'}")
+            typer.echo(f"  Round:  {state.current_round}")
+            typer.echo(f"  Estimated tasks: {len(state.selected_models)}")
+        return
 
     result = _run_action(name, "generate", {"retry_failed": retry_failed, "force": force})
     if not result.ok:
@@ -629,6 +666,7 @@ def batch_submit_cmd(
     name: str = typer.Argument(..., help="Project name"),
     i2i: bool = typer.Option(False, "--i2i", help="Submit image-to-image batch"),
     model: Optional[str] = typer.Option(None, "--model", help="Model ID (defaults to first selected)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show planned operations and exit"),
 ) -> None:
     """Submit batch generation tasks."""
     state = project_store.load_state(name)
@@ -646,6 +684,27 @@ def batch_submit_cmd(
     if not model_id:
         typer.echo("Error: No model selected.", err=True)
         raise typer.Exit(1)
+
+    if dry_run:
+        if i2i:
+            uploads = project_store.load_i2i_uploads(name, state.current_batch or 1)
+            typer.echo("[dry-run] batch-submit --i2i")
+            typer.echo(f"  Model: {model_id}")
+            typer.echo(f"  Batch: {state.current_batch}")
+            typer.echo(f"  Reference uploads: {len(uploads)}")
+        else:
+            try:
+                cfg = project_store.load_batch_config(name, state.current_batch or 1)
+                pending = sum(1 for c in cfg.cases if c.status == "pending")
+                total = len(cfg.cases)
+            except FileNotFoundError:
+                pending = 0
+                total = 0
+            typer.echo("[dry-run] batch-submit")
+            typer.echo(f"  Model: {model_id}")
+            typer.echo(f"  Batch: {state.current_batch}")
+            typer.echo(f"  Cases: {pending} pending of {total} total")
+        return
 
     result = _run_action(name, "batch-submit", {"model": model_id})
     if not result.ok:

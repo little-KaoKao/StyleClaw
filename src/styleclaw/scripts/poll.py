@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 class DownloadStats:
     attempted: int = 0
     succeeded: int = 0
+    failed_urls: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def failed(self) -> int:
@@ -28,6 +30,7 @@ class DownloadStats:
         return DownloadStats(
             attempted=self.attempted + other.attempted,
             succeeded=self.succeeded + other.succeeded,
+            failed_urls=self.failed_urls + other.failed_urls,
         )
 
 
@@ -36,6 +39,7 @@ async def _download_results(
 ) -> DownloadStats:
     attempted = 0
     succeeded = 0
+    failed: list[str] = []
     for i, result in enumerate(results, 1):
         url = result.get("url", "")
         if not url:
@@ -46,10 +50,24 @@ async def _download_results(
         try:
             actual = await download_image(url, dest)
             succeeded += 1
-            logger.info("Downloaded %s -> %s", url[:60], actual.name)
+            logger.debug("Downloaded %s -> %s", url[:60], actual.name)
         except RuntimeError as exc:
             logger.error("Failed to download result %d from %s: %s", i, url[:80], exc)
-    return DownloadStats(attempted=attempted, succeeded=succeeded)
+            failed.append(url)
+
+    if failed:
+        record_path = dest_dir / "failed_downloads.json"
+        try:
+            record_path.write_text(
+                json.dumps({"failed_urls": failed}, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            logger.warning("Could not write %s: %s", record_path, exc)
+
+    return DownloadStats(
+        attempted=attempted, succeeded=succeeded, failed_urls=tuple(failed),
+    )
 
 
 def _log_download_summary(scope: str, stats: DownloadStats, task_count: int) -> None:
@@ -74,14 +92,14 @@ async def _poll_one_model_select(
     pass_num: int,
 ) -> tuple[str, TaskRecord, DownloadStats]:
     if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
-        logger.info("Task %s already terminal (%s), skipping.", record.task_id, record.status)
+        logger.debug("Task %s already terminal (%s), skipping.", record.task_id, record.status)
         return key, record, DownloadStats()
 
     if not record.task_id:
         logger.warning("Skipping %s: no task_id (submission may have failed).", key)
         return key, record, DownloadStats()
 
-    logger.info("Polling task %s for %s (pass %d)...", record.task_id, key, pass_num)
+    logger.debug("Polling task %s for %s (pass %d)...", record.task_id, key, pass_num)
     new_record = await poll_and_update(client, record)
 
     if "/" in key:
@@ -140,14 +158,14 @@ async def _poll_one_style_refine(
     pass_num: int,
 ) -> tuple[str, TaskRecord, DownloadStats]:
     if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
-        logger.info("Task %s already completed, skipping.", record.task_id)
+        logger.debug("Task %s already completed, skipping.", record.task_id)
         return model_id, record, DownloadStats()
 
     if not record.task_id:
         logger.warning("Skipping model %s (round %d): no task_id.", model_id, round_num)
         return model_id, record, DownloadStats()
 
-    logger.info("Polling task %s for model %s (round %d)...", record.task_id, model_id, round_num)
+    logger.debug("Polling task %s for model %s (round %d)...", record.task_id, model_id, round_num)
     new_record = await poll_and_update(client, record)
     project_store.save_round_task_record(
         name, round_num, model_id, new_record, pass_num=pass_num,
@@ -208,7 +226,7 @@ async def _poll_one_batch(
         logger.warning("Skipping case %s: no task_id.", case_id)
         return case_id, record, DownloadStats()
 
-    logger.info("Polling task %s for case %s...", record.task_id, case_id)
+    logger.debug("Polling task %s for case %s...", record.task_id, case_id)
     new_record = await poll_and_update(client, record)
 
     if phase == "i2i":

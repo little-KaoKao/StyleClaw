@@ -65,7 +65,7 @@ async def submit_task(
         params=params,
         results=results,
     )
-    logger.info("Submitted task %s to %s (status=%s)", task_id, endpoint, record.status)
+    logger.debug("Submitted task %s to %s (status=%s)", task_id, endpoint, record.status)
     return record
 
 
@@ -82,6 +82,7 @@ async def poll_task(
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     consecutive_failures = 0
+    poll_count = 0
     while time.monotonic() < deadline:
         try:
             result = await query_task(client, task_id)
@@ -106,8 +107,14 @@ async def poll_task(
             raise RuntimeError(
                 f"Task {task_id} failed: {result.get('errorMessage', 'unknown error')}"
             )
-        logger.debug("Task %s status=%s, waiting %ss...", task_id, status, interval)
-        await asyncio.sleep(interval)
+        # Exponential backoff after the first 3 polls, capped at 60s.
+        poll_count += 1
+        if poll_count <= 3:
+            wait = interval
+        else:
+            wait = min(interval * (1.5 ** (poll_count - 3)), 60.0)
+        logger.debug("Task %s status=%s, waiting %.1fs...", task_id, status, wait)
+        await asyncio.sleep(wait)
 
     raise TimeoutError(f"Task {task_id} timed out after {timeout}s")
 
