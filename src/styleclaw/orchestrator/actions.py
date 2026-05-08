@@ -84,7 +84,8 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         analysis = project_store.load_analysis(ctx.project, pass_num=pass_num)
         trigger = analysis.trigger_phrase
         uploads = project_store.load_uploads(ctx.project)
-        sref_url = uploads[0].url if uploads else ""
+        config = project_store.load_config(ctx.project)
+        sref_url = uploads[config.sref_index].url if uploads else ""
         records = await generate_model_select(
             ctx.project, ctx.client, trigger,
             sref_url=sref_url, pass_num=pass_num,
@@ -98,7 +99,8 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
             ctx.project, round_num, pass_num=pass_num,
         )
         uploads = project_store.load_uploads(ctx.project)
-        sref_url = uploads[0].url if uploads else ""
+        config = project_store.load_config(ctx.project)
+        sref_url = uploads[config.sref_index].url if uploads else ""
         records = await generate_style_refine(
             ctx.project, ctx.client, round_num, prompt_config.trigger_phrase,
             sref_url=sref_url, extra_model_params=prompt_config.model_params,
@@ -401,7 +403,8 @@ async def do_batch_submit(ctx: ExecutionContext, args: dict[str, Any]) -> StepRe
 
     if state.phase == Phase.BATCH_T2I:
         uploads = project_store.load_uploads(ctx.project)
-        sref_url = uploads[0].url if uploads else ""
+        config = project_store.load_config(ctx.project)
+        sref_url = uploads[config.sref_index].url if uploads else ""
         records = await batch_submit_t2i(
             ctx.project, ctx.client, state.current_batch, model_id, sref_url=sref_url,
         )

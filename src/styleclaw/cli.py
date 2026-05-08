@@ -535,6 +535,21 @@ def rollback(
     typer.echo(f"Rolled back to {new_state.phase} (round={new_state.current_round})")
 
 
+@app.command(name="set-sref")
+def set_sref(
+    name: str = typer.Argument(..., help="Project name"),
+    index: int = typer.Argument(..., help="0-based index of ref image to use as sref"),
+) -> None:
+    """Set which reference image to use as style reference (sref)."""
+    config = project_store.load_config(name)
+    if index < 0 or index >= len(config.ref_images):
+        typer.echo(f"Error: index {index} out of range (0–{len(config.ref_images)-1})", err=True)
+        raise typer.Exit(1)
+    new_config = config.model_copy(update={"sref_index": index})
+    project_store.save_config(name, new_config)
+    typer.echo(f"sref set to ref-{index+1:03d}: {config.ref_images[index]}")
+
+
 @app.command(name="retest-models")
 def retest_models_cmd(
     name: str = typer.Argument(..., help="Project name"),

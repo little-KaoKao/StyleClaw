@@ -41,6 +41,7 @@ class ProjectConfig(_FrozenModel):
     description: str = ""
     ip_info: str = ""
     ref_images: list[str] = Field(default_factory=list)
+    sref_index: int = 0  # index into ref_images / uploads used as style reference
 
 
 class UploadRecord(_FrozenModel):
