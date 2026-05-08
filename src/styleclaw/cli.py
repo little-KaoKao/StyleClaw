@@ -268,6 +268,7 @@ def analyze(
 def generate(
     name: str = typer.Argument(..., help="Project name"),
     retry_failed: bool = typer.Option(False, "--retry-failed", help="Retry only failed tasks"),
+    force: bool = typer.Option(False, "--force", "-f", help="Re-submit even if SUCCESS record exists"),
 ) -> None:
     """Submit generation tasks (auto-detects phase)."""
     state = project_store.load_state(name)
@@ -280,7 +281,7 @@ def generate(
         typer.echo(f"Error: Cannot generate in {state.phase} phase.", err=True)
         raise typer.Exit(1)
 
-    result = _run_action(name, "generate", {"retry_failed": retry_failed})
+    result = _run_action(name, "generate", {"retry_failed": retry_failed, "force": force})
     if not result.ok:
         typer.echo(f"Error: {result.message}", err=True)
         raise typer.Exit(1)

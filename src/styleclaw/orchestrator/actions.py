@@ -88,7 +88,7 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         sref_url = uploads[config.sref_index].url if uploads else ""
         records = await generate_model_select(
             ctx.project, ctx.client, trigger,
-            sref_url=sref_url, pass_num=pass_num,
+            sref_url=sref_url, pass_num=pass_num, force=args.get("force", False),
         )
         return StepResult(ok=True, message=f"Submitted {len(records)} model tasks (pass {pass_num})")
 
@@ -104,7 +104,7 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         records = await generate_style_refine(
             ctx.project, ctx.client, round_num, prompt_config.trigger_phrase,
             sref_url=sref_url, extra_model_params=prompt_config.model_params,
-            pass_num=pass_num,
+            pass_num=pass_num, force=args.get("force", False),
         )
         return StepResult(ok=True, message=f"Submitted {len(records)} refine tasks")
 

@@ -30,6 +30,7 @@ async def generate_model_select(
     sref_url: str = "",
     models: list[str] | None = None,
     pass_num: int = 1,
+    force: bool = False,
 ) -> dict[str, TaskRecord]:
     model_ids = models or list(MODEL_REGISTRY.keys())
 
@@ -43,7 +44,7 @@ async def generate_model_select(
             for gender in TEST_SUBJECTS:
                 key = f"{mid}/{variant}-{gender}"
                 prev = existing.get(key)
-                if prev and prev.status != TaskStatus.FAILED:
+                if not force and prev and prev.status != TaskStatus.FAILED:
                     logger.info("Skipping %s: already has %s record.", key, prev.status)
                     skipped[key] = prev
                 else:
@@ -94,6 +95,7 @@ async def generate_style_refine(
     sref_url: str = "",
     extra_model_params: dict[str, dict[str, Any]] | None = None,
     pass_num: int = 1,
+    force: bool = False,
 ) -> dict[str, TaskRecord]:
     state = project_store.load_state(name)
     model_ids = state.selected_models
@@ -106,7 +108,7 @@ async def generate_style_refine(
     skipped: dict[str, TaskRecord] = {}
     for mid in model_ids:
         prev = existing.get(mid)
-        if prev and prev.status != TaskStatus.FAILED:
+        if not force and prev and prev.status != TaskStatus.FAILED:
             logger.info("Skipping model %s round %d: already has %s record.", mid, round_num, prev.status)
             skipped[mid] = prev
         else:
