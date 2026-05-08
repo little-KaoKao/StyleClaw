@@ -82,22 +82,6 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
     if state.phase == Phase.MODEL_SELECT:
         pass_num = state.current_model_select_pass or 1
 
-        # Auto-skip to next pass only if current pass is fully successful (soft rollback support)
-        if not args.get("force", False):
-            ms_root = project_store.project_dir(ctx.project) / "model-select"
-            while (ms_root / f"pass-{pass_num:03d}").exists():
-                existing = project_store.load_all_task_records(ctx.project, pass_num=pass_num)
-                has_incomplete = any(
-                    r.status != TaskStatus.SUCCESS for r in existing.values()
-                ) if existing else False
-                if has_incomplete or not existing:
-                    break  # stay on this pass to retry failures
-                pass_num += 1
-
-        if pass_num != (state.current_model_select_pass or 1):
-            state = state.with_model_select_pass(pass_num)
-            project_store.save_state(ctx.project, state)
-
         # Ensure analysis exists for this pass (copy from previous if needed)
         try:
             analysis = project_store.load_analysis(ctx.project, pass_num=pass_num)
@@ -321,9 +305,13 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     pass_num = state.current_model_select_pass or 1
     round_num = state.current_round + 1
 
-    # Auto-skip existing rounds (soft rollback support)
-    while project_store.round_dir(ctx.project, round_num, pass_num=pass_num).exists():
-        round_num += 1
+    # Skip rounds that already have a prompt config (non-destructive rollback support)
+    while True:
+        try:
+            project_store.load_prompt_config(ctx.project, round_num, pass_num=pass_num)
+            round_num += 1
+        except FileNotFoundError:
+            break
 
     if round_num > MAX_AUTO_ROUNDS:
         return StepResult(ok=False, message=f"Max rounds ({MAX_AUTO_ROUNDS}) reached")
