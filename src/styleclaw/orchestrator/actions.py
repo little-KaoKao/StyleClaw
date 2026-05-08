@@ -82,10 +82,16 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
     if state.phase == Phase.MODEL_SELECT:
         pass_num = state.current_model_select_pass or 1
 
-        # Auto-skip existing passes unless --force (soft rollback support)
+        # Auto-skip to next pass only if current pass is fully successful (soft rollback support)
         if not args.get("force", False):
             ms_root = project_store.project_dir(ctx.project) / "model-select"
             while (ms_root / f"pass-{pass_num:03d}").exists():
+                existing = project_store.load_all_task_records(ctx.project, pass_num=pass_num)
+                has_incomplete = any(
+                    r.status != TaskStatus.SUCCESS for r in existing.values()
+                ) if existing else False
+                if has_incomplete or not existing:
+                    break  # stay on this pass to retry failures
                 pass_num += 1
 
         if pass_num != (state.current_model_select_pass or 1):
