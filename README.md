@@ -27,7 +27,9 @@ INIT → MODEL_SELECT → STYLE_REFINE → BATCH_T2I → BATCH_I2I → COMPLETED
 - **Python 3.11+**
 - **[uv](https://docs.astral.sh/uv/)** package manager
 - **RunningHub** API key (for image generation)
-- **AWS Bedrock** access with bearer token (for Claude LLM calls)
+- **LLM provider** — either:
+  - An **OpenAI-compatible** provider like [gptproto.com](https://gptproto.com) (recommended), or
+  - **AWS Bedrock** access with a bearer token (legacy)
 
 ## Installation
 
@@ -42,21 +44,32 @@ uv sync
 cp .env.example .env
 ```
 
-Edit `.env` with your credentials:
+Edit `.env` with your credentials. Choose **one** LLM provider block:
 
 ```env
 RUNNINGHUB_API_KEY=<your-runninghub-api-key>
-AWS_REGION=us-east-1
-AWS_BEARER_TOKEN_BEDROCK=<your-bedrock-token>
-CLAUDE_MODEL=anthropic.claude-sonnet-4-20250514    # optional
+
+# Option A: OpenAI-compatible (recommended, takes priority if set)
+OPENAI_COMPAT_API_KEY=<your-api-key>
+OPENAI_COMPAT_BASE_URL=https://api.gptproto.com/v1
+LLM_MODEL=gemini-2.5-pro-preview-05-06
+
+# Option B: AWS Bedrock (legacy)
+# AWS_REGION=us-east-1
+# AWS_BEARER_TOKEN_BEDROCK=<your-bedrock-token>
+# LLM_MODEL=anthropic.claude-sonnet-4-20250514
 ```
 
 | Variable | Required | Description |
 |----------|:--------:|-------------|
 | `RUNNINGHUB_API_KEY` | Yes | RunningHub API key for image generation |
-| `AWS_REGION` | Yes | AWS region for Bedrock (e.g. `us-east-1`) |
-| `AWS_BEARER_TOKEN_BEDROCK` | Yes | Bearer token for AWS Bedrock authentication |
-| `CLAUDE_MODEL` | No | Bedrock model ID (default: `anthropic.claude-sonnet-4-20250514`) |
+| `OPENAI_COMPAT_API_KEY` | A | API key for OpenAI-compatible provider (e.g. gptproto) |
+| `OPENAI_COMPAT_BASE_URL` | A | Provider base URL (e.g. `https://api.gptproto.com/v1`) |
+| `LLM_MODEL` | Yes | Model ID for the chosen provider |
+| `AWS_REGION` | B | AWS region (only if using Bedrock) |
+| `AWS_BEARER_TOKEN_BEDROCK` | B | Bearer token for Bedrock proxy/gateway (only if using Bedrock) |
+
+If `OPENAI_COMPAT_API_KEY` is set, it takes priority over AWS Bedrock.
 
 Verify the installation:
 
@@ -260,7 +273,7 @@ uv run python -m pytest tests/ -m "not integration"
 | Language | Python 3.11+ |
 | Package Manager | uv |
 | HTTP Client | httpx (async) |
-| LLM | Claude via AWS Bedrock |
+| LLM | OpenAI-compatible API (default) or AWS Bedrock (legacy) |
 | Data Models | Pydantic v2 |
 | CLI | Typer |
 | Reports | Jinja2 HTML templates |

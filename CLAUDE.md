@@ -19,24 +19,31 @@ uv run python -m pytest tests/ -v
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and fill in:
+Copy `.env.example` to `.env` and fill in. Choose ONE LLM provider block:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `RUNNINGHUB_API_KEY` | Yes | RunningHub API key for image generation |
-| `AWS_REGION` | Yes | AWS region for Bedrock (e.g. `us-east-1`) |
-| `AWS_BEARER_TOKEN_BEDROCK` | Yes | Bearer token sent as `Authorization: Bearer ...` to `bedrock-runtime.<region>.amazonaws.com`. **This is not a standard AWS credential** — StyleClaw does not use SigV4 signing. The token comes from a pre-configured proxy/gateway (e.g. a Cloudflare Worker or API Gateway that forwards to Bedrock after signing). Treat it as a secret with the same blast radius as an IAM credential and do not check it into version control. |
-| `CLAUDE_MODEL` | No | Bedrock model ID (default: `anthropic.claude-sonnet-4-20250514`) |
+| **Option A: OpenAI-compatible (recommended, e.g. gptproto.com)** | | |
+| `OPENAI_COMPAT_API_KEY` | A | API key for the OpenAI-compatible provider |
+| `OPENAI_COMPAT_BASE_URL` | A | Provider base URL (e.g. `https://api.gptproto.com/v1`) |
+| `LLM_MODEL` | A | Model ID (e.g. `gemini-2.5-pro-preview-05-06`) |
+| **Option B: AWS Bedrock (legacy)** | | |
+| `AWS_REGION` | B | AWS region (e.g. `us-east-1`) |
+| `AWS_BEARER_TOKEN_BEDROCK` | B | Bearer token sent as `Authorization: Bearer ...` to a pre-configured proxy/gateway that forwards to Bedrock after SigV4 signing. **Not a standard AWS credential.** Treat as a secret. |
+| `LLM_MODEL` | B | Bedrock model ID (e.g. `anthropic.claude-sonnet-4-20250514`) |
+
+If `OPENAI_COMPAT_API_KEY` is set, it takes priority over Bedrock.
 
 ## Tech Stack
 
 - **Language**: Python 3.11+ with uv package manager
-- **HTTP**: httpx (async) — both RunningHub client and Bedrock LLM provider
-- **LLM**: Claude via AWS Bedrock (httpx + bearer token auth)
+- **HTTP**: httpx (async) — RunningHub client and LLM provider
+- **LLM**: OpenAI-compatible API (default) or AWS Bedrock (legacy), both via httpx
 - **Models**: Pydantic v2 (immutable state via `model_copy(update=...)`)
 - **CLI**: Typer
 - **Reports**: Jinja2 HTML templates
-- **Image**: Pillow (resize to 1024px long-edge before sending to LLM)
+- **Image**: Pillow (resize to 1024px long-edge, WebP encoding)
 - **Config**: python-dotenv
 
 ## Architecture
@@ -63,7 +70,8 @@ src/styleclaw/
 │   └── project_store.py    # All filesystem persistence (JSON read/write under data/projects/<name>/)
 ├── providers/
 │   ├── llm/
-│   │   ├── bedrock.py      # BedrockProvider — async httpx calls to AWS Bedrock
+│   │   ├── openai_compat.py # OpenAICompatProvider — default, for gptproto & similar
+│   │   ├── bedrock.py      # BedrockProvider — legacy AWS Bedrock fallback
 │   │   └── prompts/        # Markdown prompt templates for LLM agents
 │   └── runninghub/
 │       ├── client.py       # RunningHubClient — async httpx for image gen API
