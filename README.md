@@ -209,13 +209,15 @@ uv run styleclaw report <name> \
 
 ## Available Models
 
-| Model ID | Name | Style Ref | Notes |
-|----------|------|:---------:|-------|
-| `mj-v7` | Midjourney v7 | Yes | Default; stylize=200, 4 images per task |
-| `niji7` | Midjourney niji7 | Yes | Anime-focused, stylize=200 |
-| `nb2` | NanoBanana2 | No | 2K resolution, max 20K char prompt |
-| `seedream` | Seedream v5-lite | No | Uses width×height, max 2K char prompt |
-| `gpt-image-2` | GPT-Image-2 | No | 2K resolution, quality=medium, max 20K char prompt |
+| Model ID | Name | Style Ref Mode | Notes |
+|----------|------|:--------------:|-------|
+| `mj-v7` | Midjourney v7 | `param` | Default; style ref via `--sref` + `sw=100`; stylize=200, 4 images per task |
+| `niji7` | Midjourney niji7 | `param` | Style ref via `--sref` + `sw=100`; anime-focused, stylize=200 |
+| `nb2` | NanoBanana2 | `prompt` | Style ref via prompt prefix `参考图1的风格：` + `imageUrls`; 2K resolution, max 20K char prompt |
+| `seedream` | Seedream v5-lite | `prompt` | Style ref via prompt prefix `参考图1的风格：` + `imageUrls`; uses width×height, max 2K char prompt |
+| `gpt-image-2` | GPT-Image-2 | `prompt` | Style ref via prompt prefix `参考图1的风格：` + `imageUrls`; 2K resolution, quality=medium, max 20K char prompt |
+
+All models support style reference; the only difference is how the reference is passed (`param` vs `prompt` + `imageUrls`).
 
 ## Style Refinement Scoring
 

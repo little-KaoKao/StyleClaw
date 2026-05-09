@@ -209,13 +209,15 @@ uv run styleclaw report <name> \
 
 ## 可用模型
 
-| 模型 ID      | 名称             | 风格引用 | 备注                                                      |
-| ------------ | ---------------- | :------: | --------------------------------------------------------- |
-| `mj-v7`    | Midjourney v7    |   支持   | 默认模型；stylize=200，每次生成 4 张图                    |
-| `niji7`    | Midjourney niji7 |   支持   | 动漫向，stylize=200                                       |
-| `nb2`      | NanoBanana2      |  不支持  | 2K 分辨率，提示词最长 20000 字符                          |
-| `seedream` | Seedream v5-lite |  不支持  | 使用 width×height 而非 aspectRatio，提示词最长 2000 字符 |
-| `gpt-image-2` | GPT-Image-2  |  不支持  | 2K 分辨率，quality=medium，提示词最长 20000 字符           |
+| 模型 ID         | 名称             | 风格引用方式 | 备注                                                      |
+| --------------- | ---------------- | :----------: | --------------------------------------------------------- |
+| `mj-v7`       | Midjourney v7    |   `param`    | 默认模型；使用 `--sref` + `sw=100`；stylize=200，每次生成 4 张图 |
+| `niji7`       | Midjourney niji7 |   `param`    | 使用 `--sref` + `sw=100`；动漫向，stylize=200             |
+| `nb2`         | NanoBanana2      |   `prompt`   | 通过提示词前缀 `参考图1的风格：` + `imageUrls` 引用风格；2K 分辨率，提示词最长 20000 字符 |
+| `seedream`    | Seedream v5-lite |   `prompt`   | 通过提示词前缀 `参考图1的风格：` + `imageUrls` 引用风格；使用 width×height 而非 aspectRatio，提示词最长 2000 字符 |
+| `gpt-image-2` | GPT-Image-2      |   `prompt`   | 通过提示词前缀 `参考图1的风格：` + `imageUrls` 引用风格；2K 分辨率，quality=medium，提示词最长 20000 字符 |
+
+说明：**所有模型都支持“风格引用”**，只是引用方式不同：`param` 表示通过 API 参数（如 `--sref`）传入；`prompt` 表示通过提示词前缀 + `imageUrls` 传入。
 
 ## 风格精炼评分
 
