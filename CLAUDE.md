@@ -75,10 +75,10 @@ src/styleclaw/
 │   │   └── prompts/        # Markdown prompt templates for LLM agents
 │   └── runninghub/
 │       ├── client.py       # RunningHubClient — async httpx for image gen API
-│       ├── models.py       # MODEL_REGISTRY: mj-v7, niji7, nb2, seedream configs
+│       ├── models.py       # MODEL_REGISTRY: mj-v7, niji7, nb2, seedream, gpt-image-2 configs
 │       ├── tasks.py        # submit_task() with 3x retry, poll_task() with timeout
 │       └── upload.py       # Upload files to RunningHub
-├── agents/          # LLM-powered creative work (each calls BedrockProvider)
+├── agents/          # LLM-powered creative work (uses the configured LLM provider)
 │   ├── analyze_style.py    # Analyze ref images → StyleAnalysis + initial trigger phrase
 │   ├── select_model.py     # Compare models' outputs → ModelEvaluation
 │   ├── evaluate_result.py  # Score round results on 5 dimensions → RoundEvaluation
@@ -104,20 +104,22 @@ data/projects/<project-name>/
 │   ├── *.png / *.jpg
 │   └── uploads.json                     # UploadRecord[]
 ├── model-select/
-│   ├── initial-analysis.json            # StyleAnalysis from LLM
-│   ├── evaluation.json                  # ModelEvaluation from LLM
-│   ├── report.html
-│   └── results/<model-id>/<variant>/    # variant = "prompt-only" | "prompt-sref"
-│       ├── task.json                    # TaskRecord
-│       └── output-*.png
-├── style-refine/
-│   └── round-001/
-│       ├── prompt.json                  # PromptConfig (trigger phrase for this round)
-│       ├── evaluation.json              # RoundEvaluation
+│   └── pass-001/
+│       ├── initial-analysis.json        # StyleAnalysis from LLM
+│       ├── evaluation.json              # ModelEvaluation from LLM
 │       ├── report.html
-│       └── results/<model-id>/
-│           ├── task.json
+│       └── results/<model-id>/<variant>/
+│           ├── task.json                # TaskRecord
 │           └── output-*.png
+├── style-refine/
+│   └── pass-001/
+│       └── round-001/
+│           ├── prompt.json              # PromptConfig (trigger phrase for this round)
+│           ├── evaluation.json          # RoundEvaluation
+│           ├── report.html
+│           └── results/<model-id>/
+│               ├── task.json
+│               └── output-*.png
 ├── batch-t2i/
 │   └── batch-001/
 │       ├── cases.json                   # BatchConfig (100 cases with descriptions)
@@ -322,7 +324,7 @@ styleclaw report <project-name>
 
 - **Immutability**: All Pydantic models use `model_copy(update=...)` — never mutate in place
 - **Async**: `asyncio.TaskGroup` for parallel work, semaphore(5) for concurrency
-- **Client lifecycle**: Use `_run_with_client()` in CLI to ensure proper httpx client cleanup
+- **Client lifecycle**: Use `_build_context()` / `_close_resource()` in CLI to ensure proper httpx client cleanup
 - **Storage**: JSON files under `data/projects/<name>/`, monkeypatch `DATA_ROOT` in tests
 - **LLM output**: Always strip markdown fences via `_clean_json()` before parsing
 - **Prompt building**: Final prompt = `trigger_phrase + ", " + character_desc`; for prompt-sref variant with `SrefMode.PROMPT` models: `参考图1的风格：trigger_phrase + ", " + character_desc` + `imageUrls` param

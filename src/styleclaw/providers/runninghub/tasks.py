@@ -76,10 +76,17 @@ async def query_task(client: RunningHubClient, task_id: str) -> dict[str, Any]:
 async def poll_task(
     client: RunningHubClient,
     task_id: str,
-    interval: float = POLL_INTERVAL,
-    timeout: float = TASK_TIMEOUT,
-    max_consecutive_failures: int = POLL_MAX_CONSECUTIVE_FAILURES,
+    interval: float | None = None,
+    timeout: float | None = None,
+    max_consecutive_failures: int | None = None,
 ) -> dict[str, Any]:
+    interval = POLL_INTERVAL if interval is None else interval
+    timeout = TASK_TIMEOUT if timeout is None else timeout
+    max_consecutive_failures = (
+        POLL_MAX_CONSECUTIVE_FAILURES
+        if max_consecutive_failures is None
+        else max_consecutive_failures
+    )
     deadline = time.monotonic() + timeout
     consecutive_failures = 0
     poll_count = 0

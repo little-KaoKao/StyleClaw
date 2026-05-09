@@ -59,25 +59,25 @@ class TestResizeForLlm:
 
     def test_rgba_returns_png_media_type(self, rgba_image: Path) -> None:
         _, media_type = resize_for_llm(rgba_image)
-        assert media_type == "image/png"
+        assert media_type == "image/webp"
 
     def test_rgb_returns_jpeg_media_type(self, rgb_image: Path) -> None:
         _, media_type = resize_for_llm(rgb_image)
-        assert media_type == "image/jpeg"
+        assert media_type == "image/webp"
 
 
 class TestEncodeImageForLlm:
     def test_rgb_returns_jpeg(self, rgb_image: Path) -> None:
         b64_str, media_type = encode_image_for_llm(rgb_image)
-        assert media_type == "image/jpeg"
+        assert media_type == "image/webp"
         decoded = base64.b64decode(b64_str)
-        assert decoded[:2] == b"\xff\xd8"
+        assert decoded[:4] == b"RIFF"
 
     def test_rgba_returns_png(self, rgba_image: Path) -> None:
         b64_str, media_type = encode_image_for_llm(rgba_image)
-        assert media_type == "image/png"
+        assert media_type == "image/webp"
         decoded = base64.b64decode(b64_str)
-        assert decoded[:4] == b"\x89PNG"
+        assert decoded[:4] == b"RIFF"
 
     def test_returns_valid_base64(self, small_image: Path) -> None:
         b64_str, _ = encode_image_for_llm(small_image)
@@ -90,13 +90,13 @@ class TestBuildImageBlock:
         block = build_image_block(small_image)
         assert block["type"] == "image"
         assert block["source"]["type"] == "base64"
-        assert block["source"]["media_type"] == "image/jpeg"
+        assert block["source"]["media_type"] == "image/webp"
         decoded = base64.b64decode(block["source"]["data"])
         assert len(decoded) > 0
 
     def test_rgba_returns_png_block(self, rgba_image: Path) -> None:
         block = build_image_block(rgba_image)
-        assert block["source"]["media_type"] == "image/png"
+        assert block["source"]["media_type"] == "image/webp"
 
 
 class TestVerifyRefImage:

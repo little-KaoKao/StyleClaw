@@ -215,6 +215,7 @@ uv run styleclaw report <name> \
 | `niji7` | Midjourney niji7 | Yes | Anime-focused, stylize=200 |
 | `nb2` | NanoBanana2 | No | 2K resolution, max 20K char prompt |
 | `seedream` | Seedream v5-lite | No | Uses width×height, max 2K char prompt |
+| `gpt-image-2` | GPT-Image-2 | No | 2K resolution, quality=medium, max 20K char prompt |
 
 ## Style Refinement Scoring
 
@@ -247,11 +248,13 @@ data/projects/<name>/
 ├── config.json              # Project configuration
 ├── state.json               # Current phase, round, batch, selected models
 ├── refs/                    # Reference images + upload records
-├── model-select/            # Model comparison results + report
-├── style-refine/round-NNN/  # Per-round results + evaluations
+├── model-select/pass-NNN/   # Model comparison results + report
+├── style-refine/pass-NNN/round-NNN/  # Per-round results + evaluations
 ├── batch-t2i/batch-NNN/     # 100-case t2i results + report
 └── batch-i2i/batch-NNN/     # i2i results + report
 ```
+
+Older projects may still use the pre-pass layout. Run `uv run styleclaw migrate <name>` to move them into the pass-scoped layout.
 
 ## Development
 

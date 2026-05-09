@@ -24,12 +24,13 @@ def ref_images(tmp_path: Path) -> list[Path]:
 def mock_llm() -> AsyncMock:
     llm = AsyncMock()
     llm.invoke.return_value = json.dumps({
-        "color_palette": "warm tones",
-        "line_style": "bold outlines",
-        "lighting": "dramatic",
-        "texture": "smooth",
-        "composition": "centered",
-        "mood": "energetic",
+        "visual_style": "anime illustration",
+        "color_science": "warm tones",
+        "lighting_quality": "dramatic",
+        "material_texture": "smooth",
+        "post_processing": "minimal presence",
+        "spatial_perspective": "centered",
+        "dynamic_state": "energetic",
         "trigger_phrase": "bold colorful anime style",
         "trigger_variants": ["variant1"],
         "model_suggestions": ["mj-v7"],
@@ -41,7 +42,7 @@ class TestAnalyzeStyle:
     async def test_returns_style_analysis(self, mock_llm, ref_images) -> None:
         result = await analyze_style(mock_llm, ref_images, "anime IP")
         assert result.trigger_phrase == "bold colorful anime style"
-        assert result.color_palette == "warm tones"
+        assert result.color_science == "warm tones"
 
     async def test_sends_images_to_llm(self, mock_llm, ref_images) -> None:
         await analyze_style(mock_llm, ref_images, "anime IP")

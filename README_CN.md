@@ -215,6 +215,7 @@ uv run styleclaw report <name> \
 | `niji7`    | Midjourney niji7 |   支持   | 动漫向，stylize=200                                       |
 | `nb2`      | NanoBanana2      |  不支持  | 2K 分辨率，提示词最长 20000 字符                          |
 | `seedream` | Seedream v5-lite |  不支持  | 使用 width×height 而非 aspectRatio，提示词最长 2000 字符 |
+| `gpt-image-2` | GPT-Image-2  |  不支持  | 2K 分辨率，quality=medium，提示词最长 20000 字符           |
 
 ## 风格精炼评分
 
@@ -258,11 +259,13 @@ data/projects/<项目名>/
 ├── config.json              # 项目配置
 ├── state.json               # 当前状态（阶段、轮次、批次、已选模型）
 ├── refs/                    # 参考图片 + 上传记录
-├── model-select/            # 模型对比结果 + 报告
-├── style-refine/round-NNN/  # 各轮精炼结果 + 评估
+├── model-select/pass-NNN/   # 模型对比结果 + 报告
+├── style-refine/pass-NNN/round-NNN/  # 各轮精炼结果 + 评估
 ├── batch-t2i/batch-NNN/     # 100 用例文生图结果 + 报告
 └── batch-i2i/batch-NNN/     # 图生图结果 + 报告
 ```
+
+旧项目可能仍是未按 pass 分层的旧布局。可用 `uv run styleclaw migrate <项目名>` 迁移到当前布局。
 
 ## 开发指南
 

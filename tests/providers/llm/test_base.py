@@ -9,6 +9,7 @@ class TestLLMProvider:
     def test_protocol_check_with_mock(self) -> None:
         mock = AsyncMock()
         mock.invoke = AsyncMock(return_value="result")
+        mock.invoke_with_thinking = AsyncMock(return_value=LLMResponse(text="result"))
         assert isinstance(mock, LLMProvider)
 
 

@@ -91,6 +91,7 @@ class TestBedrockProvider:
     def test_default_env_values(self, monkeypatch) -> None:
         monkeypatch.setenv("AWS_BEARER_TOKEN_BEDROCK", "valid-token")
         monkeypatch.delenv("AWS_REGION", raising=False)
+        monkeypatch.delenv("LLM_MODEL", raising=False)
         monkeypatch.delenv("CLAUDE_MODEL", raising=False)
         p = BedrockProvider()
         assert p._region == "us-east-1"

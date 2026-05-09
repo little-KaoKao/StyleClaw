@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -73,6 +74,24 @@ def _build_llm_provider() -> Any:
     return BedrockProvider()
 
 
+async def _close_resource(resource: Any, label: str) -> None:
+    close = getattr(resource, "close", None)
+    if close is None:
+        return
+    try:
+        result = close()
+        if inspect.isawaitable(result):
+            await asyncio.wait_for(result, timeout=5.0)
+    except asyncio.TimeoutError:
+        logging.getLogger(__name__).warning(
+            "Timed out closing %s after 5s.", label,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning(
+            "Error closing %s: %s", label, exc,
+        )
+
+
 @asynccontextmanager
 async def _build_context(
     project: str,
@@ -98,16 +117,7 @@ async def _build_context(
         for label, resource in (("client", client), ("llm", llm)):
             if resource is None:
                 continue
-            try:
-                await asyncio.wait_for(resource.close(), timeout=5.0)
-            except asyncio.TimeoutError:
-                logging.getLogger(__name__).warning(
-                    "Timed out closing %s after 5s.", label,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logging.getLogger(__name__).warning(
-                    "Error closing %s: %s", label, exc,
-                )
+            await _close_resource(resource, label)
 
 
 def _run_action(
@@ -902,12 +912,13 @@ def run(
     from styleclaw.orchestrator.actions import ACTION_REGISTRY
     from styleclaw.orchestrator.executor import display_plan, execute
     from styleclaw.orchestrator.planner import plan
-    from styleclaw.providers.llm.bedrock import BedrockProvider
-    from styleclaw.providers.runninghub.client import RunningHubClient
 
     async def _plan_and_execute() -> None:
-        async with BedrockProvider() as llm:
+        llm = _build_llm_provider()
+        try:
             action_plan = await plan(llm, project, intent)
+        finally:
+            await _close_resource(llm, "llm")
 
         display_plan(action_plan, project)
 

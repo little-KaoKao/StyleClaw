@@ -70,3 +70,18 @@ class TestRunCommand:
         mock_plan.return_value = _make_plan("Analyze")
         result = runner.invoke(app, ["run", "analyze", "-p", "test-proj"], input="n\n")
         assert "Analyze" in result.output
+
+    @patch("styleclaw.cli._build_llm_provider")
+    @patch("styleclaw.orchestrator.planner.plan", new_callable=AsyncMock)
+    def test_uses_configured_llm_provider(self, mock_plan, mock_build_llm, setup_project) -> None:
+        fake_llm = MagicMock()
+        fake_llm.close = AsyncMock()
+        mock_build_llm.return_value = fake_llm
+        mock_plan.return_value = _make_plan("Configured provider")
+
+        result = runner.invoke(app, ["run", "analyze", "-p", "test-proj"], input="n\n")
+
+        assert result.exit_code == 0
+        mock_build_llm.assert_called_once()
+        assert mock_plan.call_args.args[0] is fake_llm
+        fake_llm.close.assert_awaited_once()

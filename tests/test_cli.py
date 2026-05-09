@@ -75,7 +75,10 @@ class TestInitCommand:
         mock_client.__aexit__ = AsyncMock(return_value=None)
         mock_client_cls.return_value = mock_client
         mock_init.return_value = tmp_path / "projects" / "new-proj"
-        result = runner.invoke(app, ["init", "new-proj", "--ref", str(ref)])
+        result = runner.invoke(
+            app,
+            ["init", "new-proj", "--ref", str(ref), "--info", "anime style"],
+        )
         assert result.exit_code == 0
         assert "initialized" in result.output
 
@@ -95,7 +98,7 @@ class TestAnalyzeCommand:
         assert result.exit_code == 0
         assert "Analysis complete" in result.output
         mock_run.assert_called_once_with(
-            "test-proj", "analyze", show_thinking=False, thinking_budget=5000,
+            "test-proj", "analyze", show_thinking=True, thinking_budget=5000,
         )
 
 
