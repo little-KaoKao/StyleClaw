@@ -100,16 +100,17 @@ uv run styleclaw init spider-verse \
   --info "Spider-Verse animation style"
 
 # Then describe what you want in natural language
-uv run styleclaw run "analyze style and select the best model"
-uv run styleclaw run "refine trigger phrase until scores pass"
-uv run styleclaw run "design test cases and run batch generation"
+# Use the same name as in `init`. With multiple projects under data/projects, `-p` is required.
+uv run styleclaw run "analyze style and select the best model" -p spider-verse
+uv run styleclaw run "refine trigger phrase until scores pass" -p spider-verse
+uv run styleclaw run "design test cases and run batch generation" -p spider-verse
 ```
 
 The `run` command converts your intent into an execution plan via LLM, displays it for confirmation, then executes step by step. It supports loop execution for iterative refinement (refine → generate → poll → evaluate) with automatic score-based termination.
 
 ```bash
 # Options
-uv run styleclaw run "<intent>" -p <project>   # Specify project (auto-detected if only one)
+uv run styleclaw run "<intent>" -p <project>   # Required if multiple projects; optional if exactly one
 uv run styleclaw run "<intent>" --yes           # Skip confirmation prompt
 ```
 

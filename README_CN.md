@@ -99,17 +99,18 @@ uv run styleclaw init spider-verse \
   --ref ref1.png --ref ref2.png --ref ref3.png \
   --info "蜘蛛侠：平行宇宙动画风格"
 
-# 然后用自然语言描述意图
-uv run styleclaw run "分析风格并选出最佳模型"
-uv run styleclaw run "迭代优化触发短语直到评分通过"
-uv run styleclaw run "设计测试用例并跑批量生成"
+# 然后用自然语言描述意图（下面与 init 里的 <name> 一致，例如 spider-verse）
+# 若 data/projects 下有多个项目，必须加 -p；只有一个项目时可省略 -p。
+uv run styleclaw run "分析风格并选出最佳模型" -p spider-verse
+uv run styleclaw run "迭代优化触发短语直到评分通过" -p spider-verse
+uv run styleclaw run "设计测试用例并跑批量生成" -p spider-verse
 ```
 
 `run` 命令通过 LLM 将你的意图转换为执行计划，展示给你确认后逐步执行。支持循环执行（精炼 → 生成 → 等待 → 评估），根据评分自动决定是否继续迭代。
 
 ```bash
 # 选项
-uv run styleclaw run "<意图>" -p <项目名>   # 指定项目（仅有一个项目时自动选择）
+uv run styleclaw run "<意图>" -p <项目名>   # 多项目时必填；仅一个项目时可省略
 uv run styleclaw run "<意图>" --yes          # 跳过确认直接执行
 ```
 
