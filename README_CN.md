@@ -191,30 +191,34 @@ uv run styleclaw report spider-verse
 ### 常用参数
 
 ```bash
+# init：多行时每一行末尾都要有 \（行尾注释前的反斜杠不能省），否则下一行会被当成新命令。
 uv run styleclaw init <name> \
-  --ref <图片路径>            # 参考图片（可重复指定多张）
-  --ref-dir <目录>            # 从目录自动发现图片
-  --info <文本>               # IP 描述信息
-  --desc <文本>               # 项目描述
-  --force                     # 覆盖已有项目
+  --ref <图片路径> \
+  --ref-dir <目录> \
+  --info <文本> \
+  --desc <文本> \
+  --force
+# --ref 可重复；--ref-dir 与多张 --ref 按需要选用；--force 表示覆盖已有项目。
 
 uv run styleclaw generate <name> \
-  --force                     # 强制重新提交（即使已有 SUCCESS 记录）
-  --retry-failed              # 只重试失败的任务
+  --force \
+  --retry-failed
 
 uv run styleclaw refine <name> \
-  --direction <文本>          # 可选：人工指定精炼方向
+  --direction <文本>
 
 uv run styleclaw batch-submit <name> \
-  --i2i                       # 提交图生图任务（默认为文生图）
-  --model <模型ID>            # 指定模型（默认使用项目已选模型）
+  --i2i \
+  --model <模型ID>
 
 uv run styleclaw approve <name> \
-  --phase completed           # 用于 BATCH_I2I → COMPLETED 转换
-  --yes                       # 跳过确认提示
+  --phase completed \
+  --yes
+# --phase completed：BATCH_I2I → COMPLETED；--yes 跳过确认。
 
 uv run styleclaw report <name> \
-  --i2i                       # 生成图生图报告（默认为文生图）
+  --i2i
+# --i2i：图生图报告（默认文生图）。
 ```
 
 ## 可用模型

@@ -191,30 +191,33 @@ uv run styleclaw report spider-verse
 ### Options
 
 ```bash
+# For multi-line commands, every continued line must end with \ before the newline;
+# otherwise the next line is executed as a new shell command.
 uv run styleclaw init <name> \
-  --ref <image-path>         # Reference image (repeatable)
-  --ref-dir <dir>            # Auto-discover images from directory
-  --info <text>              # IP description
-  --desc <text>              # Project description
-  --force                    # Overwrite existing project
+  --ref <image-path> \
+  --ref-dir <dir> \
+  --info <text> \
+  --desc <text> \
+  --force
+# Repeat --ref for multiple images; use --ref-dir or --ref as needed; --force overwrites.
 
 uv run styleclaw generate <name> \
-  --force                    # Re-submit even if SUCCESS record exists
-  --retry-failed             # Retry only failed tasks
+  --force \
+  --retry-failed
 
 uv run styleclaw refine <name> \
-  --direction <text>         # Optional: human guidance for refinement
+  --direction <text>
 
 uv run styleclaw batch-submit <name> \
-  --i2i                      # Submit image-to-image instead of text-to-image
-  --model <model-id>         # Specify model (default: project's selected model)
+  --i2i \
+  --model <model-id>
 
 uv run styleclaw approve <name> \
-  --phase completed          # For BATCH_I2I → COMPLETED transition
-  --yes                      # Skip confirmation prompt
+  --phase completed \
+  --yes
 
 uv run styleclaw report <name> \
-  --i2i                      # Generate i2i report instead of t2i
+  --i2i
 ```
 
 ## Available Models
