@@ -11,7 +11,7 @@ from typing import Any, AsyncIterator, Optional
 import typer
 from dotenv import load_dotenv
 
-from styleclaw.core.config import MAX_AUTO_ROUNDS, validate_env
+from styleclaw.core.config import MAX_AUTO_ROUNDS, env_truthy, validate_env
 from styleclaw.core.models import Phase, ProjectState, TaskStatus
 from styleclaw.core.state_machine import advance
 from styleclaw.orchestrator.actions import ExecutionContext, StepResult
@@ -70,6 +70,9 @@ def _build_llm_provider() -> Any:
     if os.getenv("OPENAI_COMPAT_API_KEY"):
         from styleclaw.providers.llm.openai_compat import OpenAICompatProvider
         return OpenAICompatProvider()
+    if env_truthy("RUNNINGHUB_LLM"):
+        from styleclaw.providers.llm.runninghub_llm import RunningHubLLMProvider
+        return RunningHubLLMProvider()
     from styleclaw.providers.llm.bedrock import BedrockProvider
     return BedrockProvider()
 

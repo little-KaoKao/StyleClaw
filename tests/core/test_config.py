@@ -2,6 +2,25 @@ import os
 
 import pytest
 
+from styleclaw.core.config import validate_env
+
+
+class TestValidateEnv:
+    def test_runninghub_llm_satisfies_llm_requirement(self, monkeypatch) -> None:
+        monkeypatch.setenv("RUNNINGHUB_API_KEY", "k")
+        monkeypatch.setenv("RUNNINGHUB_LLM", "1")
+        monkeypatch.delenv("OPENAI_COMPAT_API_KEY", raising=False)
+        monkeypatch.delenv("AWS_BEARER_TOKEN_BEDROCK", raising=False)
+        assert validate_env() == []
+
+    def test_no_llm_when_only_image_key(self, monkeypatch) -> None:
+        monkeypatch.setenv("RUNNINGHUB_API_KEY", "k")
+        monkeypatch.delenv("OPENAI_COMPAT_API_KEY", raising=False)
+        monkeypatch.delenv("AWS_BEARER_TOKEN_BEDROCK", raising=False)
+        monkeypatch.delenv("RUNNINGHUB_LLM", raising=False)
+        errs = validate_env()
+        assert any("No LLM credentials" in e for e in errs)
+
 
 class TestConfigDefaults:
     def test_max_auto_rounds_default(self):
