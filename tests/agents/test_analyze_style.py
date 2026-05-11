@@ -33,7 +33,6 @@ def mock_llm() -> AsyncMock:
         "dynamic_state": "energetic",
         "trigger_phrase": "bold colorful anime style",
         "trigger_variants": ["variant1"],
-        "model_suggestions": ["mj-v7"],
     })
     return llm
 

@@ -34,8 +34,7 @@ Return ONLY valid JSON (no markdown fences):
   "spatial_perspective": "description",
   "dynamic_state": "description",
   "trigger_phrase": "structured trigger phrase — see format below",
-  "trigger_variants": ["variant 1", "variant 2", "variant 3"],
-  "model_suggestions": ["model-id-1", "model-id-2"]
+  "trigger_variants": ["variant 1", "variant 2", "variant 3"]
 }
 ```
 

@@ -74,7 +74,6 @@ class StyleAnalysis(_FrozenModel):
     # 输出
     trigger_phrase: str = ""
     trigger_variants: list[str] = Field(default_factory=list)
-    model_suggestions: list[str] = Field(default_factory=list)
 
 
 class DimensionScores(_FrozenModel):
