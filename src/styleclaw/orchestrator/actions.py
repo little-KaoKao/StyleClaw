@@ -298,6 +298,15 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     from styleclaw.core.models import RoundEvaluation
 
     state = project_store.load_state(ctx.project)
+    
+    # Phase guard: refine only works in STYLE_REFINE
+    if state.phase != Phase.STYLE_REFINE:
+        return StepResult(
+            ok=False,
+            message=f"refine requires STYLE_REFINE phase (current: {state.phase}). "
+                    f"Run 'select-model' first to advance from MODEL_SELECT."
+        )
+    
     config = project_store.load_config(ctx.project)
     root = project_store.project_dir(ctx.project)
     ref_paths = [root / r for r in config.ref_images]

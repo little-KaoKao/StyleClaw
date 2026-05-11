@@ -4,7 +4,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from styleclaw.core.time_utils import utcnow_iso as _utcnow_iso
 
@@ -222,9 +222,12 @@ class Action(BaseModel):
 
 
 class LoopConfig(BaseModel):
-    start_step: int
-    end_step: int
+    model_config = ConfigDict(populate_by_name=True)
+
+    start_step: int = Field(alias="from", validation_alias=AliasChoices("start_step", "from"))
+    end_step: int = Field(alias="to", validation_alias=AliasChoices("end_step", "to"))
     max_iterations: int = 5
+    condition: str = ""
 
 
 class ActionPlan(BaseModel):

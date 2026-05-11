@@ -50,6 +50,17 @@ Return ONLY valid JSON (no markdown fences):
 
 {"summary": "...", "steps": [{"name": "...", "description": "...", "args": {}}], "loop": null}
 
+When a loop is needed, use this exact structure (0-indexed step positions):
+
+{"summary": "...", "steps": [...], "loop": {"start_step": 0, "end_step": 3, "max_iterations": 5, "condition": "..."}}
+
+- `start_step`: 0-based index of the first step in the loop body
+- `end_step`: 0-based index of the last step in the loop body (inclusive)
+- `max_iterations`: maximum number of loop repetitions
+- `condition`: human-readable description of the exit condition (e.g., "all scores ≥ 7.0 and total ≥ 7.5")
+
+Do NOT use `from`/`to` — the field names must be exactly `start_step` and `end_step`.
+
 Descriptions should be in Chinese — they are displayed to the user.
 
 ## User Intent

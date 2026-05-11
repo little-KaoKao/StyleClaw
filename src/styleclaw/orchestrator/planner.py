@@ -36,13 +36,6 @@ async def plan(llm: LLMProvider, project: str, intent: str) -> ActionPlan:
 
     available = PHASE_ACTIONS.get(state.phase, [])
 
-    if state.phase.value in ("INIT", "MODEL_SELECT"):
-        next_phases_actions: list[str] = []
-        from styleclaw.core.state_machine import TRANSITIONS
-        for next_phase in TRANSITIONS.get(state.phase, []):
-            next_phases_actions.extend(PHASE_ACTIONS.get(next_phase, []))
-        available = list(dict.fromkeys(available + next_phases_actions))
-
     template = Template(PROMPT_PATH.read_text(encoding="utf-8"))
     system_prompt = template.safe_substitute(
         project_name=project,
