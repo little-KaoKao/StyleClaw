@@ -169,6 +169,7 @@ class BatchConfig(_FrozenModel):
 class ProjectState(_FrozenModel):
     phase: Phase = Phase.INIT
     selected_models: list[str] = Field(default_factory=list)
+    selected_variant: str = "prompt-sref"  # variant chosen at select-model: "prompt-sref" or "prompt-only"
     current_round: int = 0
     current_batch: int = 0
     current_model_select_pass: int = 0
@@ -190,11 +191,14 @@ class ProjectState(_FrozenModel):
             ],
         })
 
-    def with_selected_models(self, models: list[str]) -> ProjectState:
-        return self.model_copy(update={
+    def with_selected_models(self, models: list[str], variant: str = "") -> ProjectState:
+        update: dict[str, Any] = {
             "selected_models": models,
             "last_updated": _utcnow_iso(),
-        })
+        }
+        if variant:
+            update["selected_variant"] = variant
+        return self.model_copy(update=update)
 
     def with_round(self, round_num: int) -> ProjectState:
         return self.model_copy(update={

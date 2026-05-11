@@ -107,13 +107,14 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         )
         uploads = project_store.load_uploads(ctx.project)
         config = project_store.load_config(ctx.project)
-        sref_url = uploads[config.sref_index].url if uploads else ""
+        use_sref = state.selected_variant != "prompt-only"
+        sref_url = (uploads[config.sref_index].url if uploads else "") if use_sref else ""
         records = await generate_style_refine(
             ctx.project, ctx.client, round_num, prompt_config.trigger_phrase,
             sref_url=sref_url, extra_model_params=prompt_config.model_params,
             pass_num=pass_num, force=args.get("force", False),
         )
-        return StepResult(ok=True, message=f"Submitted {len(records)} refine tasks")
+        return StepResult(ok=True, message=f"Submitted {len(records)} refine tasks (variant: {state.selected_variant})")
 
     return StepResult(ok=False, message=f"Cannot generate in {state.phase}")
 
@@ -279,16 +280,22 @@ async def do_select_model(ctx: ExecutionContext, args: dict[str, Any]) -> StepRe
         if m not in MODEL_REGISTRY:
             return StepResult(ok=False, message=f"Unknown model: {m}")
 
+    variant = args.get("variant", "").strip()
+    if variant and variant not in ("prompt-sref", "prompt-only"):
+        return StepResult(ok=False, message=f"Unknown variant: {variant}. Use 'prompt-sref' or 'prompt-only'.")
+
     state = project_store.load_state(ctx.project)
     if state.phase == Phase.MODEL_SELECT:
         new_state = advance(state, Phase.STYLE_REFINE)
-        new_state = new_state.with_selected_models(selected)
+        new_state = new_state.with_selected_models(selected, variant=variant)
         project_store.save_state(ctx.project, new_state)
-        return StepResult(ok=True, message=f"Selected {', '.join(selected)}, advanced to STYLE_REFINE")
+        v_info = f" [{variant}]" if variant else ""
+        return StepResult(ok=True, message=f"Selected {', '.join(selected)}{v_info}, advanced to STYLE_REFINE")
     elif state.phase == Phase.STYLE_REFINE:
-        new_state = state.with_selected_models(selected)
+        new_state = state.with_selected_models(selected, variant=variant)
         project_store.save_state(ctx.project, new_state)
-        return StepResult(ok=True, message=f"Updated models: {', '.join(selected)}")
+        v_info = f" [{variant}]" if variant else ""
+        return StepResult(ok=True, message=f"Updated models: {', '.join(selected)}{v_info}")
 
     return StepResult(ok=False, message=f"Cannot select model in {state.phase}")
 

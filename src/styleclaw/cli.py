@@ -403,6 +403,7 @@ def evaluate(
 def select_model(
     name: str = typer.Argument(..., help="Project name"),
     models: str = typer.Option(..., "--models", help="Comma-separated model IDs"),
+    variant: str = typer.Option("", "--variant", help="Variant to use in STYLE_REFINE: prompt-sref or prompt-only"),
 ) -> None:
     """Confirm selected models for style refinement. Works in MODEL_SELECT or STYLE_REFINE phase."""
     state = project_store.load_state(name)
@@ -413,6 +414,10 @@ def select_model(
         )
         raise typer.Exit(1)
 
+    if variant and variant not in ("prompt-sref", "prompt-only"):
+        typer.echo(f"Error: --variant must be 'prompt-sref' or 'prompt-only', got '{variant}'", err=True)
+        raise typer.Exit(1)
+
     from styleclaw.providers.runninghub.models import MODEL_REGISTRY
 
     selected = [m.strip() for m in models.split(",")]
@@ -421,7 +426,7 @@ def select_model(
             typer.echo(f"Error: Unknown model '{m}'. Available: {list(MODEL_REGISTRY.keys())}", err=True)
             raise typer.Exit(1)
 
-    result = _run_action(name, "select-model", {"models": models})
+    result = _run_action(name, "select-model", {"models": models, "variant": variant})
     if not result.ok:
         typer.echo(f"Error: {result.message}", err=True)
         raise typer.Exit(1)
@@ -881,16 +886,39 @@ def _confirm_select_model(
 
     available = list(MODEL_REGISTRY.keys())
     typer.echo(f"  可选模型: {', '.join(available)}")
-    user_input = typer.prompt(
-        "  选择模型 (逗号分隔, 回车使用推荐)",
-        default=default_models,
-    )
 
-    if not user_input or not user_input.strip():
-        typer.echo("  已取消。")
-        return None
+    while True:
+        user_input = typer.prompt(
+            "  选择模型 (逗号分隔, 回车使用推荐)",
+            default=default_models,
+        )
 
-    return {**args, "models": user_input.strip()}
+        if not user_input or not user_input.strip():
+            typer.echo("  已取消。")
+            return None
+
+        selected = [m.strip() for m in user_input.strip().split(",")]
+        invalid = [m for m in selected if m not in MODEL_REGISTRY]
+        if invalid:
+            typer.echo(f"  ✗ 无效的模型 ID: {', '.join(invalid)}")
+            typer.echo(f"  提示: 只填模型 ID（如 mj-v7），不需要带 prompt-sref / prompt-only")
+            typer.echo(f"  可选模型: {', '.join(available)}")
+            continue
+        break
+
+    # Ask which variant to use in STYLE_REFINE
+    default_variant = evaluation.recommended_variant if evaluation and evaluation.recommended_variant else "prompt-sref"
+    while True:
+        variant_input = typer.prompt(
+            "  出图方案 (prompt-sref / prompt-only, 回车使用推荐)",
+            default=default_variant,
+        )
+        variant = variant_input.strip()
+        if variant in ("prompt-sref", "prompt-only"):
+            break
+        typer.echo("  ✗ 请输入 prompt-sref 或 prompt-only")
+
+    return {**args, "models": ", ".join(selected), "variant": variant}
 
 
 @app.command()
