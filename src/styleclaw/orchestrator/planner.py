@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from string import Template
 
-from styleclaw.core.models import ActionPlan
+from styleclaw.core.models import ActionPlan, Phase
 from styleclaw.core.text_utils import parse_llm_response
 from styleclaw.orchestrator.actions import ACTION_REGISTRY, PHASE_ACTIONS
 from styleclaw.providers.llm.base import LLMProvider
@@ -35,6 +35,18 @@ async def plan(llm: LLMProvider, project: str, intent: str) -> ActionPlan:
     config = project_store.load_config(project)
 
     available = PHASE_ACTIONS.get(state.phase, [])
+
+    # Allow planning across the next phase boundary so the planner can chain
+    # an approve step with subsequent actions (e.g. STYLE_REFINE → BATCH_T2I).
+    # We intentionally exclude INIT and MODEL_SELECT here: those phases have
+    # a user-confirmation gate (select-model) that must not be bypassed, and
+    # the refine action must not run before phase advances (see do_refine guard).
+    if state.phase in (Phase.STYLE_REFINE, Phase.BATCH_T2I, Phase.BATCH_I2I):
+        from styleclaw.core.state_machine import TRANSITIONS
+        next_phases_actions: list[str] = []
+        for next_phase in TRANSITIONS.get(state.phase, []):
+            next_phases_actions.extend(PHASE_ACTIONS.get(next_phase, []))
+        available = list(dict.fromkeys(available + next_phases_actions))
 
     template = Template(PROMPT_PATH.read_text(encoding="utf-8"))
     system_prompt = template.safe_substitute(
