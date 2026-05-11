@@ -599,6 +599,12 @@ def set_sref(
     new_config = config.model_copy(update={"sref_index": index})
     project_store.save_config(name, new_config)
     typer.echo(f"sref set to ref-{index+1:03d}: {config.ref_images[index]}")
+    state = project_store.load_state(name)
+    if state.phase == Phase.MODEL_SELECT:
+        typer.echo(
+            "Hint: existing model-select SUCCESS tasks are not auto-invalidated. "
+            f"To regenerate with this sref: styleclaw generate {name} --force",
+        )
 
 
 @app.command(name="set-pass")

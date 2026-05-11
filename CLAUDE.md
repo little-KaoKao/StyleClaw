@@ -205,8 +205,12 @@ styleclaw poll <project-name>
 # Rollback to MODEL_SELECT — only changes state pointer, keeps all pass data
 styleclaw rollback <project-name> --to MODEL_SELECT
 
-# Generate creates a new pass (pass-002, pass-003, etc.)
-styleclaw generate <project-name>
+# `generate` uses `state.current_model_select_pass` (unchanged by rollback) and skips
+# non-FAILED tasks unless `--force`. After rollback, use `--force` to re-submit all
+# model-select slots (still same pass folder unless you bumped pass via set-pass /
+# retest-models). To start a new pass directory (pass-002+), use `retest-models` from
+# STYLE_REFINE/BATCH_T2I, or copy analysis + `set-pass`, or delete a bad pass dir per below.
+styleclaw generate <project-name> --force
 styleclaw poll <project-name>
 styleclaw evaluate <project-name>
 

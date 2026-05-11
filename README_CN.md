@@ -137,6 +137,13 @@ uv run styleclaw poll spider-verse
 uv run styleclaw evaluate spider-verse
 uv run styleclaw select-model spider-verse --models mj-v7
 
+# 若在 MODEL_SELECT 阶段更换风格参考图（set-sref）后要重新出图：
+# 同一 pass 下 generate 会跳过已有 SUCCESS，不会自动升到 pass-002。
+# 请用 --force 重跑全部对比位，或见 CLAUDE.md「换 sref 后」与 retest-models / set-pass 说明。
+# uv run styleclaw set-sref spider-verse 2
+# uv run styleclaw generate spider-verse --force
+# uv run styleclaw poll spider-verse && uv run styleclaw evaluate spider-verse
+
 # 5. 精炼触发短语（重复直到满意）
 uv run styleclaw refine spider-verse
 uv run styleclaw generate spider-verse
