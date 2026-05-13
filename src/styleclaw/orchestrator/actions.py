@@ -120,7 +120,13 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
 
 
 async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
-    from styleclaw.scripts.poll import poll_batch, poll_model_select, poll_style_refine
+    from styleclaw.scripts.poll import (
+        poll_batch,
+        poll_model_select,
+        poll_style_refine,
+        retry_failed_model_select,
+        retry_failed_style_refine,
+    )
 
     max_cycles = args.get("max_cycles", MAX_POLL_CYCLES)
     state = project_store.load_state(ctx.project)
@@ -145,10 +151,29 @@ async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
         succeeded = sum(1 for r in records.values() if r.status == TaskStatus.SUCCESS)
         failed = sum(1 for r in records.values() if r.status == TaskStatus.FAILED)
         if not pending:
+            # All tasks reached a terminal state. Auto-retry FAILED ones once
+            # (model-select and style-refine only — batch retries are too
+            # costly with 100 cases and should stay explicit). After retry,
+            # always continue downstream: partial failures are tolerated so
+            # evaluate/select-model don't get blocked by a few timeouts.
+            if failed:
+                if state.phase == Phase.MODEL_SELECT:
+                    pass_num = state.current_model_select_pass or 1
+                    records = await retry_failed_model_select(
+                        ctx.project, ctx.client, pass_num=pass_num,
+                    )
+                elif state.phase == Phase.STYLE_REFINE:
+                    pass_num = state.current_model_select_pass or 1
+                    records = await retry_failed_style_refine(
+                        ctx.project, ctx.client, state.current_round, pass_num=pass_num,
+                    )
+                succeeded = sum(1 for r in records.values() if r.status == TaskStatus.SUCCESS)
+                failed = sum(1 for r in records.values() if r.status == TaskStatus.FAILED)
+
             msg = f"{succeeded}/{len(records)} succeeded"
             if failed:
-                msg += f" ({failed} failed)"
-            return StepResult(ok=failed == 0, message=msg)
+                msg += f" ({failed} failed, skipping)"
+            return StepResult(ok=True, message=msg, data={"succeeded": succeeded, "failed": failed})
 
         logger.info("Waiting... %d/%d completed (cycle %d/%d)", succeeded + failed, len(records), cycle + 1, max_cycles)
         await asyncio.sleep(ctx.poll_interval)
@@ -472,10 +497,10 @@ async def do_retest_models(ctx: ExecutionContext, args: dict[str, Any]) -> StepR
     from styleclaw.core.state_machine import advance
 
     state = project_store.load_state(ctx.project)
-    if state.phase not in (Phase.STYLE_REFINE, Phase.BATCH_T2I):
+    if state.phase not in (Phase.MODEL_SELECT, Phase.STYLE_REFINE, Phase.BATCH_T2I):
         return StepResult(
             ok=False,
-            message=f"retest-models requires STYLE_REFINE or BATCH_T2I (current: {state.phase})",
+            message=f"retest-models requires MODEL_SELECT, STYLE_REFINE, or BATCH_T2I (current: {state.phase})",
         )
 
     old_pass = state.current_model_select_pass or 1
@@ -500,10 +525,16 @@ async def do_retest_models(ctx: ExecutionContext, args: dict[str, Any]) -> StepR
         ctx.project, StyleAnalysis(trigger_phrase=current_trigger), pass_num=new_pass,
     )
 
-    new_state = (
-        advance(state, Phase.MODEL_SELECT)
-        .with_model_select_pass(new_pass)
-    )
+    # advance() only allows forward transitions, so only call it when leaving
+    # a later phase. From MODEL_SELECT we stay in MODEL_SELECT and just bump
+    # the pass counter.
+    if state.phase == Phase.MODEL_SELECT:
+        new_state = state.with_model_select_pass(new_pass)
+    else:
+        new_state = (
+            advance(state, Phase.MODEL_SELECT)
+            .with_model_select_pass(new_pass)
+        )
     project_store.save_state(ctx.project, new_state)
     return StepResult(
         ok=True,
@@ -544,7 +575,7 @@ ACTION_REGISTRY: dict[str, ActionDef] = {
 
 PHASE_ACTIONS: dict[Phase, list[str]] = {
     Phase.INIT:         ["analyze"],
-    Phase.MODEL_SELECT: ["generate", "poll", "evaluate", "select-model"],
+    Phase.MODEL_SELECT: ["generate", "poll", "evaluate", "select-model", "retest-models"],
     Phase.STYLE_REFINE: ["refine", "generate", "poll", "evaluate", "approve", "select-model", "retest-models"],
     Phase.BATCH_T2I:    ["design-cases", "batch-submit", "poll", "report", "approve", "retest-models"],
     Phase.BATCH_I2I:    ["batch-submit", "poll", "report", "approve", "back-to-t2i"],

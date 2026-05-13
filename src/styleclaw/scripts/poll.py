@@ -7,9 +7,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from styleclaw.core.models import TaskRecord, TaskStatus
 from styleclaw.providers.runninghub.client import RunningHubClient
-from styleclaw.providers.runninghub.tasks import poll_and_update
+from styleclaw.providers.runninghub.models import get_model
+from styleclaw.providers.runninghub.tasks import poll_and_update, submit_task
 from styleclaw.storage import project_store
 from styleclaw.storage.image_store import download_image
 
@@ -273,3 +276,86 @@ async def poll_batch(
 
     _log_download_summary(f"Batch {batch_num} ({phase})", total_stats, len(updated))
     return updated
+
+
+async def _resubmit_from_record(
+    client: RunningHubClient, record: TaskRecord,
+) -> TaskRecord | None:
+    """Resubmit a failed task using its stored params/model_id. Returns the new
+    TaskRecord on success, or None if resubmission could not be attempted."""
+    if not record.model_id or not record.params:
+        logger.warning(
+            "Cannot resubmit task %s: missing model_id or params.", record.task_id,
+        )
+        return None
+    try:
+        config = get_model(record.model_id)
+    except (KeyError, ValueError) as exc:
+        logger.warning("Cannot resubmit task %s: %s", record.task_id, exc)
+        return None
+    try:
+        return await submit_task(
+            client, config.t2i_endpoint, record.params, record.model_id,
+        )
+    except (RuntimeError, httpx.HTTPError) as exc:
+        logger.warning("Resubmit failed for %s: %s", record.task_id, exc)
+        return None
+
+
+async def retry_failed_model_select(
+    name: str,
+    client: RunningHubClient,
+    pass_num: int = 1,
+) -> dict[str, TaskRecord]:
+    """Resubmit FAILED model-select tasks once, then poll the new submissions.
+    Returns the final records dict (mixing previously-succeeded, newly-resubmitted,
+    and any still-failed entries)."""
+    records = project_store.load_all_task_records(name, pass_num=pass_num)
+    failed_keys = [k for k, r in records.items() if r.status == TaskStatus.FAILED]
+    if not failed_keys:
+        return records
+
+    logger.info("Retrying %d failed model-select task(s) once...", len(failed_keys))
+    for key in failed_keys:
+        new_record = await _resubmit_from_record(client, records[key])
+        if new_record is None:
+            continue
+        if "/" in key:
+            model_id, variant = key.split("/", 1)
+            project_store.save_task_record(
+                name, model_id, new_record, variant=variant, pass_num=pass_num,
+            )
+        else:
+            project_store.save_task_record(name, key, new_record, pass_num=pass_num)
+
+    return await poll_model_select(name, client, pass_num=pass_num)
+
+
+async def retry_failed_style_refine(
+    name: str,
+    client: RunningHubClient,
+    round_num: int,
+    pass_num: int = 1,
+) -> dict[str, TaskRecord]:
+    """Resubmit FAILED style-refine tasks once, then poll. Same contract as
+    retry_failed_model_select."""
+    records = project_store.load_all_round_task_records(
+        name, round_num, pass_num=pass_num,
+    )
+    failed_keys = [k for k, r in records.items() if r.status == TaskStatus.FAILED]
+    if not failed_keys:
+        return records
+
+    logger.info(
+        "Retrying %d failed style-refine task(s) (round %d) once...",
+        len(failed_keys), round_num,
+    )
+    for model_id in failed_keys:
+        new_record = await _resubmit_from_record(client, records[model_id])
+        if new_record is None:
+            continue
+        project_store.save_round_task_record(
+            name, round_num, model_id, new_record, pass_num=pass_num,
+        )
+
+    return await poll_style_refine(name, client, round_num, pass_num=pass_num)

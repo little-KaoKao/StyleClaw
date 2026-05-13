@@ -25,10 +25,12 @@ CROSS_PHASE_PLANNABLE_FROM = frozenset({
     Phase.INIT, Phase.STYLE_REFINE, Phase.BATCH_T2I, Phase.BATCH_I2I,
 })
 
-# Actions that advance the project across a phase boundary and require
-# explicit user confirmation. They are only made plannable when the project
-# is already in the phase that owns them — never via cross-phase extension.
-GATED_CROSS_PHASE_ACTIONS: frozenset[str] = frozenset({"select-model", "approve"})
+# Actions that advance the project across a phase boundary, change pass
+# scope, or otherwise require explicit user intent. They are only made
+# plannable when the project is already in the phase that owns them — never
+# via cross-phase extension. (`retest-models` opens a new model-select pass
+# and should never be inserted just because the user said "analyze".)
+GATED_CROSS_PHASE_ACTIONS: frozenset[str] = frozenset({"select-model", "approve", "retest-models"})
 
 
 def _build_actions_text(actions: list[str]) -> str:

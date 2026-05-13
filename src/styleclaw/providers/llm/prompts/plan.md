@@ -29,6 +29,7 @@ $available_actions
 - **design-cases**: LLM designs 100 diverse test cases across 10 categories. Creates batch config.
 - **batch-submit**: Submit batch generation tasks (all pending cases). Optional `args.model` to override.
 - **report**: Generate HTML visual report for current batch.
+- **retest-models**: Open a new MODEL_SELECT pass (pass-002, pass-003, ...) using the current trigger. Preserves previous pass data on disk. Use only when the user explicitly asks to re-test models or start a fresh model-comparison round.
 
 ## Loop Support
 
@@ -36,13 +37,14 @@ If the plan involves iterating (e.g., refine until scores pass), include a `loop
 
 ## Rules
 
-1. Only use actions available in the current phase. If the goal requires crossing phases, chain the actions that advance the phase (e.g., analyze advances INIT → MODEL_SELECT, then MODEL_SELECT actions become available).
+1. Every action listed under **Available Actions** is plannable **in this single run** — including ones that belong to the next phase after a transition. Do not defer them to a future run. Example: if the user is in INIT and says "分析风格并选出最佳模型", `generate / poll / evaluate` will already appear in Available Actions, so chain `analyze → generate → poll → evaluate` in one plan.
 2. `poll` must follow every `generate` or `batch-submit` — generation is async.
 3. `evaluate` requires images to exist — must come after `generate` + `poll`.
 4. `refine` must come before `generate` in STYLE_REFINE (it sets the trigger phrase).
-5. `select-model` requires `args.models`. If the user specifies a model, include it. If not, use the evaluate recommendation.
+5. `select-model` requires `args.models`. If the user specifies a model, include it. If not, use the evaluate recommendation. **Do not emit `select-model` automatically as part of a cross-phase chain** — it always pauses for user confirmation, so only include it when the user is already in the phase that owns it (MODEL_SELECT/STYLE_REFINE) and has explicitly asked to pick a model.
 6. If the user's intent involves "until satisfied" or iterative refinement, use a loop over refine → generate → poll → evaluate.
-7. Keep the plan minimal — don't add unnecessary steps.
+7. `retest-models` opens a new model-select pass (pass-002, pass-003, ...) without destroying earlier passes. Use it only when the user explicitly asks to re-test models / re-run from scratch / start a new round of model comparison. Never insert it automatically just because the previous run had partial failures — `poll` already auto-retries failed tasks once and skips the rest.
+8. Keep the plan minimal — don't add unnecessary steps.
 
 ## Output Format
 
