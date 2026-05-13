@@ -14,6 +14,22 @@ logger = logging.getLogger(__name__)
 
 PROMPT_PATH = Path(__file__).parent.parent / "providers" / "llm" / "prompts" / "plan.md"
 
+# Phases from which the planner is allowed to see the next phase's actions in
+# the same plan. The transition into the next phase for each of these is
+# either automatic (INIT → MODEL_SELECT via `analyze`) or already lives behind
+# its own user-confirmation gate inside the current phase's action list
+# (`approve` in STYLE_REFINE / BATCH_T2I, `back-to-t2i` / `approve` in
+# BATCH_I2I). MODEL_SELECT is deliberately excluded: its `select-model` gate
+# must not be bypassed by an LLM-emitted plan.
+CROSS_PHASE_PLANNABLE_FROM = frozenset({
+    Phase.INIT, Phase.STYLE_REFINE, Phase.BATCH_T2I, Phase.BATCH_I2I,
+})
+
+# Actions that advance the project across a phase boundary and require
+# explicit user confirmation. They are only made plannable when the project
+# is already in the phase that owns them — never via cross-phase extension.
+GATED_CROSS_PHASE_ACTIONS: frozenset[str] = frozenset({"select-model", "approve"})
+
 
 def _build_actions_text(actions: list[str]) -> str:
     return "\n".join(f"- `{a}`" for a in actions)
@@ -36,17 +52,13 @@ async def plan(llm: LLMProvider, project: str, intent: str) -> ActionPlan:
 
     available = PHASE_ACTIONS.get(state.phase, [])
 
-    # Allow planning across the next phase boundary so the planner can chain
-    # an approve step with subsequent actions (e.g. STYLE_REFINE → BATCH_T2I).
-    # We intentionally exclude INIT and MODEL_SELECT here: those phases have
-    # a user-confirmation gate (select-model) that must not be bypassed, and
-    # the refine action must not run before phase advances (see do_refine guard).
-    if state.phase in (Phase.STYLE_REFINE, Phase.BATCH_T2I, Phase.BATCH_I2I):
+    if state.phase in CROSS_PHASE_PLANNABLE_FROM:
         from styleclaw.core.state_machine import TRANSITIONS
         next_phases_actions: list[str] = []
         for next_phase in TRANSITIONS.get(state.phase, []):
             next_phases_actions.extend(PHASE_ACTIONS.get(next_phase, []))
-        available = list(dict.fromkeys(available + next_phases_actions))
+        extended = [a for a in next_phases_actions if a not in GATED_CROSS_PHASE_ACTIONS]
+        available = list(dict.fromkeys(available + extended))
 
     template = Template(PROMPT_PATH.read_text(encoding="utf-8"))
     system_prompt = template.safe_substitute(

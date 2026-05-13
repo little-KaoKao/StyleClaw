@@ -47,8 +47,8 @@ def generate_model_select_report(name: str, pass_num: int = 1) -> Path:
         _relative_img_src(root / r, dest_dir) for r in config.ref_images
     ]
 
-    # sref uses first ref image
-    sref_image = ref_images[0] if ref_images else ""
+    sref_idx = config.sref_index if 0 <= config.sref_index < len(ref_images) else 0
+    sref_image = ref_images[sref_idx] if ref_images else ""
 
     # Import test subjects from generate.py
     from styleclaw.scripts.generate import TEST_SUBJECTS
@@ -115,8 +115,8 @@ def generate_style_refine_report(
         _relative_img_src(root / r, dest_dir) for r in config.ref_images
     ]
 
-    # sref uses first ref image
-    sref_image = ref_images[0] if ref_images else ""
+    sref_idx = config.sref_index if 0 <= config.sref_index < len(ref_images) else 0
+    sref_image = ref_images[sref_idx] if ref_images else ""
 
     # Import test subjects from generate.py
     from styleclaw.scripts.generate import TEST_SUBJECTS

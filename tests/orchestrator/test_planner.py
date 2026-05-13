@@ -98,6 +98,39 @@ class TestPlanner:
         result = await plan(llm, "test-proj", "analyze")
         assert result.steps[0].name == "analyze"
 
+    async def test_init_phase_can_plan_into_model_select(self, setup_project) -> None:
+        """From INIT, the planner is allowed to chain `analyze` with
+        MODEL_SELECT's non-gated actions in one plan so a multi-phase intent
+        like '分析并对比模型' does not require running `run` twice."""
+        state = ProjectState(phase=Phase.INIT)
+        project_store.save_state("test-proj", state)
+
+        llm = AsyncMock()
+        llm.invoke = AsyncMock(return_value=json.dumps({
+            "summary": "analyze and compare",
+            "steps": [
+                {"name": "analyze", "description": "分析参考图", "args": {}},
+                {"name": "generate", "description": "生成测试图", "args": {}},
+                {"name": "poll", "description": "等待完成", "args": {}},
+                {"name": "evaluate", "description": "评估对比", "args": {}},
+            ],
+            "loop": None,
+        }))
+
+        result = await plan(llm, "test-proj", "分析参考图，对比所有模型，给出推荐")
+        assert [s.name for s in result.steps] == ["analyze", "generate", "poll", "evaluate"]
+        # `select-model` is a gated transition action — it must not slip into
+        # the available-actions list via cross-phase extension. The available
+        # list uses "- `name`" entries; the descriptions section uses
+        # "- **name**: ..." so we only check the bullet-list form here.
+        call_args = llm.invoke.call_args_list[0]
+        system_prompt = call_args.kwargs.get("system", "")
+        assert "- `generate`" in system_prompt
+        assert "- `poll`" in system_prompt
+        assert "- `evaluate`" in system_prompt
+        assert "- `select-model`" not in system_prompt
+        assert "- `refine`" not in system_prompt
+
 
 class TestPlannerValidation:
     async def test_retries_on_unknown_action(self, setup_project) -> None:

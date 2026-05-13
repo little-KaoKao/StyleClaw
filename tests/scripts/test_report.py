@@ -104,6 +104,46 @@ class TestGenerateModelSelectReport:
         assert 'src="results/mj-v7/output-001.png"' in html
         assert 'src="../../refs/ref-001.png"' in html
 
+    def test_sref_image_honors_sref_index(self, tmp_path) -> None:
+        """The sref thumbnail in the report must reflect config.sref_index,
+        not always default to ref_images[0]."""
+        config = ProjectConfig(
+            name="sref-proj",
+            ip_info="anime",
+            ref_images=["refs/ref-001.png", "refs/ref-002.png", "refs/ref-003.png"],
+            sref_index=2,
+        )
+        root = project_store.create_project(config)
+        for fname in ("ref-001.png", "ref-002.png", "ref-003.png"):
+            Image.new("RGB", (100, 100)).save(root / "refs" / fname)
+        project_store.save_state(
+            "sref-proj",
+            ProjectState(phase=Phase.MODEL_SELECT, current_round=1, current_batch=1),
+        )
+
+        project_store.save_analysis("sref-proj", StyleAnalysis(trigger_phrase="x"))
+        evaluation = ModelEvaluation(
+            evaluations=[
+                ModelScore(
+                    model="mj-v7",
+                    scores=DimensionScores(color_palette=7.0, line_style=7.0, lighting=7.0, texture=7.0, overall_mood=7.0),
+                    total=7.0,
+                    analysis="ok",
+                    suggestions="",
+                ),
+            ],
+            recommendation="mj-v7",
+        )
+        project_store.save_evaluation("sref-proj", evaluation)
+
+        path = generate_model_select_report("sref-proj")
+        html = path.read_text(encoding="utf-8")
+
+        sref_section = html.split('Style Reference')[1].split('</div>')[0]
+        assert "ref-003.png" in sref_section
+        assert "ref-001.png" not in sref_section
+        assert "ref-002.png" not in sref_section
+
 
 class TestGenerateStyleRefineReport:
     def test_generates_html(self, setup_project) -> None:
