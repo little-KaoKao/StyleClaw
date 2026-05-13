@@ -243,3 +243,40 @@ class TestPlanNoProjectMode:
         result = await plan(llm, "fresh", "用 /tmp/abc 的图分析风格")
         assert "fresh" in result.steps[0].description
         assert "/tmp/abc" in result.steps[0].description
+
+
+class TestStopSummary:
+    async def test_init_only_plan_has_stop_summary(self) -> None:
+        from unittest.mock import AsyncMock as _AM
+        result = await plan(_AM(), "ghost", "create from refs")
+        assert result.stop_summary
+        assert "INIT" in result.stop_summary or "项目" in result.stop_summary
+
+    async def test_planned_stop_summary_round_trips(self, setup_project) -> None:
+        state = ProjectState(phase=Phase.INIT)
+        project_store.save_state("test-proj", state)
+
+        llm = AsyncMock()
+        llm.invoke = AsyncMock(return_value=json.dumps({
+            "summary": "分析风格",
+            "steps": [{"name": "analyze", "description": "分析", "args": {}}],
+            "loop": None,
+            "stop_summary": "分析完后停在 MODEL_SELECT，告诉我选哪个模型",
+        }))
+
+        result = await plan(llm, "test-proj", "分析风格")
+        assert result.stop_summary == "分析完后停在 MODEL_SELECT，告诉我选哪个模型"
+
+    async def test_missing_stop_summary_defaults_empty(self, setup_project) -> None:
+        state = ProjectState(phase=Phase.INIT)
+        project_store.save_state("test-proj", state)
+
+        llm = AsyncMock()
+        llm.invoke = AsyncMock(return_value=json.dumps({
+            "summary": "分析",
+            "steps": [{"name": "analyze", "description": "分析", "args": {}}],
+            "loop": None,
+        }))
+
+        result = await plan(llm, "test-proj", "分析")
+        assert result.stop_summary == ""

@@ -238,3 +238,4 @@ class ActionPlan(BaseModel):
     summary: str
     steps: list[Action]
     loop: LoopConfig | None = None
+    stop_summary: str = ""

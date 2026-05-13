@@ -123,6 +123,28 @@ class TestDisplayPlan:
         assert "Loop" in captured.out
         assert "max 3" in captured.out
 
+    def test_display_with_stop_summary(self, setup_project, capsys) -> None:
+        project_store.save_state("test-proj", ProjectState(phase=Phase.INIT))
+        plan = ActionPlan(
+            summary="Analyze",
+            steps=[Action(name="analyze", description="分析")],
+            stop_summary="分析完后停在 MODEL_SELECT，告诉我选哪个模型",
+        )
+        display_plan(plan, "test-proj")
+        captured = capsys.readouterr()
+        assert "停在哪" in captured.out
+        assert "告诉我选哪个模型" in captured.out
+
+    def test_display_no_stop_summary_omits_block(self, setup_project, capsys) -> None:
+        project_store.save_state("test-proj", ProjectState(phase=Phase.INIT))
+        plan = ActionPlan(
+            summary="x",
+            steps=[Action(name="analyze", description="x")],
+        )
+        display_plan(plan, "test-proj")
+        captured = capsys.readouterr()
+        assert "停在哪" not in captured.out
+
 
 class TestExecute:
     async def test_single_step(self, setup_project, ctx) -> None:

@@ -112,6 +112,9 @@ def display_plan(plan: ActionPlan, project: str) -> None:
         s, e = plan.loop.start_step + 1, plan.loop.end_step + 1
         typer.echo(f"\n  Loop: steps {s}-{e} repeat until pass (max {plan.loop.max_iterations}x)")
 
+    if plan.stop_summary:
+        typer.echo(f"\n  停在哪：{plan.stop_summary}")
+
     typer.echo("")
 
 

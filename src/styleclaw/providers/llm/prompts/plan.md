@@ -54,12 +54,18 @@ If the plan involves iterating (e.g., refine until scores pass), include a `loop
 
 Return ONLY valid JSON (no markdown fences):
 
-{"summary": "...", "steps": [{"name": "...", "description": "...", "args": {}}], "loop": null}
+{"summary": "...", "steps": [{"name": "...", "description": "...", "args": {}}], "loop": null, "stop_summary": "..."}
 
 When a loop is needed, use this exact structure (0-indexed step positions):
 
-{"summary": "...", "steps": [...], "loop": {"start_step": 0, "end_step": 3, "max_iterations": 5, "condition": "..."}}
+{"summary": "...", "steps": [...], "loop": {"start_step": 0, "end_step": 3, "max_iterations": 5, "condition": "..."}, "stop_summary": "..."}
 
+- `summary`: one Chinese sentence describing what the plan does
+- `stop_summary`: one short Chinese sentence describing **where the plan stops and why** — what the user can do/expect next. Examples:
+  - "评估完成后停在这里，等你说选哪个模型。"
+  - "本轮精炼分数过线就停，否则会自动再来一轮（最多 5 轮）。"
+  - "提交完批量任务就停，下一步是 poll 查看进度并出报告。"
+  Always end the plan with a stop_summary so the user knows what comes next without having to inspect the steps.
 - `start_step`: 0-based index of the first step in the loop body
 - `end_step`: 0-based index of the last step in the loop body (inclusive)
 - `max_iterations`: maximum number of loop repetitions
