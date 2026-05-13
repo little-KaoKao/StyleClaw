@@ -55,18 +55,24 @@ def generate_model_select_report(name: str, pass_num: int = 1) -> Path:
 
     model_data: list[dict] = []
     for ev in evaluation.evaluations:
-        # Collect images from all gender variants (prompt-only-male, prompt-only-female, etc.)
+        # Collect images from both gender variants (prompt-only-male, prompt-only-female).
+        # The bare `{variant}` directory (no gender suffix) is a legacy layout that no
+        # longer holds data; iterating over it would side-effect a mkdir via
+        # model_results_dir and leave empty folders behind.
         all_images: list[Path] = []
-        for gender_suffix in ["", "-male", "-female"]:
-            variant_name = f"{ev.variant}{gender_suffix}" if ev.variant else ""
-            if variant_name:
+        if ev.variant:
+            for gender_suffix in ("-male", "-female"):
                 results_dir = project_store.model_results_dir(
-                    name, ev.model, variant=variant_name, pass_num=pass_num,
+                    name, ev.model,
+                    variant=f"{ev.variant}{gender_suffix}",
+                    pass_num=pass_num,
                 )
-            else:
-                results_dir = project_store.model_results_dir(
-                    name, ev.model, pass_num=pass_num,
-                )
+                if results_dir.exists():
+                    all_images.extend(list_output_images(results_dir))
+        else:
+            results_dir = project_store.model_results_dir(
+                name, ev.model, pass_num=pass_num,
+            )
             if results_dir.exists():
                 all_images.extend(list_output_images(results_dir))
 
