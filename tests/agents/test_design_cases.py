@@ -32,6 +32,25 @@ class TestDesignCases:
         call_args = mock_llm.invoke.call_args
         assert "Spider-Verse" in call_args.kwargs["system"]
 
+    async def test_no_feedback_section_when_empty(self, mock_llm) -> None:
+        await design_cases(mock_llm, "anime", "x", batch_num=1)
+        sys_prompt = mock_llm.invoke.call_args.kwargs["system"]
+        # Placeholder must not leak through and there must be no feedback heading
+        assert "{feedback_section}" not in sys_prompt
+        assert "User feedback on previous batch" not in sys_prompt
+
+    async def test_feedback_appended_to_prompt(self, mock_llm) -> None:
+        feedback = "上一批室内场景太少，多加一些咖啡馆和书房"
+        await design_cases(mock_llm, "anime", "x", batch_num=2, feedback=feedback)
+        sys_prompt = mock_llm.invoke.call_args.kwargs["system"]
+        assert "User feedback on previous batch" in sys_prompt
+        assert feedback in sys_prompt
+
+    async def test_whitespace_only_feedback_treated_as_empty(self, mock_llm) -> None:
+        await design_cases(mock_llm, "anime", "x", batch_num=2, feedback="   \n  ")
+        sys_prompt = mock_llm.invoke.call_args.kwargs["system"]
+        assert "User feedback on previous batch" not in sys_prompt
+
 
 class TestFormatSkeleton:
     def test_formats_categories(self) -> None:

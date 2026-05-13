@@ -18,7 +18,7 @@ Fill in the `description` field for each test case below. Each description shoul
 ## Categories and Cases
 
 {case_skeleton}
-
+{feedback_section}
 ## Rules
 
 1. Descriptions should describe the CHARACTER or SCENE only, not the style.

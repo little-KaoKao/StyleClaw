@@ -27,7 +27,7 @@ $available_actions
 - **select-model**: Choose which model(s) to use. Requires `args.models` (comma-separated). In MODEL_SELECT: advances to STYLE_REFINE. In STYLE_REFINE: updates models without phase change. **Always pauses for user confirmation** before executing — the user reviews LLM scores and may override the model choice. Only skip confirmation if the user explicitly says to proceed without it.
 - **refine**: LLM refines trigger phrase based on previous evaluations. Increments round. Max 5 rounds. Optional `args.direction` for human guidance.
 - **approve**: Advance to next phase. From STYLE_REFINE → BATCH_T2I. With `args.target = "completed"`: BATCH_I2I → COMPLETED.
-- **design-cases**: LLM designs 100 diverse test cases across 10 categories. Creates batch config.
+- **design-cases**: LLM designs 100 diverse test cases across 10 categories. Creates a new batch config (current_batch + 1). Optional `args.feedback` (string): free-text user feedback on the previous batch — pass it when the user says "再来一批，这次多一点室内场景" / "上一批群像太少，重做一批". The feedback is folded into the design prompt; a fresh batch number is always created (existing batches are preserved).
 - **batch-submit**: Submit batch generation tasks (all pending cases). Optional `args.model` to override.
 - **report**: Generate HTML visual report for current batch.
 - **retest-models**: Open a new MODEL_SELECT pass (pass-002, pass-003, ...) using the current trigger. Preserves previous pass data on disk. Use only when the user explicitly asks to re-test models or start a fresh model-comparison round.

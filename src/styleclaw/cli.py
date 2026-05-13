@@ -811,6 +811,10 @@ def back_to_t2i_cmd(
 @app.command(name="design-cases")
 def design_cases_cmd(
     name: str = typer.Argument(..., help="Project name"),
+    feedback: str = typer.Option(
+        "", "--feedback",
+        help="Free-text feedback on the previous batch to inform the new design",
+    ),
 ) -> None:
     """Design 100 test cases using LLM."""
     state = project_store.load_state(name)
@@ -818,7 +822,10 @@ def design_cases_cmd(
         typer.echo(f"Error: Must be in BATCH_T2I phase (current: {state.phase})", err=True)
         raise typer.Exit(1)
 
-    result = _run_action(name, "design-cases")
+    action_args: dict[str, Any] = {}
+    if feedback:
+        action_args["feedback"] = feedback
+    result = _run_action(name, "design-cases", action_args)
     if not result.ok:
         typer.echo(f"Error: {result.message}", err=True)
         raise typer.Exit(1)

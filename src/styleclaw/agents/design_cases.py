@@ -21,15 +21,25 @@ async def design_cases(
     ip_info: str,
     trigger_phrase: str,
     batch_num: int,
+    feedback: str = "",
 ) -> BatchConfig:
     skeleton = generate_case_skeleton()
     skeleton_text = _format_skeleton(skeleton)
+
+    feedback_section = (
+        f"\n\n## User feedback on previous batch\n\n{sanitize_braces(feedback)}\n\n"
+        "Apply this feedback when designing the new batch — adjust subjects, "
+        "scenes, or angles accordingly while keeping the generalization rule."
+        if feedback.strip()
+        else ""
+    )
 
     system_prompt = (
         PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
         .replace("{ip_info}", sanitize_braces(ip_info))
         .replace("{trigger_phrase}", trigger_phrase)
         .replace("{case_skeleton}", skeleton_text)
+        .replace("{feedback_section}", feedback_section)
     )
 
     messages = [{"role": "user", "content": [

@@ -459,15 +459,20 @@ async def do_design_cases(ctx: ExecutionContext, args: dict[str, Any]) -> StepRe
     prompt_config = project_store.load_prompt_config(
         ctx.project, state.current_round, pass_num=pass_num,
     )
+    feedback = str(args.get("feedback", "") or "").strip()
     batch_config = await design_cases(
         ctx.llm, config.ip_info, prompt_config.trigger_phrase, batch_num,
+        feedback=feedback,
     )
     project_store.save_batch_config(ctx.project, batch_num, batch_config)
 
     new_state = state.with_batch(batch_num)
     project_store.save_state(ctx.project, new_state)
 
-    return StepResult(ok=True, message=f"Designed {len(batch_config.cases)} cases")
+    msg = f"Designed {len(batch_config.cases)} cases (batch {batch_num})"
+    if feedback:
+        msg += " [applied feedback]"
+    return StepResult(ok=True, message=msg)
 
 
 async def do_batch_submit(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
