@@ -1,17 +1,81 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, Callable
 
 import typer
 
-from styleclaw.core.models import ActionPlan, LoopConfig
+from styleclaw.core.models import ActionPlan, LoopConfig, RoundEvaluation
 from styleclaw.orchestrator.actions import ACTION_REGISTRY, ExecutionContext, StepResult
 from styleclaw.storage import project_store
 
 logger = logging.getLogger(__name__)
 
 ConfirmCallback = Callable[[str, dict[str, Any], ExecutionContext], dict[str, Any] | None]
+
+_DIMENSION_LABELS: dict[str, str] = {
+    "color_palette": "色彩调性",
+    "line_style": "线条风格",
+    "lighting": "光影",
+    "texture": "材质",
+    "overall_mood": "整体氛围",
+}
+
+_DIMENSION_HINTS: dict[str, str] = {
+    "color_palette": "提高色彩饱和度、减弱色差光",
+    "line_style": "调整线条粗细、加强轮廓",
+    "lighting": "增强光影对比、加强立体感",
+    "texture": "增加材质细节、强化笔触",
+    "overall_mood": "调整整体氛围、强化情绪表达",
+}
+
+
+def _find_weakest_dimension(evaluation: RoundEvaluation) -> tuple[str, float] | None:
+    weakest: tuple[str, float] | None = None
+    for ev in evaluation.evaluations:
+        for dim in _DIMENSION_LABELS:
+            score = getattr(ev.scores, dim)
+            if weakest is None or score < weakest[1]:
+                weakest = (dim, score)
+    return weakest
+
+
+def _format_report_path(project: str, round_num: int, pass_num: int) -> str:
+    report_path = (
+        project_store.project_dir(project)
+        / "style-refine"
+        / f"pass-{pass_num:03d}"
+        / f"round-{round_num:03d}"
+        / "report.html"
+    )
+    try:
+        return str(report_path.relative_to(Path.cwd()))
+    except ValueError:
+        return str(report_path)
+
+
+def _format_needs_human_hint(
+    project: str, round_num: int, pass_num: int, evaluation: RoundEvaluation,
+) -> str:
+    weakest = _find_weakest_dimension(evaluation)
+    report_path = _format_report_path(project, round_num, pass_num)
+
+    if weakest is None:
+        diagnosis = "评分缺失，无法定位最弱维度"
+        hint_phrase = "调整方向"
+    else:
+        dim, score = weakest
+        label = _DIMENSION_LABELS.get(dim, dim)
+        diagnosis = f"{label}得分 {score:.1f} 最弱"
+        hint_phrase = _DIMENSION_HINTS.get(dim, "调整方向")
+
+    return (
+        "\n  !! needs_human: 某维度得分 < 5，自动循环已停止。\n"
+        f"  {diagnosis}；可以告诉我方向，例如：\n"
+        f'    styleclaw run "{hint_phrase}" -p {project}\n'
+        f"  报告：{report_path}\n"
+    )
 
 
 def _should_continue_loop(ctx: ExecutionContext) -> bool:
@@ -28,7 +92,7 @@ def _should_continue_loop(ctx: ExecutionContext) -> bool:
         return False
     if evaluation.needs_human():
         typer.echo(
-            "\n  !! needs_human: 某维度得分 < 5，自动循环已停止。请查看报告后手动调整方向。\n",
+            _format_needs_human_hint(ctx.project, state.current_round, pass_num, evaluation),
             err=True,
         )
         return False

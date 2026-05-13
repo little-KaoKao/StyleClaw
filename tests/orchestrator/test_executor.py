@@ -69,6 +69,30 @@ class TestShouldContinueLoop:
         project_store.save_round_evaluation("test-proj", 1, evaluation)
         assert _should_continue_loop(ctx) is True
 
+    def test_needs_human_prints_diagnosis(self, setup_project, ctx, capsys) -> None:
+        project_store.save_state(
+            "test-proj",
+            ProjectState(phase=Phase.STYLE_REFINE, current_round=2),
+        )
+        weak = DimensionScores(color_palette=4.5, line_style=7.0, lighting=7.0, texture=7.0, overall_mood=7.0)
+        strong = DimensionScores(color_palette=8.0, line_style=8.0, lighting=8.0, texture=8.0, overall_mood=8.0)
+        evaluation = RoundEvaluation(
+            round=2,
+            evaluations=[
+                RoundScore(model="mj-v7", scores=weak, total=6.7),
+                RoundScore(model="niji7", scores=strong, total=8.0),
+            ],
+        )
+        project_store.save_round_evaluation("test-proj", 2, evaluation)
+
+        assert _should_continue_loop(ctx) is False
+
+        err = capsys.readouterr().err
+        assert "needs_human" in err
+        assert "色彩调性得分 4.5 最弱" in err
+        assert 'styleclaw run "提高色彩饱和度、减弱色差光" -p test-proj' in err
+        assert "style-refine/pass-001/round-002/report.html" in err
+
 
 class TestDisplayPlan:
     def test_display_without_loop(self, setup_project, capsys) -> None:
