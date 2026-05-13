@@ -736,20 +736,17 @@ def set_sref(
     name: str = typer.Argument(..., help="Project name"),
     index: int = typer.Argument(..., help="0-based index of ref image to use as sref"),
 ) -> None:
-    """Set which reference image to use as style reference (sref)."""
-    config = project_store.load_config(name)
-    if index < 0 or index >= len(config.ref_images):
-        typer.echo(f"Error: index {index} out of range (0–{len(config.ref_images)-1})", err=True)
+    """Set which reference image to use as style reference (sref).
+
+    In MODEL_SELECT, if the current pass already has SUCCESS results, the pass
+    is auto-bumped (pass-001 → pass-002, etc.) so the previous experiment is
+    preserved on disk. In other phases, only sref_index changes.
+    """
+    result = _run_action(name, "set-sref", {"index": index})
+    if not result.ok:
+        typer.echo(f"Error: {result.message}", err=True)
         raise typer.Exit(1)
-    new_config = config.model_copy(update={"sref_index": index})
-    project_store.save_config(name, new_config)
-    typer.echo(f"sref set to ref-{index+1:03d}: {config.ref_images[index]}")
-    state = project_store.load_state(name)
-    if state.phase == Phase.MODEL_SELECT:
-        typer.echo(
-            "Hint: existing model-select SUCCESS tasks are not auto-invalidated. "
-            f"To regenerate with this sref: styleclaw generate {name} --force",
-        )
+    typer.echo(result.message)
 
 
 @app.command(name="set-pass")
@@ -758,10 +755,11 @@ def set_pass(
     pass_num: int = typer.Argument(..., help="Pass number to switch to (1-based)"),
 ) -> None:
     """Switch the active model-select pass (e.g. after deleting a bad pass)."""
-    state = project_store.load_state(name)
-    new_state = state.with_model_select_pass(pass_num)
-    project_store.save_state(name, new_state)
-    typer.echo(f"Active pass set to {pass_num}")
+    result = _run_action(name, "set-pass", {"pass_num": pass_num})
+    if not result.ok:
+        typer.echo(f"Error: {result.message}", err=True)
+        raise typer.Exit(1)
+    typer.echo(result.message)
 
 
 @app.command(name="retest-models")

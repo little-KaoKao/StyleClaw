@@ -81,6 +81,23 @@ LLM_MODEL=gemini-2.5-pro-preview-05-06
 
 **Precedence:** If `OPENAI_COMPAT_API_KEY` is set, the OpenAI-compatible provider is used. Otherwise, if `RUNNINGHUB_LLM` is truthy, RunningHub LLM is used. Otherwise Bedrock.
 
+#### Optional runtime tunables
+
+All have sensible defaults; you only need to set these to tune performance or override paths.
+
+| Variable | Default | Purpose |
+|----------|--------:|---------|
+| `STYLECLAW_DATA_ROOT` | `data/projects` | Root for project storage |
+| `STYLECLAW_LOG_LEVEL` | `INFO` | Default log level (`DEBUG` / `WARNING` / …); `-v` is the per-call shortcut |
+| `STYLECLAW_SKIP_ENV_CHECK` | — | Truthy disables CLI-startup env validation |
+| `STYLECLAW_MAX_ROUNDS` | `5` | Cap on auto refine rounds |
+| `STYLECLAW_CONCURRENCY` | `5` | Image-gen concurrency |
+| `STYLECLAW_LLM_CONCURRENCY` | `4` | LLM call concurrency |
+| `STYLECLAW_TASK_TIMEOUT` | `300` | Single-task poll timeout (seconds) |
+| `STYLECLAW_POLL_INTERVAL` | `3` | Inner poll interval (seconds) |
+| `STYLECLAW_ORCH_POLL_INTERVAL` | `30` | Outer orchestrator poll interval (seconds) |
+| `STYLECLAW_MAX_POLL_CYCLES` | `60` | Max orchestrator poll cycles before timeout |
+
 Verify the installation:
 
 ```bash
@@ -106,12 +123,26 @@ uv run styleclaw run "refine trigger phrase until scores pass" -p spider-verse
 uv run styleclaw run "design test cases and run batch generation" -p spider-verse
 ```
 
-The `run` command converts your intent into an execution plan via LLM, displays it for confirmation, then executes step by step. It supports loop execution for iterative refinement (refine → generate → poll → evaluate) with automatic score-based termination.
+The `run` command converts your intent into an execution plan via LLM, displays it for confirmation, then executes step by step. The plan includes:
+
+- A **summary** describing what will happen
+- An ordered list of **steps** (action name + Chinese description + args)
+- An optional **loop** for iterative work (e.g., refine → generate → poll → evaluate until pass)
+- A **stop_summary** ("停在哪") telling you where execution stops and what comes next
+
+Loop exit logic: stops when the round evaluation passes (all 5 dimensions ≥ 7.0 and total ≥ 7.5); also stops with a `!! needs_human` diagnostic — naming the weakest dimension and suggesting a redirection phrase — when any dimension drops below 5.0.
+
+After execution, `run` prints 1–5 example follow-up commands tailored to the new phase ("下一步可以这样说"). `status <project>` shows the same hints whenever you want to see them.
+
+Actions that change the world (`init`, `select-model`, `add-refs`) pause for an interactive confirmation prompt where you fine-tune arguments — for example, overriding the LLM-recommended model or picking the prompt-sref / prompt-only variant. `--yes` skips both the top-level "Execute?" prompt and these inline confirmations.
 
 ```bash
 # Options
-uv run styleclaw run "<intent>" -p <project>   # Required if multiple projects; optional if exactly one
-uv run styleclaw run "<intent>" --yes           # Skip confirmation prompt
+uv run styleclaw run "<intent>" -p <project>           # Required if multiple projects; optional if exactly one
+uv run styleclaw run "<intent>" --yes                  # Skip all confirmation prompts
+uv run styleclaw run "<intent>" --dry-run              # Print the plan and exit without executing
+uv run styleclaw run "<intent>" --no-show-thinking     # Suppress saved LLM reasoning files
+uv run styleclaw run "<intent>" --thinking-budget 8000 # Tune reasoning-budget token cap (default 5000)
 ```
 
 ### Step-by-Step Mode
@@ -132,10 +163,11 @@ uv run styleclaw analyze spider-verse
 # 3. Generate test images across all models (2 variants × 2 genders)
 uv run styleclaw generate spider-verse
 uv run styleclaw poll spider-verse
+# Optional: restrict to specific models, e.g. styleclaw generate spider-verse --models mj-v7,niji7
 
-# 4. Evaluate and select the best model
+# 4. Evaluate and select the best model + variant (prompt-sref or prompt-only)
 uv run styleclaw evaluate spider-verse
-uv run styleclaw select-model spider-verse --models mj-v7
+uv run styleclaw select-model spider-verse --models mj-v7 --variant prompt-sref
 
 # 5. Refine trigger phrase (repeat until satisfied)
 uv run styleclaw refine spider-verse
@@ -181,13 +213,27 @@ uv run styleclaw report spider-verse
 
 | Command | Description |
 |---------|-------------|
-| `status` | List all projects |
-| `status <name>` | Show detailed project status |
-| `adjust <name> --direction <text>` | Provide manual direction for refinement |
+| `status` | List all projects with their current phase |
+| `status <name>` | Show detailed project status + phase-aware "next step" hints |
+| `adjust <name> --direction <text>` | Provide manual direction for refinement (shortcut for `refine --direction`) |
 | `rollback <name> --to <phase> --round <n>` | Roll back to an earlier phase/round (non-destructive) |
+| `retest-models <name>` | Open a new MODEL_SELECT pass (pass-002+) without destroying prior data |
+| `back-to-t2i <name>` | Return from BATCH_I2I to BATCH_T2I |
 | `set-sref <name> <index>` | Set which ref image to use as style reference (0-based) |
 | `set-pass <name> <pass>` | Switch active model-select pass number |
-| `add-refs <name> --images <img>...` | Add reference images for i2i testing |
+| `add-refs <name> --images <img>...` | Add reference images for i2i testing (advances BATCH_T2I → BATCH_I2I) |
+| `archive <name>` | Move a project under `data/projects/.archive/<ts>-<name>/` (non-destructive) |
+| `clean --stalled [--days N] [--yes]` | List (default) or archive projects idle > N days and not COMPLETED |
+| `migrate <name>` | Move pre-pass storage layout into the pass-scoped layout (idempotent) |
+
+### Global Flags
+
+| Flag | Where it applies | What it does |
+|------|------------------|---------------|
+| `--verbose / -v` | any command | Lift the root logger to DEBUG for this invocation |
+| `--show-thinking / --no-show-thinking` | `analyze` / `evaluate` / `refine` / `run` | Save LLM reasoning to `*.thinking.md` siblings (default on) |
+| `--thinking-budget <int>` | same as above | Token budget passed to `invoke_with_thinking` (default 5000) |
+| `--dry-run` | `run` / `generate` / `batch-submit` | Print the plan / estimated task counts and exit without API calls |
 
 ### Options
 
@@ -204,14 +250,24 @@ uv run styleclaw init <name> \
 
 uv run styleclaw generate <name> \
   --force \
-  --retry-failed
+  --retry-failed \
+  --models mj-v7,niji7 \   # MODEL_SELECT only — limit submission to a subset
+  --dry-run                # Show planned operations and exit
 
 uv run styleclaw refine <name> \
   --direction <text>
 
+uv run styleclaw select-model <name> \
+  --models <model-ids> \   # Comma-separated, e.g. "mj-v7"
+  --variant prompt-sref    # or prompt-only — locks the variant used in STYLE_REFINE
+
+uv run styleclaw design-cases <name> \
+  --feedback "<text>"      # Feedback on previous batch; design-cases always creates a NEW batch
+
 uv run styleclaw batch-submit <name> \
   --i2i \
-  --model <model-id>
+  --model <model-id> \
+  --dry-run
 
 uv run styleclaw approve <name> \
   --phase completed \

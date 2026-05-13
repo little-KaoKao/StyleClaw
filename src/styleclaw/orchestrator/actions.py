@@ -94,6 +94,19 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         config = project_store.load_config(ctx.project)
         sref_url = uploads[config.sref_index].url if uploads else ""
 
+        force = bool(args.get("force", False))
+        if force:
+            existing_records = project_store.load_all_task_records(ctx.project, pass_num=pass_num)
+            if any(r.status == TaskStatus.SUCCESS for r in existing_records.values()):
+                return StepResult(
+                    ok=False,
+                    message=(
+                        f"generate force=true would overwrite SUCCESS data in pass-{pass_num:03d}. "
+                        f"Run `retest-models` to open a new pass first, "
+                        f"or use `set-sref` (which auto-bumps the pass when SUCCESS exists)."
+                    ),
+                )
+
         models_arg = args.get("models")
         models: list[str] | None
         if isinstance(models_arg, str):
@@ -117,7 +130,7 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         records = await generate_model_select(
             ctx.project, ctx.client, trigger,
             sref_url=sref_url, models=models,
-            pass_num=pass_num, force=args.get("force", False),
+            pass_num=pass_num, force=force,
         )
         msg = f"Submitted {len(records)} model tasks (pass {pass_num})"
         if models:
@@ -134,10 +147,25 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         config = project_store.load_config(ctx.project)
         use_sref = state.selected_variant != "prompt-only"
         sref_url = (uploads[config.sref_index].url if uploads else "") if use_sref else ""
+
+        force = bool(args.get("force", False))
+        if force:
+            existing_records = project_store.load_all_round_task_records(
+                ctx.project, round_num, pass_num=pass_num,
+            )
+            if any(r.status == TaskStatus.SUCCESS for r in existing_records.values()):
+                return StepResult(
+                    ok=False,
+                    message=(
+                        f"generate force=true would overwrite SUCCESS data in round-{round_num:03d}. "
+                        f"Run `refine` to open the next round instead."
+                    ),
+                )
+
         records = await generate_style_refine(
             ctx.project, ctx.client, round_num, prompt_config.trigger_phrase,
             sref_url=sref_url, extra_model_params=prompt_config.model_params,
-            pass_num=pass_num, force=args.get("force", False),
+            pass_num=pass_num, force=force,
         )
         return StepResult(ok=True, message=f"Submitted {len(records)} refine tasks (variant: {state.selected_variant})")
 
@@ -616,7 +644,14 @@ async def do_init(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
 
 
 async def do_set_sref(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
-    """Set which reference image is used as the style reference (0-based)."""
+    """Set which reference image is used as the style reference (0-based).
+
+    In MODEL_SELECT, changing the sref is a hard experimental boundary — if the
+    current pass already has SUCCESS results, auto-bump to a new pass first so
+    the previous experiment is preserved on disk.
+    """
+    from styleclaw.core.models import StyleAnalysis
+
     if "index" not in args:
         return StepResult(ok=False, message="set-sref requires args.index")
     try:
@@ -630,9 +665,29 @@ async def do_set_sref(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
             ok=False,
             message=f"index {index} out of range (0–{len(config.ref_images) - 1})",
         )
+
+    state = project_store.load_state(ctx.project)
+    bumped_to: int | None = None
+    if state.phase == Phase.MODEL_SELECT:
+        old_pass = state.current_model_select_pass or 1
+        existing = project_store.load_all_task_records(ctx.project, pass_num=old_pass)
+        if any(r.status == TaskStatus.SUCCESS for r in existing.values()):
+            new_pass = old_pass + 1
+            try:
+                prev_analysis = project_store.load_analysis(ctx.project, pass_num=old_pass)
+            except FileNotFoundError:
+                prev_analysis = StyleAnalysis()
+            project_store.save_analysis(ctx.project, prev_analysis, pass_num=new_pass)
+            project_store.save_state(ctx.project, state.with_model_select_pass(new_pass))
+            bumped_to = new_pass
+
     new_config = config.model_copy(update={"sref_index": index})
     project_store.save_config(ctx.project, new_config)
-    return StepResult(ok=True, message=f"sref set to ref-{index + 1:03d}: {config.ref_images[index]}")
+
+    msg = f"sref set to ref-{index + 1:03d}: {config.ref_images[index]}"
+    if bumped_to is not None:
+        msg += f" (auto-bumped to pass-{bumped_to:03d}; previous pass preserved)"
+    return StepResult(ok=True, message=msg, data={"pass_num": bumped_to} if bumped_to else None)
 
 
 async def do_set_pass(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
