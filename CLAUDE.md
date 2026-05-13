@@ -57,6 +57,7 @@ All defined in `core/config.py` via `_int_env` / `_float_env`. Invalid values ra
 | `STYLECLAW_POLL_MAX_CONSEC_FAIL` | `5` | Consecutive poll failures before giving up on a task |
 | `STYLECLAW_ORCH_POLL_INTERVAL` | `30` | Orchestrator-driven outer poll cycle interval (seconds) |
 | `STYLECLAW_MAX_POLL_CYCLES` | `60` | Cap on orchestrator poll cycles before reporting timeout |
+| `STYLECLAW_STREAM_DISPLAY` | `1` | Print LLM response deltas to stdout as they arrive (`  ↓ ...`); set to `0` / `false` to silence (e.g. in CI) |
 
 ## Tech Stack
 

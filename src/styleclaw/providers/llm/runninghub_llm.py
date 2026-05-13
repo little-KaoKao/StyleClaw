@@ -9,7 +9,7 @@ from typing import Any, Self
 import httpx
 from pydantic import SecretStr
 
-from styleclaw.core.config import LLM_CONCURRENCY_LIMIT
+from styleclaw.core.config import LLM_CONCURRENCY_LIMIT, STREAM_DISPLAY
 from styleclaw.providers.llm.base import LLMResponse
 
 logger = logging.getLogger(__name__)
@@ -82,6 +82,7 @@ class RunningHubLLMProvider:
             "messages": oai_messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
+            "stream": True,
         }
         result = await self._post(body)
         msg = result["choices"][0]["message"]
@@ -113,6 +114,7 @@ class RunningHubLLMProvider:
             "top_p": 1,
             "presence_penalty": 0,
             "frequency_penalty": 0,
+            "stream": True,
         }
         if self._reasoning_effort and self._reasoning_effort not in ("off", "false", "0", "no"):
             body["reasoning_effort"] = self._reasoning_effort
@@ -148,6 +150,10 @@ class RunningHubLLMProvider:
                         if "text/event-stream" in content_type:
                             chunks: list[str] = []
                             reasoning_chunks: list[str] = []
+                            # active_stream: None | "think" | "answer" — tracks which
+                            # marker was printed last so we only emit a new prefix on
+                            # a transition (e.g. think → answer).
+                            active_stream: str | None = None
                             async for line in resp.aiter_lines():
                                 if not line.startswith("data: "):
                                     continue
@@ -156,14 +162,26 @@ class RunningHubLLMProvider:
                                     break
                                 try:
                                     delta_obj = json.loads(data)["choices"][0]["delta"]
-                                    delta = delta_obj.get("content", "")
-                                    if delta:
-                                        chunks.append(delta)
-                                    reasoning = delta_obj.get("reasoning_content", "")
-                                    if reasoning:
-                                        reasoning_chunks.append(reasoning)
                                 except (KeyError, IndexError, json.JSONDecodeError):
                                     continue
+                                reasoning = delta_obj.get("reasoning_content", "")
+                                if reasoning:
+                                    if STREAM_DISPLAY:
+                                        if active_stream != "think":
+                                            print("\n  💭 " if active_stream else "  💭 ", end="", flush=True)
+                                            active_stream = "think"
+                                        print(reasoning, end="", flush=True)
+                                    reasoning_chunks.append(reasoning)
+                                delta = delta_obj.get("content", "")
+                                if delta:
+                                    if STREAM_DISPLAY:
+                                        if active_stream != "answer":
+                                            print("\n  ↓ " if active_stream else "  ↓ ", end="", flush=True)
+                                            active_stream = "answer"
+                                        print(delta, end="", flush=True)
+                                    chunks.append(delta)
+                            if STREAM_DISPLAY and active_stream is not None:
+                                print()
                             return {
                                 "choices": [{
                                     "message": {

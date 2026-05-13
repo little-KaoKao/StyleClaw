@@ -9,7 +9,7 @@ from typing import Any, Self
 import httpx
 from pydantic import SecretStr
 
-from styleclaw.core.config import LLM_CONCURRENCY_LIMIT
+from styleclaw.core.config import LLM_CONCURRENCY_LIMIT, STREAM_DISPLAY
 from styleclaw.providers.llm.base import LLMResponse
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,6 @@ class OpenAICompatProvider:
         messages: list[dict[str, Any]],
         max_tokens: int = 4096,
         temperature: float = 0.3,
-        stream: bool = False,
     ) -> str:
         oai_messages = [{"role": "system", "content": system}, *messages]
         body = {
@@ -67,16 +66,13 @@ class OpenAICompatProvider:
             "messages": oai_messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
+            "stream": True,
         }
-        if stream:
-            body["stream"] = True
-            return await self._post_stream(body)
-        else:
-            result = await self._post(body)
-            try:
-                return result["choices"][0]["message"]["content"]
-            except (KeyError, IndexError) as exc:
-                raise ValueError(f"Unexpected response format: {result}") from exc
+        result = await self._post(body)
+        try:
+            return result["choices"][0]["message"]["content"]
+        except (KeyError, IndexError) as exc:
+            raise ValueError(f"Unexpected response format: {result}") from exc
 
     async def invoke_with_thinking(
         self,
@@ -86,7 +82,7 @@ class OpenAICompatProvider:
         thinking_budget: int = 5000,
     ) -> LLMResponse:
         # OpenAI-compat providers don't expose thinking blocks; fall back to plain invoke.
-        text = await self.invoke(system, messages, max_tokens=max_tokens, temperature=1.0, stream=True)
+        text = await self.invoke(system, messages, max_tokens=max_tokens, temperature=1.0)
         return LLMResponse(text=text)
 
     async def _post(self, body: dict[str, Any]) -> dict[str, Any]:
@@ -94,14 +90,12 @@ class OpenAICompatProvider:
         for attempt in range(MAX_RETRIES):
             try:
                 async with self._semaphore:
-                    # Use stream() even for non-streaming to handle SSE responses
                     chunks: list[str] = []
+                    stream_started = False
                     async with self._http.stream("POST", "/chat/completions", content=json.dumps(body)) as resp:
                         resp.raise_for_status()
-                        # Check if response is SSE (server-sent events)
                         content_type = resp.headers.get("content-type", "")
                         if "text/event-stream" in content_type:
-                            # Server returned SSE, parse it
                             async for line in resp.aiter_lines():
                                 if not line.startswith("data: "):
                                     continue
@@ -110,62 +104,27 @@ class OpenAICompatProvider:
                                     break
                                 try:
                                     delta = json.loads(data)["choices"][0]["delta"].get("content", "")
-                                    if delta:
-                                        chunks.append(delta)
                                 except (KeyError, IndexError, json.JSONDecodeError):
                                     continue
-                            # Return as if it were a normal response
+                                if not delta:
+                                    continue
+                                if STREAM_DISPLAY:
+                                    if not stream_started:
+                                        print("  ↓ ", end="", flush=True)
+                                        stream_started = True
+                                    print(delta, end="", flush=True)
+                                chunks.append(delta)
+                            if STREAM_DISPLAY and stream_started:
+                                print()
                             return {
                                 "choices": [{
                                     "message": {"content": "".join(chunks)}
                                 }]
                             }
                         else:
-                            # Normal JSON response - must read body first
+                            # Server ignored stream:true and returned JSON
                             await resp.aread()
                             return resp.json()
-            except httpx.TransportError as exc:
-                last_exc = exc
-                if attempt < MAX_RETRIES - 1:
-                    wait = 2**attempt
-                    logger.warning("Request failed (attempt %d/%d): %s: %s. Retrying in %ds.",
-                                   attempt + 1, MAX_RETRIES, type(exc).__name__, exc, wait)
-                    await asyncio.sleep(wait)
-            except httpx.HTTPStatusError as exc:
-                if exc.response.status_code < 500:
-                    raise
-                last_exc = exc
-                if attempt < MAX_RETRIES - 1:
-                    wait = 2**attempt
-                    logger.warning("Request failed (attempt %d/%d): %s: %s. Retrying in %ds.",
-                                   attempt + 1, MAX_RETRIES, type(exc).__name__, exc, wait)
-                    await asyncio.sleep(wait)
-        raise RuntimeError(f"LLM invoke failed after {MAX_RETRIES} retries") from last_exc
-
-
-    async def _post_stream(self, body: dict[str, Any]) -> str:
-        last_exc: Exception | None = None
-        for attempt in range(MAX_RETRIES):
-            try:
-                async with self._semaphore:
-                    chunks: list[str] = []
-                    async with self._http.stream("POST", "/chat/completions", content=json.dumps(body)) as resp:
-                        resp.raise_for_status()
-                        async for line in resp.aiter_lines():
-                            if not line.startswith("data: "):
-                                continue
-                            data = line[6:]
-                            if data == "[DONE]":
-                                break
-                            try:
-                                delta = json.loads(data)["choices"][0]["delta"].get("content", "")
-                                if delta:
-                                    print(delta, end="", flush=True)
-                                    chunks.append(delta)
-                            except (KeyError, IndexError, json.JSONDecodeError):
-                                continue
-                    print()  # newline after stream ends
-                    return "".join(chunks)
             except httpx.TransportError as exc:
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:

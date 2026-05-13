@@ -19,6 +19,13 @@ def _float_env(name: str, default: str) -> float:
         raise ValueError(f"Invalid value for {name}: '{raw}'. Expected a number.") from None
 
 
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
 MAX_AUTO_ROUNDS: int = _int_env("STYLECLAW_MAX_ROUNDS", "5")
 CONCURRENCY_LIMIT: int = _int_env("STYLECLAW_CONCURRENCY", "5")
 LLM_CONCURRENCY_LIMIT: int = _int_env("STYLECLAW_LLM_CONCURRENCY", "4")
@@ -27,6 +34,7 @@ POLL_INTERVAL: float = _float_env("STYLECLAW_POLL_INTERVAL", "3")
 POLL_MAX_CONSECUTIVE_FAILURES: int = _int_env("STYLECLAW_POLL_MAX_CONSEC_FAIL", "5")
 ORCHESTRATOR_POLL_INTERVAL: float = _float_env("STYLECLAW_ORCH_POLL_INTERVAL", "30")
 MAX_POLL_CYCLES: int = _int_env("STYLECLAW_MAX_POLL_CYCLES", "60")
+STREAM_DISPLAY: bool = _bool_env("STYLECLAW_STREAM_DISPLAY", True)
 
 
 def env_truthy(name: str) -> bool:
