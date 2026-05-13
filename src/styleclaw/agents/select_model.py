@@ -60,7 +60,7 @@ async def evaluate_models(
     raw = await llm.invoke(
         system=_build_system_prompt(),
         messages=await _build_messages(ref_image_paths, model_images),
-        max_tokens=4096,
+        max_tokens=16384,
     )
     evaluation = _parse_evaluation(raw)
     logger.info("Model evaluation complete. Recommendation: %s", evaluation.recommendation)
@@ -76,7 +76,7 @@ async def evaluate_models_with_thinking(
     response = await llm.invoke_with_thinking(
         system=_build_system_prompt(),
         messages=await _build_messages(ref_image_paths, model_images),
-        max_tokens=4096,
+        max_tokens=16384,
         thinking_budget=thinking_budget,
     )
     evaluation = _parse_evaluation(response.text)
