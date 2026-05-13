@@ -831,3 +831,72 @@ class TestDoAddRefs:
         )
         assert result.ok is False
         assert "No images" in result.message
+
+
+class TestDoGenerateModelsFilter:
+    async def test_passes_models_string_arg(self) -> None:
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        analysis = StyleAnalysis(trigger_phrase="bold anime")
+        project_store.save_analysis(name, analysis)
+        project_store.save_uploads(name, [
+            UploadRecord(local_path="ref1.png", url="http://img/1", file_name="ref1.png"),
+        ])
+
+        captured: dict = {}
+
+        async def _fake_generate(name, client, trigger, *, sref_url, models, pass_num, force):
+            captured["models"] = models
+            return {"mj-v7/prompt-only-male": TaskRecord(task_id="t1", model_id="mj-v7")}
+
+        with patch(
+            "styleclaw.scripts.generate.generate_model_select",
+            new=_fake_generate,
+        ):
+            result = await do_generate(
+                _ctx(name, client=AsyncMock()),
+                {"models": "mj-v7,niji7"},
+            )
+
+        assert result.ok is True
+        assert "filtered: mj-v7, niji7" in result.message
+        assert captured["models"] == ["mj-v7", "niji7"]
+
+    async def test_unknown_model_rejected(self) -> None:
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        analysis = StyleAnalysis(trigger_phrase="x")
+        project_store.save_analysis(name, analysis)
+        project_store.save_uploads(name, [
+            UploadRecord(local_path="ref1.png", url="http://img/1", file_name="ref1.png"),
+        ])
+
+        result = await do_generate(
+            _ctx(name, client=AsyncMock()),
+            {"models": "mj-v7,not-a-model"},
+        )
+        assert result.ok is False
+        assert "not-a-model" in result.message
+        assert "Unknown model" in result.message
+
+    async def test_no_models_arg_means_all(self) -> None:
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        analysis = StyleAnalysis(trigger_phrase="x")
+        project_store.save_analysis(name, analysis)
+        project_store.save_uploads(name, [
+            UploadRecord(local_path="ref1.png", url="http://img/1", file_name="ref1.png"),
+        ])
+
+        captured: dict = {}
+
+        async def _fake_generate(name, client, trigger, *, sref_url, models, pass_num, force):
+            captured["models"] = models
+            return {}
+
+        with patch(
+            "styleclaw.scripts.generate.generate_model_select",
+            new=_fake_generate,
+        ):
+            result = await do_generate(_ctx(name, client=AsyncMock()), {})
+
+        assert result.ok is True
+        assert captured["models"] is None
+        assert "filtered" not in result.message

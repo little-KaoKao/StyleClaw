@@ -421,6 +421,10 @@ def generate(
     name: str = typer.Argument(..., help="Project name"),
     retry_failed: bool = typer.Option(False, "--retry-failed", help="Retry only failed tasks"),
     force: bool = typer.Option(False, "--force", "-f", help="Re-submit even if SUCCESS record exists"),
+    models: Optional[str] = typer.Option(
+        None, "--models",
+        help="Comma-separated model IDs to limit submission to (MODEL_SELECT only)",
+    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show planned operations and exit"),
 ) -> None:
     """Submit generation tasks (auto-detects phase)."""
@@ -434,14 +438,28 @@ def generate(
         typer.echo(f"Error: Cannot generate in {state.phase} phase.", err=True)
         raise typer.Exit(1)
 
+    if models and state.phase != Phase.MODEL_SELECT:
+        typer.echo(
+            "Error: --models filter only applies in MODEL_SELECT phase.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
     if dry_run:
         from styleclaw.providers.runninghub.models import MODEL_REGISTRY
         if state.phase == Phase.MODEL_SELECT:
-            models = list(MODEL_REGISTRY.keys())
-            # 2 variants × 2 genders per model
-            est_tasks = len(models) * 2 * 2
+            all_models = list(MODEL_REGISTRY.keys())
+            chosen = (
+                [m.strip() for m in models.split(",") if m.strip()]
+                if models else all_models
+            )
+            unknown = [m for m in chosen if m not in MODEL_REGISTRY]
+            if unknown:
+                typer.echo(f"Error: Unknown model(s): {', '.join(unknown)}", err=True)
+                raise typer.Exit(1)
+            est_tasks = len(chosen) * 2 * 2
             typer.echo("[dry-run] generate (MODEL_SELECT)")
-            typer.echo(f"  Models: {', '.join(models)}")
+            typer.echo(f"  Models: {', '.join(chosen)}")
             typer.echo(f"  Estimated tasks: {est_tasks}")
         else:
             typer.echo("[dry-run] generate (STYLE_REFINE)")
@@ -450,7 +468,10 @@ def generate(
             typer.echo(f"  Estimated tasks: {len(state.selected_models)}")
         return
 
-    result = _run_action(name, "generate", {"retry_failed": retry_failed, "force": force})
+    action_args: dict[str, Any] = {"retry_failed": retry_failed, "force": force}
+    if models:
+        action_args["models"] = models
+    result = _run_action(name, "generate", action_args)
     if not result.ok:
         typer.echo(f"Error: {result.message}", err=True)
         raise typer.Exit(1)

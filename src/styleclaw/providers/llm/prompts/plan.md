@@ -21,7 +21,7 @@ $available_actions
 
 - **init**: Create a new project from a directory of reference images. Used only when the project doesn't exist yet — the planner is invoked in "no-project" mode and only this action is available. The CLI confirmation step collects ref_dir / ip_info from the user; the planner just emits the single step.
 - **analyze**: Analyze reference images with LLM, extract style dimensions and initial trigger phrase. Advances phase INIT → MODEL_SELECT.
-- **generate**: Submit image generation tasks. In MODEL_SELECT: tests all models. In STYLE_REFINE: uses selected models with current trigger.
+- **generate**: Submit image generation tasks. In MODEL_SELECT: tests all models by default; pass `args.models` (comma-separated, e.g. `"mj-v7,niji7"`) to limit submission to a subset — use this when the user says "只重测 X 和 Y" / "只跑 mj-v7 看看". In STYLE_REFINE: uses the selected models with the current trigger (no models filter).
 - **poll**: Wait for all pending generation tasks to complete and download results. Blocks until done.
 - **evaluate**: LLM scores generated images. In MODEL_SELECT: compares models. In STYLE_REFINE: scores on 5 dimensions (color, line, lighting, texture, mood). Pass = all ≥ 7.0 and total ≥ 7.5.
 - **select-model**: Choose which model(s) to use. Requires `args.models` (comma-separated). In MODEL_SELECT: advances to STYLE_REFINE. In STYLE_REFINE: updates models without phase change. **Always pauses for user confirmation** before executing — the user reviews LLM scores and may override the model choice. Only skip confirmation if the user explicitly says to proceed without it.

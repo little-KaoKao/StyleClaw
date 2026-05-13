@@ -130,6 +130,36 @@ class TestGenerateCommand:
         assert result.exit_code == 1
         assert "Run 'refine' first" in result.output
 
+    @patch("styleclaw.cli._run_action")
+    def test_models_filter_passed_through(self, mock_run, setup_project) -> None:
+        _set_state(Phase.MODEL_SELECT)
+        mock_run.return_value = StepResult(
+            ok=True, message="Submitted 8 model tasks (pass 1) [filtered: mj-v7, niji7]",
+        )
+        result = runner.invoke(
+            app, ["generate", "test-proj", "--models", "mj-v7,niji7"],
+        )
+        assert result.exit_code == 0
+        # _run_action receives the filter in args
+        action_args = mock_run.call_args.args[2]
+        assert action_args.get("models") == "mj-v7,niji7"
+
+    def test_models_filter_rejected_outside_model_select(self, setup_project) -> None:
+        _set_state(Phase.STYLE_REFINE, current_round=1)
+        result = runner.invoke(
+            app, ["generate", "test-proj", "--models", "mj-v7"],
+        )
+        assert result.exit_code == 1
+        assert "MODEL_SELECT" in result.output
+
+    def test_models_dry_run_unknown_model(self, setup_project) -> None:
+        _set_state(Phase.MODEL_SELECT)
+        result = runner.invoke(
+            app, ["generate", "test-proj", "--models", "ghost-model", "--dry-run"],
+        )
+        assert result.exit_code == 1
+        assert "Unknown model" in result.output
+
 
 class TestPollCommand:
     def test_wrong_phase(self, setup_project) -> None:

@@ -93,11 +93,36 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         uploads = project_store.load_uploads(ctx.project)
         config = project_store.load_config(ctx.project)
         sref_url = uploads[config.sref_index].url if uploads else ""
+
+        models_arg = args.get("models")
+        models: list[str] | None
+        if isinstance(models_arg, str):
+            models = [m.strip() for m in models_arg.split(",") if m.strip()]
+        elif isinstance(models_arg, list):
+            models = [str(m).strip() for m in models_arg if str(m).strip()]
+        else:
+            models = None
+        from styleclaw.providers.runninghub.models import MODEL_REGISTRY
+        if models is not None:
+            unknown = [m for m in models if m not in MODEL_REGISTRY]
+            if unknown:
+                return StepResult(
+                    ok=False,
+                    message=f"Unknown model(s): {', '.join(unknown)}. "
+                            f"Choose from: {', '.join(MODEL_REGISTRY.keys())}",
+                )
+            if not models:
+                models = None
+
         records = await generate_model_select(
             ctx.project, ctx.client, trigger,
-            sref_url=sref_url, pass_num=pass_num, force=args.get("force", False),
+            sref_url=sref_url, models=models,
+            pass_num=pass_num, force=args.get("force", False),
         )
-        return StepResult(ok=True, message=f"Submitted {len(records)} model tasks (pass {pass_num})")
+        msg = f"Submitted {len(records)} model tasks (pass {pass_num})"
+        if models:
+            msg += f" [filtered: {', '.join(models)}]"
+        return StepResult(ok=True, message=msg)
 
     if state.phase == Phase.STYLE_REFINE:
         pass_num = state.current_model_select_pass or 1
