@@ -10,6 +10,7 @@ class TestActionRegistry:
             "init", "analyze", "generate", "poll", "evaluate", "select-model",
             "refine", "approve", "design-cases", "batch-submit", "report",
             "retest-models", "back-to-t2i",
+            "set-sref", "set-pass", "add-refs",
         }
         assert set(ACTION_REGISTRY.keys()) == expected
 
@@ -68,6 +69,28 @@ class TestActionRegistry:
             assert "init" not in actions, (
                 "init must only be reachable in no-project mode, never via phase planning"
             )
+
+    def test_set_sref_in_model_select_and_style_refine(self) -> None:
+        assert "set-sref" in PHASE_ACTIONS[Phase.MODEL_SELECT]
+        assert "set-sref" in PHASE_ACTIONS[Phase.STYLE_REFINE]
+
+    def test_set_pass_in_model_select(self) -> None:
+        assert "set-pass" in PHASE_ACTIONS[Phase.MODEL_SELECT]
+
+    def test_add_refs_in_batch_phases(self) -> None:
+        assert "add-refs" in PHASE_ACTIONS[Phase.BATCH_T2I]
+        assert "add-refs" in PHASE_ACTIONS[Phase.BATCH_I2I]
+
+    def test_add_refs_requires_client_and_confirmation(self) -> None:
+        action = ACTION_REGISTRY["add-refs"]
+        assert action.needs_client is True
+        assert action.requires_confirmation is True
+
+    def test_set_sref_no_client_no_llm_no_confirm(self) -> None:
+        action = ACTION_REGISTRY["set-sref"]
+        assert action.needs_client is False
+        assert action.needs_llm is False
+        assert action.requires_confirmation is False
 
 
 class TestExecutionContextThinking:

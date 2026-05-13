@@ -30,7 +30,7 @@ CROSS_PHASE_PLANNABLE_FROM = frozenset({
 # plannable when the project is already in the phase that owns them — never
 # via cross-phase extension. (`retest-models` opens a new model-select pass
 # and should never be inserted just because the user said "analyze".)
-GATED_CROSS_PHASE_ACTIONS: frozenset[str] = frozenset({"select-model", "approve", "retest-models"})
+GATED_CROSS_PHASE_ACTIONS: frozenset[str] = frozenset({"select-model", "approve", "retest-models", "add-refs"})
 
 
 def _build_actions_text(actions: list[str]) -> str:

@@ -1084,6 +1084,36 @@ def _confirm_init(
     }
 
 
+def _confirm_add_refs(
+    action_name: str,
+    args: dict[str, Any],
+    ctx: "ExecutionContext",
+) -> dict[str, Any] | None:
+    """Prompt user for the directory of i2i reference images to add."""
+    image_exts = {".png", ".jpg", ".jpeg", ".webp"}
+
+    typer.echo("\n=== 添加图生图参考图 ===")
+    typer.echo(f"  项目: {ctx.project}")
+
+    while True:
+        image_dir_str = typer.prompt(
+            "  i2i 参考图目录 (绝对路径或~开头)",
+            default=args.get("image_dir", "") or "",
+        )
+        image_dir = Path(image_dir_str.strip()).expanduser()
+        if not image_dir.is_dir():
+            typer.echo(f"  ✗ 目录不存在: {image_dir}")
+            continue
+        found = sorted(p for p in image_dir.iterdir() if p.suffix.lower() in image_exts)
+        if not found:
+            typer.echo(f"  ✗ 目录里没有支持的图片: {image_dir}")
+            continue
+        typer.echo(f"  ✓ 发现 {len(found)} 张图片: {', '.join(p.name for p in found)}")
+        break
+
+    return {**args, "image_dir": str(image_dir)}
+
+
 def _confirm_dispatch(
     action_name: str,
     args: dict[str, Any],
@@ -1096,6 +1126,8 @@ def _confirm_dispatch(
         return _confirm_select_model(action_name, args, ctx)
     if action_name == "init":
         return _confirm_init(action_name, args, ctx)
+    if action_name == "add-refs":
+        return _confirm_add_refs(action_name, args, ctx)
     return args
 
 

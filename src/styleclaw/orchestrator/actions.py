@@ -558,20 +558,6 @@ async def do_back_to_t2i(ctx: ExecutionContext, args: dict[str, Any]) -> StepRes
 
 
 async def do_init(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
-    """Create a new project from a reference image directory.
-
-    Required args (collected via the confirmation callback before execution):
-      - ref_dir: directory containing reference images (.png/.jpg/.jpeg/.webp)
-      - ip_info: free-text description of the IP/style
-
-    Optional:
-      - description: project description (default "")
-      - force: overwrite existing project with the same name (default False)
-
-    The project name comes from ``ctx.project`` — the orchestrator must be
-    invoked with the desired project name and have already verified that no
-    project by that name exists yet (or that ``force=True``).
-    """
     from styleclaw.scripts.init_project import init_project
 
     ref_dir_str = args.get("ref_dir", "").strip()
@@ -599,6 +585,123 @@ async def do_init(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     )
 
 
+async def do_set_sref(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
+    """Set which reference image is used as the style reference (0-based)."""
+    if "index" not in args:
+        return StepResult(ok=False, message="set-sref requires args.index")
+    try:
+        index = int(args["index"])
+    except (TypeError, ValueError):
+        return StepResult(ok=False, message=f"set-sref args.index must be an integer (got {args['index']!r})")
+
+    config = project_store.load_config(ctx.project)
+    if index < 0 or index >= len(config.ref_images):
+        return StepResult(
+            ok=False,
+            message=f"index {index} out of range (0–{len(config.ref_images) - 1})",
+        )
+    new_config = config.model_copy(update={"sref_index": index})
+    project_store.save_config(ctx.project, new_config)
+    return StepResult(ok=True, message=f"sref set to ref-{index + 1:03d}: {config.ref_images[index]}")
+
+
+async def do_set_pass(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
+    """Switch the active model-select pass number."""
+    if "pass_num" not in args:
+        return StepResult(ok=False, message="set-pass requires args.pass_num")
+    try:
+        pass_num = int(args["pass_num"])
+    except (TypeError, ValueError):
+        return StepResult(ok=False, message=f"set-pass args.pass_num must be an integer (got {args['pass_num']!r})")
+    if pass_num < 1:
+        return StepResult(ok=False, message=f"pass_num must be >= 1 (got {pass_num})")
+
+    state = project_store.load_state(ctx.project)
+    new_state = state.with_model_select_pass(pass_num)
+    project_store.save_state(ctx.project, new_state)
+    return StepResult(ok=True, message=f"Active pass set to {pass_num}")
+
+
+async def do_add_refs(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
+    """Add reference images for image-to-image batch testing.
+
+    Required args (collected via the confirmation callback):
+      - image_dir: directory containing reference images for i2i
+
+    Behavior mirrors the ``add-refs`` CLI command: when called from
+    BATCH_T2I, advances the project to BATCH_I2I; uploads new images and
+    appends them to the i2i uploads list for the current batch.
+    """
+    import shutil
+
+    from styleclaw.core.image_utils import verify_ref_image
+    from styleclaw.core.models import UploadRecord
+    from styleclaw.core.state_machine import advance
+    from styleclaw.providers.runninghub.upload import upload_file
+
+    image_dir_str = args.get("image_dir", "").strip()
+    if not image_dir_str:
+        return StepResult(ok=False, message="add-refs requires args.image_dir")
+    image_dir = Path(image_dir_str).expanduser()
+    if not image_dir.is_dir():
+        return StepResult(ok=False, message=f"image_dir is not a directory: {image_dir}")
+
+    image_exts = {".png", ".jpg", ".jpeg", ".webp"}
+    images = sorted(p for p in image_dir.iterdir() if p.suffix.lower() in image_exts)
+    if not images:
+        return StepResult(ok=False, message=f"No images found in {image_dir}")
+
+    state = project_store.load_state(ctx.project)
+    if state.phase not in (Phase.BATCH_T2I, Phase.BATCH_I2I):
+        return StepResult(
+            ok=False,
+            message=f"add-refs requires BATCH_T2I or BATCH_I2I (current: {state.phase})",
+        )
+
+    for img in images:
+        try:
+            verify_ref_image(img)
+        except ValueError as exc:
+            return StepResult(ok=False, message=f"invalid ref image {img.name}: {exc}")
+
+    if state.phase == Phase.BATCH_T2I:
+        state = advance(state, Phase.BATCH_I2I)
+        project_store.save_state(ctx.project, state)
+
+    batch_num = state.current_batch or 1
+    source_dir = project_store.batch_i2i_dir(ctx.project, batch_num) / "source-images"
+    source_dir.mkdir(parents=True, exist_ok=True)
+
+    local_dests: list[Path] = []
+    for img in images:
+        dest = source_dir / img.name
+        shutil.copy2(img, dest)
+        local_dests.append(dest)
+
+    new_records: dict[int, UploadRecord] = {}
+
+    async def _one(idx: int, dest: Path) -> None:
+        new_records[idx] = await upload_file(ctx.client, dest)
+
+    async with asyncio.TaskGroup() as tg:
+        for idx, dest in enumerate(local_dests):
+            tg.create_task(_one(idx, dest))
+
+    appended = [new_records[i] for i in sorted(new_records)]
+    if appended:
+        existing = project_store.load_i2i_uploads(ctx.project, batch_num)
+        project_store.save_i2i_uploads(ctx.project, batch_num, existing + appended)
+
+    if state.current_batch != batch_num:
+        new_state = state.with_batch(batch_num)
+        project_store.save_state(ctx.project, new_state)
+
+    return StepResult(
+        ok=True,
+        message=f"Added {len(appended)} ref images to BATCH_I2I batch {batch_num}",
+    )
+
+
 ACTION_REGISTRY: dict[str, ActionDef] = {
     "init":          ActionDef(fn=do_init,          needs_client=True,  needs_llm=False, requires_confirmation=True),
     "analyze":       ActionDef(fn=do_analyze,       needs_client=False, needs_llm=True),
@@ -613,14 +716,17 @@ ACTION_REGISTRY: dict[str, ActionDef] = {
     "report":        ActionDef(fn=do_report,        needs_client=False, needs_llm=False),
     "retest-models": ActionDef(fn=do_retest_models, needs_client=False, needs_llm=False),
     "back-to-t2i":   ActionDef(fn=do_back_to_t2i,   needs_client=False, needs_llm=False),
+    "set-sref":      ActionDef(fn=do_set_sref,      needs_client=False, needs_llm=False),
+    "set-pass":      ActionDef(fn=do_set_pass,      needs_client=False, needs_llm=False),
+    "add-refs":      ActionDef(fn=do_add_refs,      needs_client=True,  needs_llm=False, requires_confirmation=True),
 }
 
 
 PHASE_ACTIONS: dict[Phase, list[str]] = {
     Phase.INIT:         ["analyze"],
-    Phase.MODEL_SELECT: ["generate", "poll", "evaluate", "select-model", "retest-models"],
-    Phase.STYLE_REFINE: ["refine", "generate", "poll", "evaluate", "approve", "select-model", "retest-models"],
-    Phase.BATCH_T2I:    ["design-cases", "batch-submit", "poll", "report", "approve", "retest-models"],
-    Phase.BATCH_I2I:    ["batch-submit", "poll", "report", "approve", "back-to-t2i"],
+    Phase.MODEL_SELECT: ["generate", "poll", "evaluate", "select-model", "retest-models", "set-sref", "set-pass"],
+    Phase.STYLE_REFINE: ["refine", "generate", "poll", "evaluate", "approve", "select-model", "retest-models", "set-sref"],
+    Phase.BATCH_T2I:    ["design-cases", "batch-submit", "poll", "report", "approve", "retest-models", "add-refs"],
+    Phase.BATCH_I2I:    ["batch-submit", "poll", "report", "approve", "back-to-t2i", "add-refs"],
     Phase.COMPLETED:    [],
 }

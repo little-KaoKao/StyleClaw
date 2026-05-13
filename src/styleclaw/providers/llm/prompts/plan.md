@@ -31,6 +31,9 @@ $available_actions
 - **batch-submit**: Submit batch generation tasks (all pending cases). Optional `args.model` to override.
 - **report**: Generate HTML visual report for current batch.
 - **retest-models**: Open a new MODEL_SELECT pass (pass-002, pass-003, ...) using the current trigger. Preserves previous pass data on disk. Use only when the user explicitly asks to re-test models or start a fresh model-comparison round.
+- **set-sref**: Switch which reference image (0-based index) is used as the style reference. Requires `args.index` (integer). Use when the user says things like "换 sref 到第 N 张" / "用第二张参考图作为 sref". Note: existing SUCCESS tasks are NOT auto-invalidated; chain a `generate` with `force=true` afterwards to re-run.
+- **set-pass**: Switch the active model-select pass number. Requires `args.pass_num` (integer ≥ 1). Use only when the user explicitly references a pass number (e.g. "切回 pass-002").
+- **add-refs**: Add reference images for image-to-image batch testing. Requires `args.image_dir` (directory path). When called from BATCH_T2I, advances the project to BATCH_I2I and uploads the images. Use when the user says things like "加几张图，进入图生图" / "用 /tmp/i2i 这个目录的图开始 i2i 测试".
 
 ## Loop Support
 

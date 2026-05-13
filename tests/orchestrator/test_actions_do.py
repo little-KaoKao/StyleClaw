@@ -25,6 +25,7 @@ from styleclaw.core.models import (
 from styleclaw.orchestrator.actions import (
     ExecutionContext,
     StepResult,
+    do_add_refs,
     do_analyze,
     do_approve,
     do_batch_submit,
@@ -36,6 +37,8 @@ from styleclaw.orchestrator.actions import (
     do_refine,
     do_report,
     do_select_model,
+    do_set_pass,
+    do_set_sref,
 )
 from styleclaw.storage import project_store
 
@@ -709,6 +712,122 @@ class TestDoInit:
         result = await do_init(
             _ctx("new-proj", client=MagicMock()),
             {"ref_dir": str(empty_dir), "ip_info": "x"},
+        )
+        assert result.ok is False
+        assert "No images" in result.message
+
+
+class TestDoSetSref:
+    async def test_updates_sref_index(self) -> None:
+        name = _create_project(
+            phase=Phase.MODEL_SELECT,
+            ref_images=["refs/ref-001.png", "refs/ref-002.png", "refs/ref-003.png"],
+        )
+        result = await do_set_sref(_ctx(name), {"index": 2})
+        assert result.ok is True
+        assert "ref-003" in result.message
+        assert project_store.load_config(name).sref_index == 2
+
+    async def test_index_out_of_range(self) -> None:
+        name = _create_project(
+            phase=Phase.MODEL_SELECT,
+            ref_images=["refs/ref-001.png"],
+        )
+        result = await do_set_sref(_ctx(name), {"index": 5})
+        assert result.ok is False
+        assert "out of range" in result.message
+
+    async def test_missing_index(self) -> None:
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        result = await do_set_sref(_ctx(name), {})
+        assert result.ok is False
+        assert "args.index" in result.message
+
+    async def test_non_integer_index(self) -> None:
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        result = await do_set_sref(_ctx(name), {"index": "foo"})
+        assert result.ok is False
+        assert "integer" in result.message
+
+
+class TestDoSetPass:
+    async def test_updates_pass_number(self) -> None:
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        result = await do_set_pass(_ctx(name), {"pass_num": 3})
+        assert result.ok is True
+        assert "3" in result.message
+        assert project_store.load_state(name).current_model_select_pass == 3
+
+    async def test_zero_pass_rejected(self) -> None:
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        result = await do_set_pass(_ctx(name), {"pass_num": 0})
+        assert result.ok is False
+        assert ">= 1" in result.message
+
+    async def test_missing_pass_num(self) -> None:
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        result = await do_set_pass(_ctx(name), {})
+        assert result.ok is False
+        assert "args.pass_num" in result.message
+
+
+class TestDoAddRefs:
+    async def test_advances_from_t2i_and_uploads(self, tmp_path) -> None:
+        name = _create_project(phase=Phase.BATCH_T2I, current_batch=1)
+
+        i2i_dir = tmp_path / "i2i-srcs"
+        i2i_dir.mkdir()
+        (i2i_dir / "src1.png").write_bytes(b"x")
+        (i2i_dir / "src2.jpg").write_bytes(b"y")
+
+        with patch(
+            "styleclaw.providers.runninghub.upload.upload_file",
+            new_callable=AsyncMock,
+            side_effect=[
+                UploadRecord(local_path="x", url="http://u/1", file_name="src1.png"),
+                UploadRecord(local_path="y", url="http://u/2", file_name="src2.jpg"),
+            ],
+        ), patch(
+            "styleclaw.core.image_utils.verify_ref_image",
+            return_value=None,
+        ):
+            result = await do_add_refs(
+                _ctx(name, client=MagicMock()),
+                {"image_dir": str(i2i_dir)},
+            )
+
+        assert result.ok is True, result.message
+        assert "2 ref images" in result.message
+        state = project_store.load_state(name)
+        assert state.phase == Phase.BATCH_I2I
+        uploads = project_store.load_i2i_uploads(name, 1)
+        assert len(uploads) == 2
+
+    async def test_missing_image_dir(self) -> None:
+        name = _create_project(phase=Phase.BATCH_T2I)
+        result = await do_add_refs(_ctx(name, client=MagicMock()), {})
+        assert result.ok is False
+        assert "image_dir" in result.message
+
+    async def test_wrong_phase(self, tmp_path) -> None:
+        name = _create_project(phase=Phase.STYLE_REFINE, current_round=1)
+        d = tmp_path / "i"
+        d.mkdir()
+        (d / "a.png").write_bytes(b"x")
+        result = await do_add_refs(
+            _ctx(name, client=MagicMock()),
+            {"image_dir": str(d)},
+        )
+        assert result.ok is False
+        assert "BATCH_T2I or BATCH_I2I" in result.message
+
+    async def test_empty_dir(self, tmp_path) -> None:
+        name = _create_project(phase=Phase.BATCH_T2I)
+        d = tmp_path / "empty"
+        d.mkdir()
+        result = await do_add_refs(
+            _ctx(name, client=MagicMock()),
+            {"image_dir": str(d)},
         )
         assert result.ok is False
         assert "No images" in result.message
