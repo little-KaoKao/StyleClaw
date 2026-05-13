@@ -4,7 +4,9 @@ import asyncio
 import inspect
 import logging
 import os
+import shutil
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator, Optional
 
@@ -40,7 +42,10 @@ def _global_options(
         logging.getLogger().setLevel(logging.DEBUG)
 
     # Skip env validation for commands that don't touch any external service.
-    _skip_validation = {"status", "rollback", "set-sref", "set-pass", "migrate"}
+    _skip_validation = {
+        "status", "rollback", "set-sref", "set-pass", "migrate",
+        "archive", "clean",
+    }
     if (
         os.getenv("STYLECLAW_SKIP_ENV_CHECK")
         or ctx.invoked_subcommand in _skip_validation
@@ -232,6 +237,113 @@ def status(
     typer.echo(f"Updated: {state.last_updated}")
     if config.ip_info:
         typer.echo(f"IP Info: {config.ip_info[:100]}")
+
+
+def _archive_project(name: str) -> Path:
+    """Move a project's directory under DATA_ROOT/.archive/<timestamp>-<name>/.
+
+    Verifies the project exists by loading state.json before moving. The move
+    is non-destructive — the project is renamed, not deleted.
+    """
+    project_store.load_state(name)
+    src = project_store.project_dir(name)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    archive_root = project_store.DATA_ROOT / ".archive"
+    archive_root.mkdir(parents=True, exist_ok=True)
+    target = archive_root / f"{timestamp}-{name}"
+    shutil.move(str(src), str(target))
+    return target
+
+
+def _find_stalled_projects(days: int) -> list[tuple[str, ProjectState]]:
+    """Return (name, state) for projects whose last_updated is older than
+    `days` days and whose phase is not COMPLETED. Projects with unreadable
+    state or unparseable timestamps are skipped.
+    """
+    threshold = datetime.now(timezone.utc) - timedelta(days=days)
+    stalled: list[tuple[str, ProjectState]] = []
+    for name in project_store.list_projects():
+        try:
+            state = project_store.load_state(name)
+        except (FileNotFoundError, ValueError):
+            continue
+        if state.phase == Phase.COMPLETED:
+            continue
+        try:
+            last = datetime.fromisoformat(state.last_updated)
+        except ValueError:
+            continue
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        if last < threshold:
+            stalled.append((name, state))
+    return stalled
+
+
+@app.command()
+def archive(
+    name: str = typer.Argument(..., help="Project name"),
+) -> None:
+    """Move a project to the archive directory (non-destructive)."""
+    try:
+        target = _archive_project(name)
+    except FileNotFoundError as exc:
+        typer.echo(f"Error: project '{name}' not found ({exc})", err=True)
+        raise typer.Exit(1) from exc
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"Archived {name} -> {target}")
+
+
+@app.command()
+def clean(
+    stalled: bool = typer.Option(
+        False, "--stalled", help="Find projects stuck for >--days days",
+    ),
+    days: int = typer.Option(
+        7, "--days", help="Stalled threshold in days (default: 7)",
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", help="Actually archive matches (default: dry-run)",
+    ),
+) -> None:
+    """List or archive stalled projects.
+
+    Without --yes this is a dry run. Stalled projects are those whose
+    last_updated is more than `--days` days old and whose phase is not
+    COMPLETED. Action is always archive (non-destructive); no data is deleted.
+    """
+    if not stalled:
+        typer.echo(
+            "Error: --stalled is required (no other selection modes yet).",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    matches = _find_stalled_projects(days)
+    if not matches:
+        typer.echo(f"No stalled projects (>{days} days, not COMPLETED).")
+        return
+
+    action_label = "archive" if yes else "would archive"
+    header = f"Found {len(matches)} stalled project(s) (>{days} days, not COMPLETED):"
+    typer.echo(header)
+    for proj_name, state in matches:
+        typer.echo(
+            f"  {proj_name}\tphase={state.phase}"
+            f"\tlast_updated={state.last_updated}\t-> {action_label}"
+        )
+
+    if not yes:
+        typer.echo("\nDry-run. Pass --yes to archive.")
+        return
+
+    typer.echo("")
+    for proj_name, _state in matches:
+        target = _archive_project(proj_name)
+        typer.echo(f"  archived {proj_name} -> {target}")
 
 
 @app.command()
