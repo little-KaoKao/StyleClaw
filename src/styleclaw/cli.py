@@ -238,6 +238,13 @@ def status(
     if config.ip_info:
         typer.echo(f"IP Info: {config.ip_info[:100]}")
 
+    from styleclaw.orchestrator.suggestions import suggest_next_steps
+    suggestions = suggest_next_steps(name)
+    if suggestions:
+        typer.echo("\n建议下一步：")
+        for line in suggestions:
+            typer.echo(f"  {line}")
+
 
 def _archive_project(name: str) -> Path:
     """Move a project's directory under DATA_ROOT/.archive/<timestamp>-<name>/.
@@ -1116,7 +1123,14 @@ def run(
                 raise typer.Exit(1)
 
     asyncio.run(_plan_and_execute())
+
     if not dry_run:
+        from styleclaw.orchestrator.suggestions import suggest_next_steps
+        suggestions = suggest_next_steps(project)
+        if suggestions:
+            typer.echo("\n下一步可以这样说：")
+            for line in suggestions:
+                typer.echo(f"  {line}")
         typer.echo("\nDone.")
 
 
