@@ -7,7 +7,7 @@ from styleclaw.orchestrator.actions import ACTION_REGISTRY, PHASE_ACTIONS
 class TestActionRegistry:
     def test_all_actions_registered(self) -> None:
         expected = {
-            "analyze", "generate", "poll", "evaluate", "select-model",
+            "init", "analyze", "generate", "poll", "evaluate", "select-model",
             "refine", "approve", "design-cases", "batch-submit", "report",
             "retest-models", "back-to-t2i",
         }
@@ -56,6 +56,18 @@ class TestActionRegistry:
         assert ACTION_REGISTRY["design-cases"].needs_llm is True
         assert ACTION_REGISTRY["generate"].needs_llm is False
         assert ACTION_REGISTRY["approve"].needs_llm is False
+
+    def test_init_action_requires_client_and_confirmation(self) -> None:
+        action = ACTION_REGISTRY["init"]
+        assert action.needs_client is True
+        assert action.needs_llm is False
+        assert action.requires_confirmation is True
+
+    def test_init_not_in_any_phase_actions(self) -> None:
+        for actions in PHASE_ACTIONS.values():
+            assert "init" not in actions, (
+                "init must only be reachable in no-project mode, never via phase planning"
+            )
 
 
 class TestExecutionContextThinking:

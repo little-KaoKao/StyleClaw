@@ -49,8 +49,13 @@ def _unknown_actions(plan: ActionPlan, available: list[str]) -> list[str]:
 
 
 async def plan(llm: LLMProvider, project: str, intent: str) -> ActionPlan:
-    state = project_store.load_state(project)
-    config = project_store.load_config(project)
+    try:
+        state = project_store.load_state(project)
+        config = project_store.load_config(project)
+    except FileNotFoundError:
+        # No project on disk yet — only `init` is plannable, and the
+        # confirmation callback will collect ref_dir / ip_info from the user.
+        return await _plan_init_only(llm, project, intent)
 
     available = PHASE_ACTIONS.get(state.phase, [])
 
@@ -117,3 +122,25 @@ async def plan(llm: LLMProvider, project: str, intent: str) -> ActionPlan:
             f"Allowed in phase {state.phase.value}: {available}."
         )
     return retried
+
+
+async def _plan_init_only(llm: LLMProvider, project: str, intent: str) -> ActionPlan:
+    """Build a plan for a project that doesn't exist yet.
+
+    The plan is always a single ``init`` step; ref_dir and ip_info come from
+    the confirmation callback in the CLI, not from the LLM. We still pass the
+    intent through ``args`` so the confirmation prompt can show it as a hint.
+    """
+    from styleclaw.core.models import ActionPlan, Action
+
+    return ActionPlan(
+        summary=f"创建新项目 '{project}'",
+        steps=[
+            Action(
+                name="init",
+                description=f"根据用户意图创建项目 '{project}'：{intent}",
+                args={"ref_dir": "", "ip_info": "", "description": "", "force": False},
+            ),
+        ],
+        loop=None,
+    )

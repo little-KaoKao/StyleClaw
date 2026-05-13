@@ -215,3 +215,31 @@ class TestPlannerValidation:
         retry_call = llm.invoke.call_args_list[1]
         retry_messages = retry_call.kwargs.get("messages", [])
         assert any("fake-name" in str(m.get("content", "")) for m in retry_messages)
+
+
+class TestPlanNoProjectMode:
+    async def test_returns_init_only_when_project_missing(self) -> None:
+        """When the project doesn't exist on disk, plan returns a single
+        init step with empty args (the CLI's confirm callback fills them)."""
+        llm = AsyncMock()  # Should NOT be called
+
+        result = await plan(llm, "ghost-project", "create from /tmp/refs")
+
+        assert len(result.steps) == 1
+        assert result.steps[0].name == "init"
+        assert "ghost-project" in result.summary
+        assert result.steps[0].args == {
+            "ref_dir": "",
+            "ip_info": "",
+            "description": "",
+            "force": False,
+        }
+        # Planner should not invoke the LLM in init-only mode — the confirmation
+        # callback is responsible for collecting parameters from the user.
+        llm.invoke.assert_not_called()
+
+    async def test_init_only_intent_carried_in_description(self) -> None:
+        llm = AsyncMock()
+        result = await plan(llm, "fresh", "用 /tmp/abc 的图分析风格")
+        assert "fresh" in result.steps[0].description
+        assert "/tmp/abc" in result.steps[0].description

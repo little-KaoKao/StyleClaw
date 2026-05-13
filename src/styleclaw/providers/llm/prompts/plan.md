@@ -19,6 +19,7 @@ $available_actions
 
 ## Action Descriptions
 
+- **init**: Create a new project from a directory of reference images. Used only when the project doesn't exist yet — the planner is invoked in "no-project" mode and only this action is available. The CLI confirmation step collects ref_dir / ip_info from the user; the planner just emits the single step.
 - **analyze**: Analyze reference images with LLM, extract style dimensions and initial trigger phrase. Advances phase INIT → MODEL_SELECT.
 - **generate**: Submit image generation tasks. In MODEL_SELECT: tests all models. In STYLE_REFINE: uses selected models with current trigger.
 - **poll**: Wait for all pending generation tasks to complete and download results. Blocks until done.

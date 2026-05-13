@@ -557,7 +557,50 @@ async def do_back_to_t2i(ctx: ExecutionContext, args: dict[str, Any]) -> StepRes
     return StepResult(ok=True, message="Returned to BATCH_T2I")
 
 
+async def do_init(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
+    """Create a new project from a reference image directory.
+
+    Required args (collected via the confirmation callback before execution):
+      - ref_dir: directory containing reference images (.png/.jpg/.jpeg/.webp)
+      - ip_info: free-text description of the IP/style
+
+    Optional:
+      - description: project description (default "")
+      - force: overwrite existing project with the same name (default False)
+
+    The project name comes from ``ctx.project`` — the orchestrator must be
+    invoked with the desired project name and have already verified that no
+    project by that name exists yet (or that ``force=True``).
+    """
+    from styleclaw.scripts.init_project import init_project
+
+    ref_dir_str = args.get("ref_dir", "").strip()
+    if not ref_dir_str:
+        return StepResult(ok=False, message="init requires args.ref_dir")
+    ref_dir = Path(ref_dir_str).expanduser()
+    if not ref_dir.is_dir():
+        return StepResult(ok=False, message=f"ref_dir is not a directory: {ref_dir}")
+
+    image_exts = {".png", ".jpg", ".jpeg", ".webp"}
+    refs = sorted(p for p in ref_dir.iterdir() if p.suffix.lower() in image_exts)
+    if not refs:
+        return StepResult(ok=False, message=f"No images found in {ref_dir}")
+
+    ip_info = args.get("ip_info", "").strip()
+    description = args.get("description", "")
+    force = bool(args.get("force", False))
+
+    root = await init_project(
+        ctx.project, refs, ip_info, description, ctx.client, force=force,
+    )
+    return StepResult(
+        ok=True,
+        message=f"Created project '{ctx.project}' with {len(refs)} ref images at {root}",
+    )
+
+
 ACTION_REGISTRY: dict[str, ActionDef] = {
+    "init":          ActionDef(fn=do_init,          needs_client=True,  needs_llm=False, requires_confirmation=True),
     "analyze":       ActionDef(fn=do_analyze,       needs_client=False, needs_llm=True),
     "generate":      ActionDef(fn=do_generate,      needs_client=True,  needs_llm=False),
     "poll":          ActionDef(fn=do_poll,          needs_client=True,  needs_llm=False),

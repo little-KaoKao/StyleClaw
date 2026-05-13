@@ -31,6 +31,7 @@ from styleclaw.orchestrator.actions import (
     do_design_cases,
     do_evaluate,
     do_generate,
+    do_init,
     do_poll,
     do_refine,
     do_report,
@@ -650,3 +651,64 @@ class TestDoReport:
         result = await do_report(_ctx(name), {})
         assert result.ok is False
         assert "No report" in result.message
+
+
+class TestDoInit:
+    async def test_creates_project_from_ref_dir(self, tmp_path) -> None:
+        ref_dir = tmp_path / "input-refs"
+        ref_dir.mkdir()
+        (ref_dir / "a.png").write_bytes(b"fake-png-1")
+        (ref_dir / "b.jpg").write_bytes(b"fake-jpg-2")
+
+        fake_root = tmp_path / "fake-project-root"
+        fake_init = AsyncMock(return_value=fake_root)
+
+        with patch("styleclaw.scripts.init_project.init_project", fake_init):
+            result = await do_init(
+                _ctx("new-proj", client=MagicMock()),
+                {
+                    "ref_dir": str(ref_dir),
+                    "ip_info": "anime style",
+                    "description": "from test",
+                    "force": False,
+                },
+            )
+
+        assert result.ok is True, result.message
+        assert "new-proj" in result.message
+        assert "2 ref images" in result.message
+        fake_init.assert_awaited_once()
+        call_args = fake_init.await_args
+        assert call_args.args[0] == "new-proj"
+        # Image paths discovered from ref_dir, sorted
+        passed_refs = call_args.args[1]
+        assert [p.name for p in passed_refs] == ["a.png", "b.jpg"]
+        assert call_args.args[2] == "anime style"
+        assert call_args.args[3] == "from test"
+        assert call_args.kwargs["force"] is False
+
+    async def test_missing_ref_dir_returns_error(self) -> None:
+        result = await do_init(
+            _ctx("new-proj", client=MagicMock()),
+            {"ref_dir": "", "ip_info": "x"},
+        )
+        assert result.ok is False
+        assert "ref_dir" in result.message
+
+    async def test_nonexistent_ref_dir_returns_error(self, tmp_path) -> None:
+        result = await do_init(
+            _ctx("new-proj", client=MagicMock()),
+            {"ref_dir": str(tmp_path / "does-not-exist"), "ip_info": "x"},
+        )
+        assert result.ok is False
+        assert "not a directory" in result.message
+
+    async def test_empty_ref_dir_returns_error(self, tmp_path) -> None:
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        result = await do_init(
+            _ctx("new-proj", client=MagicMock()),
+            {"ref_dir": str(empty_dir), "ip_info": "x"},
+        )
+        assert result.ok is False
+        assert "No images" in result.message

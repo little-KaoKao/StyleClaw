@@ -1040,6 +1040,65 @@ def _confirm_select_model(
     return {**args, "models": ", ".join(selected), "variant": variant}
 
 
+def _confirm_init(
+    action_name: str,
+    args: dict[str, Any],
+    ctx: "ExecutionContext",
+) -> dict[str, Any] | None:
+    """Prompt user to confirm new-project parameters: ref_dir, ip_info, etc."""
+    image_exts = {".png", ".jpg", ".jpeg", ".webp"}
+
+    typer.echo("\n=== 创建新项目 ===")
+    typer.echo(f"  项目名: {ctx.project}")
+
+    while True:
+        ref_dir_str = typer.prompt(
+            "  参考图目录 (绝对路径或~开头)",
+            default=args.get("ref_dir", "") or "",
+        )
+        ref_dir = Path(ref_dir_str.strip()).expanduser()
+        if not ref_dir.is_dir():
+            typer.echo(f"  ✗ 目录不存在: {ref_dir}")
+            continue
+        found = sorted(p for p in ref_dir.iterdir() if p.suffix.lower() in image_exts)
+        if not found:
+            typer.echo(f"  ✗ 目录里没有支持的图片 (.png/.jpg/.jpeg/.webp): {ref_dir}")
+            continue
+        typer.echo(f"  ✓ 发现 {len(found)} 张图片: {', '.join(p.name for p in found)}")
+        break
+
+    ip_info = typer.prompt(
+        "  IP / 风格描述",
+        default=args.get("ip_info", "") or "",
+    ).strip()
+    if not ip_info:
+        typer.echo("  ✗ IP 描述不能为空。")
+        return None
+
+    description = args.get("description", "") or ""
+    return {
+        **args,
+        "ref_dir": str(ref_dir),
+        "ip_info": ip_info,
+        "description": description,
+    }
+
+
+def _confirm_dispatch(
+    action_name: str,
+    args: dict[str, Any],
+    ctx: "ExecutionContext",
+) -> dict[str, Any] | None:
+    """Route to the per-action confirmation callback. Unknown actions pass
+    through unchanged so future ``requires_confirmation`` actions don't
+    silently lose their args."""
+    if action_name == "select-model":
+        return _confirm_select_model(action_name, args, ctx)
+    if action_name == "init":
+        return _confirm_init(action_name, args, ctx)
+    return args
+
+
 @app.command()
 def run(
     intent: str = typer.Argument(..., help="Natural language description of what to do"),
@@ -1061,7 +1120,10 @@ def run(
         if len(projects) == 1:
             project = projects[0]
         elif not projects:
-            typer.echo("Error: No projects found. Run 'init' first.", err=True)
+            typer.echo(
+                "Error: No projects yet. Pass --project NAME to create one via natural language.",
+                err=True,
+            )
             raise typer.Exit(1)
         else:
             typer.echo("Error: Multiple projects found. Specify --project.", err=True)
@@ -1107,7 +1169,7 @@ def run(
             else:
                 typer.echo(f"  x  {result.message}", err=True)
 
-        confirm_fn = None if yes else _confirm_select_model
+        confirm_fn = None if yes else _confirm_dispatch
 
         async with _build_context(
             project, needs_client, needs_llm,
@@ -1126,7 +1188,10 @@ def run(
 
     if not dry_run:
         from styleclaw.orchestrator.suggestions import suggest_next_steps
-        suggestions = suggest_next_steps(project)
+        try:
+            suggestions = suggest_next_steps(project)
+        except FileNotFoundError:
+            suggestions = []
         if suggestions:
             typer.echo("\n下一步可以这样说：")
             for line in suggestions:

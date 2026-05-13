@@ -40,7 +40,7 @@ class TestRunCommand:
     def test_no_project_found(self) -> None:
         result = runner.invoke(app, ["run", "do something"])
         assert result.exit_code == 1
-        assert "No projects found" in result.output
+        assert "No projects yet" in result.output
 
     def test_multiple_projects_no_flag(self) -> None:
         project_store.create_project(ProjectConfig(name="proj-a"))
