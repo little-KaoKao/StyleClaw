@@ -1026,6 +1026,23 @@ def _confirm_select_model(
         typer.echo("")
 
     default_models = args.get("models", "")
+    default_variant_from_models = ""
+    if default_models:
+        # Defensive: if planner concatenated variant onto model IDs
+        # (e.g. "mj-v7-prompt-sref"), strip the suffix and lift it into
+        # the variant default. Avoids the prompt's [default] showing an
+        # invalid model ID that would fail validation on Enter.
+        cleaned: list[str] = []
+        for raw in default_models.split(","):
+            m = raw.strip()
+            for suffix in ("-prompt-sref", "-prompt-only"):
+                if m.endswith(suffix) and m[: -len(suffix)] in MODEL_REGISTRY:
+                    if not default_variant_from_models:
+                        default_variant_from_models = suffix.lstrip("-")
+                    m = m[: -len(suffix)]
+                    break
+            cleaned.append(m)
+        default_models = ", ".join(cleaned)
     if not default_models and evaluation:
         default_models = evaluation.recommendation
 
@@ -1051,8 +1068,18 @@ def _confirm_select_model(
             continue
         break
 
-    # Ask which variant to use in STYLE_REFINE
-    default_variant = evaluation.recommended_variant if evaluation and evaluation.recommended_variant else "prompt-sref"
+    # Ask which variant to use in STYLE_REFINE. Prefer (in order):
+    # planner-supplied variant arg, variant lifted from a malformed
+    # models default, evaluator recommendation, then prompt-sref.
+    arg_variant = (args.get("variant") or "").strip()
+    if arg_variant in ("prompt-sref", "prompt-only"):
+        default_variant = arg_variant
+    elif default_variant_from_models:
+        default_variant = default_variant_from_models
+    elif evaluation and evaluation.recommended_variant:
+        default_variant = evaluation.recommended_variant
+    else:
+        default_variant = "prompt-sref"
     while True:
         variant_input = typer.prompt(
             "  出图方案 (prompt-sref / prompt-only, 回车使用推荐)",
