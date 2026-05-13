@@ -1038,6 +1038,9 @@ def run(
     intent: str = typer.Argument(..., help="Natural language description of what to do"),
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Plan only; print the plan and exit without executing",
+    ),
     show_thinking: bool = typer.Option(
         True, "--show-thinking/--no-show-thinking", help="Show LLM reasoning process (default: on)",
     ),
@@ -1070,6 +1073,10 @@ def run(
             await _close_resource(llm, "llm")
 
         display_plan(action_plan, project)
+
+        if dry_run:
+            typer.echo("(dry-run) 未执行；去掉 --dry-run 后再跑即可")
+            return
 
         if not yes and not typer.confirm("Execute?"):
             typer.echo("Cancelled.")
@@ -1109,7 +1116,8 @@ def run(
                 raise typer.Exit(1)
 
     asyncio.run(_plan_and_execute())
-    typer.echo("\nDone.")
+    if not dry_run:
+        typer.echo("\nDone.")
 
 
 if __name__ == "__main__":

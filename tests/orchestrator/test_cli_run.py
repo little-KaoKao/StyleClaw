@@ -85,3 +85,49 @@ class TestRunCommand:
         mock_build_llm.assert_called_once()
         assert mock_plan.call_args.args[0] is fake_llm
         fake_llm.close.assert_awaited_once()
+
+    @patch("styleclaw.cli._build_context")
+    @patch("styleclaw.cli._build_llm_provider")
+    @patch("styleclaw.orchestrator.planner.plan", new_callable=AsyncMock)
+    def test_dry_run_skips_execution(
+        self, mock_plan, mock_build_llm, mock_build_context, setup_project,
+    ) -> None:
+        fake_llm = MagicMock()
+        fake_llm.close = AsyncMock()
+        mock_build_llm.return_value = fake_llm
+        mock_plan.return_value = _make_plan("Dry-run plan")
+
+        result = runner.invoke(
+            app, ["run", "analyze", "-p", "test-proj", "--dry-run"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Dry-run plan" in result.output
+        assert "(dry-run) 未执行" in result.output
+        # Trailing "Done." (from successful execution) must not appear.
+        assert "Done." not in result.output
+        # LLM was built+closed exactly once for planning.
+        mock_build_llm.assert_called_once()
+        mock_plan.assert_awaited_once()
+        fake_llm.close.assert_awaited_once()
+        # Execution context must never be constructed in dry-run.
+        mock_build_context.assert_not_called()
+
+    @patch("styleclaw.cli._build_context")
+    @patch("styleclaw.cli._build_llm_provider")
+    @patch("styleclaw.orchestrator.planner.plan", new_callable=AsyncMock)
+    def test_dry_run_overrides_yes(
+        self, mock_plan, mock_build_llm, mock_build_context, setup_project,
+    ) -> None:
+        fake_llm = MagicMock()
+        fake_llm.close = AsyncMock()
+        mock_build_llm.return_value = fake_llm
+        mock_plan.return_value = _make_plan("Dry beats yes")
+
+        result = runner.invoke(
+            app, ["run", "analyze", "-p", "test-proj", "--yes", "--dry-run"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "(dry-run) 未执行" in result.output
+        mock_build_context.assert_not_called()
