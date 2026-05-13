@@ -85,7 +85,13 @@ class RunningHubLLMProvider:
         }
         result = await self._post(body)
         msg = result["choices"][0]["message"]
-        text, _ = _message_text_and_thinking(msg)
+        text, thinking = _message_text_and_thinking(msg)
+        if not text and thinking:
+            logger.warning(
+                "RunningHub LLM returned empty content but non-empty reasoning; "
+                "falling back to reasoning_content as response text."
+            )
+            text = thinking
         if not text:
             raise ValueError(f"RunningHub LLM returned empty content: {result!r}")
         return text
@@ -113,6 +119,16 @@ class RunningHubLLMProvider:
         result = await self._post(body)
         msg = result["choices"][0]["message"]
         text, thinking = _message_text_and_thinking(msg)
+        if not text and thinking:
+            # Some thinking models emit the JSON answer inside reasoning_content
+            # while leaving content empty. Fall back to the thinking text so that
+            # downstream JSON parsers can still extract the structured output.
+            logger.warning(
+                "RunningHub LLM returned empty content but non-empty reasoning; "
+                "falling back to reasoning_content as response text."
+            )
+            text = thinking
+            thinking = ""
         if not text:
             raise ValueError(f"RunningHub LLM returned empty content: {result!r}")
         return LLMResponse(text=text, thinking=thinking)
@@ -131,6 +147,7 @@ class RunningHubLLMProvider:
                         content_type = resp.headers.get("content-type", "")
                         if "text/event-stream" in content_type:
                             chunks: list[str] = []
+                            reasoning_chunks: list[str] = []
                             async for line in resp.aiter_lines():
                                 if not line.startswith("data: "):
                                     continue
@@ -138,12 +155,23 @@ class RunningHubLLMProvider:
                                 if data == "[DONE]":
                                     break
                                 try:
-                                    delta = json.loads(data)["choices"][0]["delta"].get("content", "")
+                                    delta_obj = json.loads(data)["choices"][0]["delta"]
+                                    delta = delta_obj.get("content", "")
                                     if delta:
                                         chunks.append(delta)
+                                    reasoning = delta_obj.get("reasoning_content", "")
+                                    if reasoning:
+                                        reasoning_chunks.append(reasoning)
                                 except (KeyError, IndexError, json.JSONDecodeError):
                                     continue
-                            return {"choices": [{"message": {"content": "".join(chunks)}}]}
+                            return {
+                                "choices": [{
+                                    "message": {
+                                        "content": "".join(chunks),
+                                        "reasoning_content": "".join(reasoning_chunks),
+                                    }
+                                }]
+                            }
                         await resp.aread()
                         return resp.json()
             except httpx.TransportError as exc:

@@ -22,6 +22,8 @@ INIT → MODEL_SELECT → STYLE_REFINE → BATCH_T2I → BATCH_I2I → COMPLETED
 4. **BATCH_T2I** — 100 个多样化用例的泛化验证（10 个类别 × 10 个）
 5. **BATCH_I2I** — 图生图测试，进一步验证风格迁移能力
 
+---
+
 ## 环境要求
 
 - **Python 3.11+**
@@ -31,6 +33,8 @@ INIT → MODEL_SELECT → STYLE_REFINE → BATCH_T2I → BATCH_I2I → COMPLETED
   - **OpenAI 兼容** 服务，如 [gptproto.com](https://gptproto.com)（推荐），或
   - **RunningHub LLM**（`https://llm.runninghub.cn/v1`，与图像 API 共用 `RUNNINGHUB_API_KEY`），或
   - **AWS Bedrock** 访问权限 + Bearer Token（旧方案）
+
+---
 
 ## 安装
 
@@ -45,7 +49,7 @@ uv sync
 cp .env.example .env
 ```
 
-编辑 `.env` 填入你的密钥，**LLM 三选一**（不要混用多套 LLM 凭据；优先级见下）：
+编辑 `.env` 填入你的密钥，**LLM 三选一**（不要混用多套 LLM 凭据）：
 
 ```env
 RUNNINGHUB_API_KEY=<你的 RunningHub API 密钥>
@@ -63,29 +67,31 @@ LLM_MODEL=gemini-2.5-pro-preview-05-06
 # 方案 C：RunningHub LLM（与图像共用 RUNNINGHUB_API_KEY；勿与方案 A 同时启用）
 # RUNNINGHUB_LLM=1
 # RUNNINGHUB_LLM_BASE_URL=https://llm.runninghub.cn/v1
-# LLM_MODEL=rh-llm-a/rh-c-o-47
+# LLM_MODEL=rh-llm-g/rh-g-pro-preview-31
 # RUNNINGHUB_LLM_REASONING_EFFORT=high
 ```
 
 | 变量 | 必填 | 说明 |
 |------|:----:|------|
 | `RUNNINGHUB_API_KEY` | 是 | RunningHub 图像生成 API 密钥 |
-| `OPENAI_COMPAT_API_KEY` | 方案 A | OpenAI 兼容服务的 API 密钥（如 gptproto） |
+| `OPENAI_COMPAT_API_KEY` | 方案 A | OpenAI 兼容服务的 API 密钥 |
 | `OPENAI_COMPAT_BASE_URL` | 方案 A | 服务端点 URL（如 `https://api.gptproto.com/v1`） |
 | `LLM_MODEL` | 是 | 所选提供方的模型 ID |
 | `RUNNINGHUB_LLM` | 方案 C | 设为 `1` / `true` / `yes` / `on` 时启用 RunningHub LLM |
 | `RUNNINGHUB_LLM_BASE_URL` | 否 | LLM 网关，默认 `https://llm.runninghub.cn/v1` |
-| `RUNNINGHUB_LLM_REASONING_EFFORT` | 否 | `invoke_with_thinking` 时传入的推理强度，默认 `high`；`off` 等则省略该字段 |
-| `AWS_REGION` | 方案 B | AWS 区域（仅使用 Bedrock 时需要） |
-| `AWS_BEARER_TOKEN_BEDROCK` | 方案 B | Bedrock 代理网关的 Bearer Token（仅使用 Bedrock 时需要） |
+| `RUNNINGHUB_LLM_REASONING_EFFORT` | 否 | 推理强度，默认 `high`；`off` 则省略该字段 |
+| `AWS_REGION` | 方案 B | AWS 区域 |
+| `AWS_BEARER_TOKEN_BEDROCK` | 方案 B | Bedrock 代理网关的 Bearer Token |
 
-**优先级**：若设置了 `OPENAI_COMPAT_API_KEY`，始终走 OpenAI 兼容网关；否则若 `RUNNINGHUB_LLM` 为真，走 RunningHub LLM；否则走 Bedrock。
+**优先级**：设置了 `OPENAI_COMPAT_API_KEY` → 走 OpenAI 兼容；否则 `RUNNINGHUB_LLM` 为真 → 走 RunningHub LLM；否则走 Bedrock。
 
 验证安装：
 
 ```bash
 uv run styleclaw --help
 ```
+
+---
 
 ## 快速上手
 
@@ -94,13 +100,12 @@ uv run styleclaw --help
 使用 `styleclaw run` + 自然语言描述你想做什么，系统自动规划并执行：
 
 ```bash
-# 先创建项目
+# 第一步：创建项目
 uv run styleclaw init spider-verse \
   --ref ref1.png --ref ref2.png --ref ref3.png \
   --info "蜘蛛侠：平行宇宙动画风格"
 
-# 然后用自然语言描述意图（下面与 init 里的 <name> 一致，例如 spider-verse）
-# 若 data/projects 下有多个项目，必须加 -p；只有一个项目时可省略 -p。
+# 第二步：用自然语言驱动各阶段（-p 指定项目名，多项目时必填）
 uv run styleclaw run "分析风格并选出最佳模型" -p spider-verse
 uv run styleclaw run "迭代优化触发短语直到评分通过" -p spider-verse
 uv run styleclaw run "设计测试用例并跑批量生成" -p spider-verse
@@ -109,7 +114,6 @@ uv run styleclaw run "设计测试用例并跑批量生成" -p spider-verse
 `run` 命令通过 LLM 将你的意图转换为执行计划，展示给你确认后逐步执行。支持循环执行（精炼 → 生成 → 等待 → 评估），根据评分自动决定是否继续迭代。
 
 ```bash
-# 选项
 uv run styleclaw run "<意图>" -p <项目名>   # 多项目时必填；仅一个项目时可省略
 uv run styleclaw run "<意图>" --yes          # 跳过确认直接执行
 ```
@@ -119,7 +123,7 @@ uv run styleclaw run "<意图>" --yes          # 跳过确认直接执行
 也可以手动执行每个命令，实现更精细的控制：
 
 ```bash
-# 1. 创建项目，指定参考图片和 IP 描述
+# 1. 创建项目
 uv run styleclaw init spider-verse \
   --ref ref1.png --ref ref2.png --ref ref3.png \
   --info "蜘蛛侠：平行宇宙动画风格"
@@ -137,13 +141,6 @@ uv run styleclaw poll spider-verse
 uv run styleclaw evaluate spider-verse
 uv run styleclaw select-model spider-verse --models mj-v7
 
-# 若在 MODEL_SELECT 阶段更换风格参考图（set-sref）后要重新出图：
-# 同一 pass 下 generate 会跳过已有 SUCCESS，不会自动升到 pass-002。
-# 请用 --force 重跑全部对比位，或见 CLAUDE.md「换 sref 后」与 retest-models / set-pass 说明。
-# uv run styleclaw set-sref spider-verse 2
-# uv run styleclaw generate spider-verse --force
-# uv run styleclaw poll spider-verse && uv run styleclaw evaluate spider-verse
-
 # 5. 精炼触发短语（重复直到满意）
 uv run styleclaw refine spider-verse
 uv run styleclaw generate spider-verse
@@ -158,121 +155,279 @@ uv run styleclaw poll spider-verse
 uv run styleclaw report spider-verse
 ```
 
+---
+
+## 典型使用场景与示例
+
+### 场景一：从零开始探索一个新 IP 的风格
+
+适合第一次使用，或对某个 IP 完全没有触发词积累的情况。
+
+```bash
+# 准备好 3 张以上参考图，放到本地目录
+uv run styleclaw init my-ip \
+  --ref-dir ./refs \
+  --info "某动画电影的赛璐珞手绘风格，强调粗线条和高饱和色块"
+
+# 用自然语言一键跑完整流程
+uv run styleclaw run "完整跑一遍：分析风格、选模型、精炼触发词、批量验证" -p my-ip
+```
+
+### 场景二：只想快速选出最适合的生成模型
+
+已有参考图，想先看看哪个模型最能还原风格，再决定是否深入精炼。
+
+```bash
+uv run styleclaw init style-test \
+  --ref ref-001.png --ref ref-002.png \
+  --info "日系水彩插画风格"
+
+uv run styleclaw run "分析参考图，对比所有模型，给出推荐" -p style-test
+# 系统会生成 HTML 报告，可在浏览器中直观对比各模型效果
+```
+
+### 场景三：已有触发词，想验证泛化能力
+
+已经有了一个触发短语，想用 100 个多样化用例测试它在不同主题下的稳定性。
+
+```bash
+# 假设已完成 STYLE_REFINE，当前处于 BATCH_T2I 阶段
+uv run styleclaw run "设计 100 个测试用例并提交批量生成" -p my-ip
+
+# 等待生成完成后查看报告
+uv run styleclaw poll my-ip
+uv run styleclaw report my-ip
+```
+
+### 场景四：精炼效果不理想，想手动给出调整方向
+
+LLM 自动精炼几轮后，你觉得方向不对，想亲自介入。
+
+```bash
+# 查看当前状态和触发词
+uv run styleclaw status my-ip
+
+# 手动指定精炼方向
+uv run styleclaw refine my-ip --direction "增加半调网点效果，降低色彩饱和度，强调黑色轮廓线"
+
+uv run styleclaw generate my-ip
+uv run styleclaw poll my-ip
+uv run styleclaw evaluate my-ip
+```
+
+### 场景五：更换风格参考图后重新对比模型
+
+发现原来的参考图不够典型，换了一张更有代表性的图，需要重新跑模型对比。
+
+```bash
+# 查看当前参考图列表（显示 0-based 索引）
+uv run styleclaw status my-ip
+
+# 切换风格参考图（例如切换到第 2 张，索引为 1）
+uv run styleclaw set-sref my-ip 1
+
+# 强制重新生成所有模型对比图
+uv run styleclaw generate my-ip --force
+uv run styleclaw poll my-ip
+uv run styleclaw evaluate my-ip
+uv run styleclaw select-model my-ip --models mj-v7
+```
+
+### 场景六：从 STYLE_REFINE 阶段重新对比模型
+
+精炼过程中发现选错了模型，想回到模型选择阶段重新测试。
+
+```bash
+# 在 STYLE_REFINE 或 BATCH_T2I 阶段均可执行
+uv run styleclaw retest-models my-ip
+# → 自动创建新的 pass 目录（pass-002），不破坏已有数据
+
+uv run styleclaw generate my-ip
+uv run styleclaw poll my-ip
+uv run styleclaw evaluate my-ip
+uv run styleclaw select-model my-ip --models niji7
+```
+
+### 场景七：回退到某一轮重新精炼
+
+某一轮精炼后效果变差，想回到之前的某轮重新出发。
+
+```bash
+# 软回退：只改变状态指针，不删除任何数据
+uv run styleclaw rollback my-ip --to STYLE_REFINE --round 2
+
+# 下一次 refine 会自动创建新的轮次（跳过已有轮次编号）
+uv run styleclaw refine my-ip
+uv run styleclaw generate my-ip
+uv run styleclaw poll my-ip
+uv run styleclaw evaluate my-ip
+```
+
+### 场景八：完成文生图验证后，追加图生图测试
+
+100 用例文生图通过后，想进一步用图生图验证风格迁移能力。
+
+```bash
+# 添加用于图生图的参考图（同时自动推进到 BATCH_I2I 阶段）
+uv run styleclaw add-refs my-ip --images source1.png --images source2.png
+
+# 提交图生图批量任务
+uv run styleclaw batch-submit my-ip --i2i
+
+uv run styleclaw poll my-ip
+uv run styleclaw report my-ip --i2i
+
+# 完成后标记项目为已完成
+uv run styleclaw approve my-ip --phase completed --yes
+```
+
+### 场景九：管理多个并行项目
+
+同时在探索多个 IP 风格，需要在项目间切换。
+
+```bash
+# 查看所有项目及其当前阶段
+uv run styleclaw status
+
+# 对特定项目执行操作（多项目时 -p 必填）
+uv run styleclaw run "继续精炼触发词" -p project-a
+uv run styleclaw run "提交批量测试" -p project-b
+
+# 查看某个项目的详细状态
+uv run styleclaw status project-a
+```
+
+---
+
 ## CLI 命令参考
 
 ### 编排器
 
-| 命令                       | 说明                                             |
-| -------------------------- | ------------------------------------------------ |
-| `run "<意图>"`           | 自然语言执行 — LLM 规划，用户确认，系统自动执行 |
-| `run "<意图>" -p <name>` | 指定项目名称                                     |
-| `run "<意图>" --yes`     | 跳过确认，直接执行                               |
+| 命令 | 说明 |
+|------|------|
+| `run "<意图>"` | 自然语言执行 — LLM 规划，用户确认，系统自动执行 |
+| `run "<意图>" -p <name>` | 指定项目名称（多项目时必填） |
+| `run "<意图>" --yes` | 跳过确认，直接执行 |
 
 ### 核心流水线命令
 
-| 命令                                   | 所属阶段                    | 说明                             |
-| -------------------------------------- | --------------------------- | -------------------------------- |
-| `init <name> --ref <img>...`         | —                          | 创建项目，指定参考图片           |
-| `analyze <name>`                     | INIT                        | LLM 分析参考图，提取初始触发短语 |
-| `generate <name>`                    | MODEL_SELECT / STYLE_REFINE | 提交图像生成任务                 |
-| `poll <name>`                        | 任意活跃阶段                | 轮询任务状态，下载已完成的图片   |
-| `evaluate <name>`                    | MODEL_SELECT / STYLE_REFINE | LLM 对生成图片评分               |
-| `select-model <name> --models <ids>` | MODEL_SELECT / STYLE_REFINE | 选择使用的模型                   |
-| `refine <name>`                      | STYLE_REFINE                | LLM 精炼触发短语                 |
-| `approve <name>`                     | STYLE_REFINE / BATCH_I2I    | 确认进入下一阶段                 |
-| `design-cases <name>`                | BATCH_T2I                   | LLM 设计 100 个测试用例描述      |
-| `batch-submit <name>`                | BATCH_T2I / BATCH_I2I       | 提交批量生成任务                 |
-| `report <name>`                      | BATCH_T2I / BATCH_I2I       | 生成 HTML 可视化报告             |
+| 命令 | 所属阶段 | 说明 |
+|------|---------|------|
+| `init <name> --ref <img>...` | — | 创建项目，指定参考图片 |
+| `analyze <name>` | INIT | LLM 分析参考图，提取初始触发短语 |
+| `generate <name>` | MODEL_SELECT / STYLE_REFINE | 提交图像生成任务 |
+| `poll <name>` | 任意活跃阶段 | 轮询任务状态，下载已完成的图片 |
+| `evaluate <name>` | MODEL_SELECT / STYLE_REFINE | LLM 对生成图片评分 |
+| `select-model <name> --models <ids>` | MODEL_SELECT | 选择使用的模型 |
+| `refine <name>` | STYLE_REFINE | LLM 精炼触发短语 |
+| `approve <name>` | STYLE_REFINE / BATCH_I2I | 确认进入下一阶段 |
+| `design-cases <name>` | BATCH_T2I | LLM 设计 100 个测试用例描述 |
+| `batch-submit <name>` | BATCH_T2I / BATCH_I2I | 提交批量生成任务 |
+| `report <name>` | BATCH_T2I / BATCH_I2I | 生成 HTML 可视化报告 |
 
 ### 辅助命令
 
-| 命令                                         | 说明                                 |
-| -------------------------------------------- | ------------------------------------ |
-| `status`                                   | 列出所有项目                         |
-| `status <name>`                            | 查看项目详细状态                     |
-| `adjust <name> --direction <text>`         | 手动提供精炼方向                     |
-| `rollback <name> --to <phase> --round <n>` | 回退到之前的阶段/轮次（非破坏性）    |
-| `set-sref <name> <index>`                  | 设置用作风格参考的图片（0 起始索引） |
-| `set-pass <name> <pass>`                   | 切换当前活跃的模型选择 pass 编号     |
-| `add-refs <name> --images <img>...`        | 为图生图测试添加参考图片             |
+| 命令 | 说明 |
+|------|------|
+| `status` | 列出所有项目 |
+| `status <name>` | 查看项目详细状态 |
+| `adjust <name> --direction <text>` | 手动提供精炼方向 |
+| `rollback <name> --to <phase> --round <n>` | 软回退到之前的阶段/轮次（不删除数据） |
+| `retest-models <name>` | 从 STYLE_REFINE / BATCH_T2I 重新进入模型选择（创建新 pass） |
+| `back-to-t2i <name>` | 从 BATCH_I2I 返回 BATCH_T2I |
+| `set-sref <name> <index>` | 设置用作风格参考的图片（0-based 索引） |
+| `set-pass <name> <pass>` | 切换当前活跃的模型选择 pass 编号 |
+| `add-refs <name> --images <img>...` | 为图生图测试添加参考图片（同时推进到 BATCH_I2I） |
+| `migrate <name>` | 将旧布局项目迁移到当前 pass 分层布局 |
 
 ### 常用参数
 
 ```bash
-# init：多行时每一行末尾都要有 \（行尾注释前的反斜杠不能省），否则下一行会被当成新命令。
 uv run styleclaw init <name> \
-  --ref <图片路径> \
-  --ref-dir <目录> \
-  --info <文本> \
-  --desc <文本> \
-  --force
-# --ref 可重复；--ref-dir 与多张 --ref 按需要选用；--force 表示覆盖已有项目。
+  --ref <图片路径> \        # 可重复多次
+  --ref-dir <目录> \        # 自动发现目录下所有图片
+  --info <文本> \           # IP 描述（影响 LLM 分析方向）
+  --desc <文本> \           # 项目备注
+  --force                   # 覆盖已有项目
 
 uv run styleclaw generate <name> \
-  --force \
-  --retry-failed
+  --force \                 # 强制重新提交所有任务（包括已成功的）
+  --retry-failed            # 仅重试失败的任务
 
 uv run styleclaw refine <name> \
-  --direction <文本>
+  --direction <文本>        # 手动指定精炼方向
 
 uv run styleclaw batch-submit <name> \
-  --i2i \
-  --model <模型ID>
+  --i2i \                   # 提交图生图任务（默认文生图）
+  --model <模型ID> \        # 指定模型（默认使用已选模型）
+  --dry-run                 # 预览将要提交的任务，不实际提交
 
 uv run styleclaw approve <name> \
-  --phase completed \
-  --yes
-# --phase completed：BATCH_I2I → COMPLETED；--yes 跳过确认。
+  --phase completed \       # 直接标记为已完成（BATCH_I2I → COMPLETED）
+  --yes                     # 跳过确认
 
 uv run styleclaw report <name> \
-  --i2i
-# --i2i：图生图报告（默认文生图）。
+  --i2i                     # 生成图生图报告（默认文生图）
 ```
+
+---
 
 ## 可用模型
 
-| 模型 ID         | 名称             | 风格引用方式 | 备注                                                      |
-| --------------- | ---------------- | :----------: | --------------------------------------------------------- |
-| `mj-v7`       | Midjourney v7    |   `param`    | 默认模型；使用 `--sref` + `sw=100`；stylize=200，每次生成 4 张图 |
-| `niji7`       | Midjourney niji7 |   `param`    | 使用 `--sref` + `sw=100`；动漫向，stylize=200             |
-| `nb2`         | NanoBanana2      |   `prompt`   | 通过提示词前缀 `参考图1的风格：` + `imageUrls` 引用风格；2K 分辨率，提示词最长 20000 字符 |
-| `seedream`    | Seedream v5-lite |   `prompt`   | 通过提示词前缀 `参考图1的风格：` + `imageUrls` 引用风格；使用 width×height 而非 aspectRatio，提示词最长 2000 字符 |
-| `gpt-image-2` | GPT-Image-2      |   `prompt`   | 通过提示词前缀 `参考图1的风格：` + `imageUrls` 引用风格；2K 分辨率，quality=medium，提示词最长 20000 字符 |
+| 模型 ID | 名称 | 风格引用方式 | 备注 |
+|---------|------|:----------:|------|
+| `mj-v7` | Midjourney v7 | `param` | 默认模型；`--sref` + `sw=100`；stylize=200，每次生成 4 张图 |
+| `niji7` | Midjourney niji7 | `param` | `--sref` + `sw=100`；动漫向，stylize=200 |
+| `nb2` | NanoBanana2 | `prompt` | 提示词前缀 `参考图1的风格：` + `imageUrls`；2K 分辨率，最长 20000 字符 |
+| `seedream` | Seedream v5-lite | `prompt` | 提示词前缀 `参考图1的风格：` + `imageUrls`；width×height，最长 2000 字符 |
+| `gpt-image-2` | GPT-Image-2 | `prompt` | 提示词前缀 `参考图1的风格：` + `imageUrls`；2K 分辨率，quality=medium，最长 20000 字符 |
 
-说明：**所有模型都支持“风格引用”**，只是引用方式不同：`param` 表示通过 API 参数（如 `--sref`）传入；`prompt` 表示通过提示词前缀 + `imageUrls` 传入。
+**风格引用方式**：`param` 表示通过 API 参数（`--sref`）传入；`prompt` 表示通过提示词前缀 + `imageUrls` 传入。所有模型均支持风格参考。
+
+MODEL_SELECT 阶段每个模型会测试两种变体：
+- **prompt-only**：仅触发短语，不附加风格参考图
+- **prompt-sref**：触发短语 + 风格参考图
+
+若 prompt-only 效果已足够（总分 ≥ 7.0），优先选用，灵活性更高。
+
+---
 
 ## 风格精炼评分
 
-在 STYLE_REFINE 阶段，LLM 会从 5 个维度对生成图片评分：
+在 STYLE_REFINE 阶段，LLM 会从 5 个维度对生成图片评分（满分 10 分）：
 
-| 维度                      | 说明                         |
-| ------------------------- | ---------------------------- |
-| 色彩调性（Color Palette） | 色彩是否匹配参考风格         |
-| 线条风格（Line Style）    | 笔触粗细、边缘处理、线条质感 |
-| 光影效果（Lighting）      | 光线方向、对比度、阴影风格   |
-| 纹理质感（Texture）       | 表面细节、颗粒感、材质表现   |
-| 整体氛围（Overall Mood）  | 情感基调和氛围一致性         |
+| 维度 | 说明 |
+|------|------|
+| 色彩调性（Color Palette） | 色彩是否匹配参考风格 |
+| 线条风格（Line Style） | 笔触粗细、边缘处理、线条质感 |
+| 光影效果（Lighting） | 光线方向、对比度、阴影风格 |
+| 纹理质感（Texture） | 表面细节、颗粒感、材质表现 |
+| 整体氛围（Overall Mood） | 情感基调和氛围一致性 |
 
-**通过标准**：所有维度 ≥ 7.0 且总分 ≥ 7.5（满分 10 分）。
+**通过标准**：所有维度 ≥ 7.0 且总分 ≥ 7.5。
+
+---
 
 ## 批量测试类别
 
 100 用例泛化测试覆盖 10 个类别（每类 10 个）：
 
-| 类别               | 说明      |
-| ------------------ | --------- |
-| `adult_male`     | 成年男性  |
-| `adult_female`   | 成年女性  |
-| `shota`          | 少年      |
-| `loli`           | 少女      |
-| `elderly_male`   | 老年男性  |
-| `elderly_female` | 老年女性  |
-| `creature`       | 生物/怪物 |
-| `outdoor_scene`  | 室外场景  |
-| `indoor_scene`   | 室内场景  |
-| `group`          | 群像      |
+| 类别 | 说明 |
+|------|------|
+| `adult_male` | 成年男性 |
+| `adult_female` | 成年女性 |
+| `shota` | 少年 |
+| `loli` | 少女 |
+| `elderly_male` | 老年男性 |
+| `elderly_female` | 老年女性 |
+| `creature` | 生物/怪物 |
+| `outdoor_scene` | 室外场景 |
+| `indoor_scene` | 室内场景 |
+| `group` | 群像 |
 
 **泛化规则**：100 个用例中最多只有 1-2 个可引用原始 IP 元素，其余 98+ 个必须是全新主题，以验证触发短语的泛化能力。
+
+---
 
 ## 项目数据结构
 
@@ -280,16 +435,41 @@ uv run styleclaw report <name> \
 
 ```
 data/projects/<项目名>/
-├── config.json              # 项目配置
-├── state.json               # 当前状态（阶段、轮次、批次、已选模型）
-├── refs/                    # 参考图片 + 上传记录
-├── model-select/pass-NNN/   # 模型对比结果 + 报告
-├── style-refine/pass-NNN/round-NNN/  # 各轮精炼结果 + 评估
-├── batch-t2i/batch-NNN/     # 100 用例文生图结果 + 报告
-└── batch-i2i/batch-NNN/     # 图生图结果 + 报告
+├── config.json                          # 项目配置（名称、IP 描述、参考图列表）
+├── state.json                           # 当前状态（阶段、轮次、批次、已选模型）
+├── refs/                                # 参考图片 + 上传记录
+├── model-select/
+│   └── pass-001/                        # 每次模型对比独立 pass
+│       ├── initial-analysis.json        # LLM 风格分析结果
+│       ├── evaluation.json              # LLM 模型评估结果
+│       ├── report.html                  # 可视化对比报告
+│       └── results/<model-id>/<variant>/
+├── style-refine/
+│   └── pass-001/
+│       └── round-001/                   # 每轮精炼独立目录
+│           ├── prompt.json              # 本轮触发短语
+│           ├── evaluation.json          # 本轮评分
+│           └── results/<model-id>/
+├── batch-t2i/
+│   └── batch-001/
+│       ├── cases.json                   # 100 个测试用例
+│       ├── report.html
+│       └── results/<case-id>/
+└── batch-i2i/
+    └── batch-001/
+        ├── source-images/               # 图生图源图
+        ├── uploads.json
+        ├── cases.json
+        └── results/<case-id>/
 ```
 
-旧项目可能仍是未按 pass 分层的旧布局。可用 `uv run styleclaw migrate <项目名>` 迁移到当前布局。
+旧项目可能仍是未按 pass 分层的旧布局，可用以下命令迁移：
+
+```bash
+uv run styleclaw migrate <项目名>
+```
+
+---
 
 ## 开发指南
 
@@ -304,19 +484,23 @@ uv run python -m pytest tests/ --cov=src
 uv run python -m pytest tests/ -m "not integration"
 ```
 
+---
+
 ## 技术栈
 
-| 组件        | 技术                   |
-| ----------- | ---------------------- |
-| 语言        | Python 3.11+           |
-| 包管理      | uv                     |
-| HTTP 客户端 | httpx（异步）          |
-| LLM         | OpenAI 兼容 API、RunningHub LLM 或 AWS Bedrock（旧方案） |
-| 数据模型    | Pydantic v2            |
-| 命令行      | Typer                  |
-| 报告        | Jinja2 HTML 模板       |
-| 图像处理    | Pillow                 |
-| 配置        | python-dotenv          |
+| 组件 | 技术 |
+|------|------|
+| 语言 | Python 3.11+ |
+| 包管理 | uv |
+| HTTP 客户端 | httpx（异步） |
+| LLM | OpenAI 兼容 API、RunningHub LLM 或 AWS Bedrock（旧方案） |
+| 数据模型 | Pydantic v2 |
+| 命令行 | Typer |
+| 报告 | Jinja2 HTML 模板 |
+| 图像处理 | Pillow |
+| 配置 | python-dotenv |
+
+---
 
 ## 许可证
 
