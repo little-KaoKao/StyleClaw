@@ -9,7 +9,12 @@ from typing import Any, Self
 import httpx
 from pydantic import SecretStr
 
-from styleclaw.core.config import LLM_CONCURRENCY_LIMIT
+from styleclaw.core.config import (
+    LLM_CONCURRENCY_LIMIT,
+    LLM_CONNECT_TIMEOUT,
+    LLM_READ_TIMEOUT,
+    LLM_WRITE_TIMEOUT,
+)
 from styleclaw.providers.llm.base import LLMResponse
 
 logger = logging.getLogger(__name__)
@@ -44,7 +49,9 @@ class BedrockProvider:
                 "Authorization": f"Bearer {self._token.get_secret_value()}",
                 "Content-Type": "application/json",
             },
-            timeout=120,
+            timeout=httpx.Timeout(
+                LLM_READ_TIMEOUT, connect=LLM_CONNECT_TIMEOUT, write=LLM_WRITE_TIMEOUT,
+            ),
             limits=httpx.Limits(
                 max_connections=200,
                 max_keepalive_connections=50,

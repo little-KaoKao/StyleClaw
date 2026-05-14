@@ -36,6 +36,15 @@ ORCHESTRATOR_POLL_INTERVAL: float = _float_env("STYLECLAW_ORCH_POLL_INTERVAL", "
 MAX_POLL_CYCLES: int = _int_env("STYLECLAW_MAX_POLL_CYCLES", "60")
 STREAM_DISPLAY: bool = _bool_env("STYLECLAW_STREAM_DISPLAY", True)
 
+# httpx timeouts for LLM providers (in seconds).
+# WriteTimeout is the killer when evaluate POSTs many base64 images at once —
+# the default httpx 5s is way too short, and even the historical 60s here
+# wasn't enough on slow upload links. Default to 300s (matching read) and
+# expose env knobs so users on flaky networks can crank further.
+LLM_WRITE_TIMEOUT: float = _float_env("STYLECLAW_LLM_WRITE_TIMEOUT", "300")
+LLM_READ_TIMEOUT: float = _float_env("STYLECLAW_LLM_READ_TIMEOUT", "300")
+LLM_CONNECT_TIMEOUT: float = _float_env("STYLECLAW_LLM_CONNECT_TIMEOUT", "30")
+
 
 def env_truthy(name: str) -> bool:
     raw = (os.getenv(name) or "").strip().lower()

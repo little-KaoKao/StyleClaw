@@ -9,7 +9,13 @@ from typing import Any, Self
 import httpx
 from pydantic import SecretStr
 
-from styleclaw.core.config import LLM_CONCURRENCY_LIMIT, STREAM_DISPLAY
+from styleclaw.core.config import (
+    LLM_CONCURRENCY_LIMIT,
+    LLM_CONNECT_TIMEOUT,
+    LLM_READ_TIMEOUT,
+    LLM_WRITE_TIMEOUT,
+    STREAM_DISPLAY,
+)
 from styleclaw.providers.llm.base import LLMResponse
 
 logger = logging.getLogger(__name__)
@@ -40,7 +46,9 @@ class OpenAICompatProvider:
                 "Authorization": f"Bearer {self._api_key.get_secret_value()}",
                 "Content-Type": "application/json",
             },
-            timeout=httpx.Timeout(300.0, connect=30.0, write=60.0),
+            timeout=httpx.Timeout(
+                LLM_READ_TIMEOUT, connect=LLM_CONNECT_TIMEOUT, write=LLM_WRITE_TIMEOUT,
+            ),
         )
         self._semaphore = asyncio.Semaphore(LLM_CONCURRENCY_LIMIT)
 

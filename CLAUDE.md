@@ -58,6 +58,9 @@ All defined in `core/config.py` via `_int_env` / `_float_env`. Invalid values ra
 | `STYLECLAW_ORCH_POLL_INTERVAL` | `30` | Orchestrator-driven outer poll cycle interval (seconds) |
 | `STYLECLAW_MAX_POLL_CYCLES` | `60` | Cap on orchestrator poll cycles before reporting timeout |
 | `STYLECLAW_STREAM_DISPLAY` | `1` | Print LLM response deltas to stdout as they arrive (`  ↓ ...`); set to `0` / `false` to silence (e.g. in CI) |
+| `STYLECLAW_LLM_WRITE_TIMEOUT` | `300` | httpx write timeout (seconds) for LLM requests. Evaluate POSTs many base64 images at once — raise on slow upload links (e.g. `600`). |
+| `STYLECLAW_LLM_READ_TIMEOUT` | `300` | httpx read timeout (seconds) for LLM streaming responses. |
+| `STYLECLAW_LLM_CONNECT_TIMEOUT` | `30` | httpx connect timeout (seconds) for LLM connections. |
 
 ## Tech Stack
 
