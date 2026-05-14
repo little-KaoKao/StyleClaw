@@ -61,11 +61,11 @@ When a loop is needed, use this exact structure (0-indexed step positions):
 {"summary": "...", "steps": [...], "loop": {"start_step": 0, "end_step": 3, "max_iterations": 5, "condition": "..."}, "stop_summary": "..."}
 
 - `summary`: one Chinese sentence describing what the plan does
-- `stop_summary`: one short Chinese sentence describing **where the plan stops and why** — what the user can do/expect next. Examples:
-  - "评估完成后停在这里，等你说选哪个模型。"
-  - "本轮精炼分数过线就停，否则会自动再来一轮（最多 5 轮）。"
-  - "提交完批量任务就停，下一步是 poll 查看进度并出报告。"
-  Always end the plan with a stop_summary so the user knows what comes next without having to inspect the steps.
+- `stop_summary`: one short Chinese sentence describing **the end state and what the user does next**. Write it as a positive statement, not as "stops here" — the renderer already prefixes it with "执行完后：". Examples:
+  - "评估完毕，由你确认选哪个模型再进入精炼。"
+  - "分数过线就结束；否则自动再来一轮（最多 5 轮）。"
+  - "批量任务已提交，接下来用 poll 查看进度并出报告。"
+  Avoid phrases like "停在这里" / "就停" — they read circularly under the "执行完后：" prefix. Always end the plan with a stop_summary so the user knows what comes next without having to inspect the steps.
 - `start_step`: 0-based index of the first step in the loop body
 - `end_step`: 0-based index of the last step in the loop body (inclusive)
 - `max_iterations`: maximum number of loop repetitions

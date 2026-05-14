@@ -113,7 +113,7 @@ def display_plan(plan: ActionPlan, project: str) -> None:
         typer.echo(f"\n  Loop: steps {s}-{e} repeat until pass (max {plan.loop.max_iterations}x)")
 
     if plan.stop_summary:
-        typer.echo(f"\n  停在哪：{plan.stop_summary}")
+        typer.echo(f"\n  执行完后：{plan.stop_summary}")
 
     typer.echo("")
 

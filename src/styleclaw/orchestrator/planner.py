@@ -143,5 +143,5 @@ async def _plan_init_only(llm: LLMProvider, project: str, intent: str) -> Action
             ),
         ],
         loop=None,
-        stop_summary="项目创建完成后停在 INIT 阶段，下一步可以让我分析风格。",
+        stop_summary="项目创建完成，phase 进入 INIT，下一步可以让我分析风格。",
     )
