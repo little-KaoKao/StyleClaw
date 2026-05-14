@@ -30,10 +30,15 @@ class TestDesignCasesErrorRecovery:
             await design_cases(mock_llm, "anime", "bold style", 1)
 
     async def test_raises_on_no_closing_bracket(self) -> None:
+        """Input has a `}` but no `]`. The recovery helper closes the array,
+        but the recovered case is missing required fields, so Pydantic
+        validation fails — which is the correct surface for "garbage in,
+        clear failure out"."""
+        from pydantic import ValidationError
         mock_llm = AsyncMock()
         mock_llm.invoke.return_value = '{"cases": [{"id": "am-01"}'
 
-        with pytest.raises(json.JSONDecodeError):
+        with pytest.raises((json.JSONDecodeError, ValidationError, ValueError)):
             await design_cases(mock_llm, "anime", "bold style", 1)
 
     async def test_raises_on_completely_invalid_json(self) -> None:

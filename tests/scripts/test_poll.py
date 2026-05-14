@@ -231,3 +231,45 @@ class TestConcurrentPoll:
         results = await poll_style_refine("test-proj", mock_client, 1)
         assert len(results) == 2
         assert all(r.status == "SUCCESS" for r in results.values())
+
+
+class TestResubmitFromRecord:
+    @patch("styleclaw.scripts.poll.submit_task", new_callable=AsyncMock)
+    async def test_uses_recorded_endpoint_when_present(
+        self, mock_submit, mock_client,
+    ) -> None:
+        """Resubmit must hit the SAME endpoint the original task used —
+        otherwise an i2i record gets silently retried on the t2i endpoint."""
+        from styleclaw.scripts.poll import _resubmit_from_record
+
+        record = TaskRecord(
+            task_id="orig", model_id="nb2", status="FAILED",
+            params={"prompt": "x", "imageUrls": ["http://cdn/1.png"]},
+            endpoint="/openapi/v2/rhart-image-n-g31-flash-official/image-to-image",
+        )
+        mock_submit.return_value = TaskRecord(
+            task_id="new", model_id="nb2", status="QUEUED",
+        )
+        await _resubmit_from_record(mock_client, record)
+        called_endpoint = mock_submit.call_args[0][1]
+        assert called_endpoint == "/openapi/v2/rhart-image-n-g31-flash-official/image-to-image"
+
+    @patch("styleclaw.scripts.poll.submit_task", new_callable=AsyncMock)
+    async def test_falls_back_to_t2i_endpoint_when_unrecorded(
+        self, mock_submit, mock_client,
+    ) -> None:
+        """Pre-existing task records (saved before the endpoint field was
+        added) have endpoint=''. Resubmit must fall back to the model's
+        t2i_endpoint so legacy records still resubmit cleanly."""
+        from styleclaw.scripts.poll import _resubmit_from_record
+
+        record = TaskRecord(
+            task_id="orig", model_id="mj-v7", status="FAILED",
+            params={"prompt": "x"},
+        )
+        mock_submit.return_value = TaskRecord(
+            task_id="new", model_id="mj-v7", status="QUEUED",
+        )
+        await _resubmit_from_record(mock_client, record)
+        called_endpoint = mock_submit.call_args[0][1]
+        assert "text-to-image-v7" in called_endpoint

@@ -99,6 +99,54 @@ class TestBedrockInvokeWithThinking:
         assert result.text == "done"
 
     @respx.mock
+    async def test_max_tokens_lifted_above_thinking_budget(
+        self, provider: BedrockProvider,
+    ) -> None:
+        """Anthropic requires thinking.budget_tokens < max_tokens.
+        When a caller passes max_tokens <= thinking_budget, the provider
+        must lift max_tokens so the API doesn't reject the request.
+        """
+        captured = {}
+
+        def _handler(request):
+            captured["body"] = json.loads(request.content.decode())
+            return httpx.Response(
+                200, json={"content": [{"type": "text", "text": "ok"}]},
+            )
+
+        respx.post(
+            "https://bedrock-runtime.us-east-1.amazonaws.com/model/test-model/invoke"
+        ).mock(side_effect=_handler)
+
+        await provider.invoke_with_thinking(
+            system="s", messages=[], max_tokens=4096, thinking_budget=5000,
+        )
+        assert captured["body"]["max_tokens"] > captured["body"]["thinking"]["budget_tokens"]
+        assert captured["body"]["thinking"]["budget_tokens"] == 5000
+
+    @respx.mock
+    async def test_max_tokens_preserved_when_already_large_enough(
+        self, provider: BedrockProvider,
+    ) -> None:
+        captured = {}
+
+        def _handler(request):
+            captured["body"] = json.loads(request.content.decode())
+            return httpx.Response(
+                200, json={"content": [{"type": "text", "text": "ok"}]},
+            )
+
+        respx.post(
+            "https://bedrock-runtime.us-east-1.amazonaws.com/model/test-model/invoke"
+        ).mock(side_effect=_handler)
+
+        await provider.invoke_with_thinking(
+            system="s", messages=[], max_tokens=16384, thinking_budget=5000,
+        )
+        # When caller already passes a generous max_tokens, don't change it.
+        assert captured["body"]["max_tokens"] == 16384
+
+    @respx.mock
     async def test_invoke_without_thinking_unchanged(
         self, provider: BedrockProvider,
     ) -> None:

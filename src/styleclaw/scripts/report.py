@@ -7,7 +7,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from styleclaw.core.models import TaskStatus
 from styleclaw.storage import project_store
-from styleclaw.storage.image_store import list_output_images
+from styleclaw.storage.image_store import count_failed_downloads, list_output_images
 
 logger = logging.getLogger(__name__)
 
@@ -168,9 +168,11 @@ def generate_batch_t2i_report(name: str, batch_num: int) -> Path:
     dest_dir = project_store.batch_t2i_dir(name, batch_num)
 
     cases_data: list[dict] = []
+    download_failures = 0
     for case in config.cases:
         case_dir = project_store.batch_t2i_case_dir(name, batch_num, case.id)
         images = list_output_images(case_dir)
+        download_failures += count_failed_downloads(case_dir)
         record = records.get(case.id)
         cases_data.append({
             "id": case.id,
@@ -189,6 +191,7 @@ def generate_batch_t2i_report(name: str, batch_num: int) -> Path:
         cases=cases_data,
         total=len(config.cases),
         completed=sum(1 for c in cases_data if c["status"] == TaskStatus.SUCCESS),
+        download_failures=download_failures,
     )
 
     dest = dest_dir / "report.html"
@@ -205,11 +208,13 @@ def generate_batch_i2i_report(name: str, batch_num: int) -> Path:
     dest_dir = project_store.batch_i2i_dir(name, batch_num)
 
     pairs: list[dict] = []
+    download_failures = 0
     for i, upload in enumerate(uploads, 1):
         case_id = f"i2i-{i:03d}"
         case_dir = project_store.batch_i2i_case_dir(name, batch_num, case_id)
         source_path = dest_dir / "source-images" / Path(upload.local_path).name
         gen_images = list_output_images(case_dir)
+        download_failures += count_failed_downloads(case_dir)
         record = records.get(case_id)
         pairs.append({
             "case_id": case_id,
@@ -225,6 +230,7 @@ def generate_batch_i2i_report(name: str, batch_num: int) -> Path:
         pairs=pairs,
         total=len(uploads),
         completed=sum(1 for p in pairs if p["status"] == TaskStatus.SUCCESS),
+        download_failures=download_failures,
     )
 
     dest = dest_dir / "report.html"

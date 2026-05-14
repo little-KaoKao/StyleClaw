@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -13,16 +14,22 @@ class Checkpoint:
 
     Used by long-running batch operations (e.g. batch-t2i submit) so that an
     interrupted run can resume by skipping items already recorded.
+
+    Thread-safe: each instance holds an in-memory copy of the file plus a
+    lock, so concurrent writes don't lose updates. Each Checkpoint instance
+    owns the on-disk file; do not share the file across instances.
     """
 
     def __init__(self, project_dir: Path, phase: str) -> None:
         self._path = project_dir / f".checkpoint_{phase}.json"
+        self._lock = Lock()
+        self._data: dict[str, Any] = self._read_disk()
 
     @property
     def path(self) -> Path:
         return self._path
 
-    def _load(self) -> dict[str, Any]:
+    def _read_disk(self) -> dict[str, Any]:
         if not self._path.exists():
             return {}
         try:
@@ -34,33 +41,58 @@ class Checkpoint:
             return {}
 
     def get(self, key: str, default: Any = None) -> Any:
-        return self._load().get(key, default)
+        with self._lock:
+            value = self._data.get(key, default)
+            # Return a copy of mutable collections so callers can't mutate
+            # the cached state without going through save/add_to_set.
+            if isinstance(value, list):
+                return list(value)
+            if isinstance(value, dict):
+                return dict(value)
+            return value
 
     def all(self) -> dict[str, Any]:
-        return self._load()
+        with self._lock:
+            return dict(self._data)
 
     def save(self, key: str, value: Any) -> None:
-        data = self._load()
-        data[key] = value
-        self._write(data)
+        with self._lock:
+            self._data[key] = value
+            self._flush()
 
     def update(self, items: dict[str, Any]) -> None:
-        data = self._load()
-        data.update(items)
-        self._write(data)
+        with self._lock:
+            self._data.update(items)
+            self._flush()
+
+    def add_to_set(self, key: str, item: Any) -> None:
+        """Atomically add `item` to the set stored under `key`.
+
+        The on-disk representation is a sorted list (JSON has no set type).
+        Concurrent calls with different items never lose entries because the
+        read-modify-write happens under the lock.
+        """
+        with self._lock:
+            current = self._data.get(key, [])
+            merged = set(current) if isinstance(current, list) else set()
+            merged.add(item)
+            self._data[key] = sorted(merged)
+            self._flush()
 
     def clear(self) -> None:
-        if self._path.exists():
-            try:
-                self._path.unlink()
-            except OSError as exc:
-                logger.warning("Could not delete checkpoint %s: %s", self._path, exc)
+        with self._lock:
+            self._data = {}
+            if self._path.exists():
+                try:
+                    self._path.unlink()
+                except OSError as exc:
+                    logger.warning("Could not delete checkpoint %s: %s", self._path, exc)
 
-    def _write(self, data: dict[str, Any]) -> None:
+    def _flush(self) -> None:
         tmp = self._path.with_suffix(self._path.suffix + ".tmp")
         try:
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+                json.dump(self._data, f, indent=2, ensure_ascii=False)
             tmp.replace(self._path)
         except OSError as exc:
             logger.warning("Failed to write checkpoint %s: %s", self._path, exc)

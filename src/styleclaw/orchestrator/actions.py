@@ -101,9 +101,11 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
                 return StepResult(
                     ok=False,
                     message=(
-                        f"generate force=true would overwrite SUCCESS data in pass-{pass_num:03d}. "
-                        f"Run `retest-models` to open a new pass first, "
-                        f"or use `set-sref` (which auto-bumps the pass when SUCCESS exists)."
+                        f"`generate --force` would overwrite SUCCESS data in pass-{pass_num:03d}. "
+                        f"You usually don't need --force: a plain `generate` already retries "
+                        f"FAILED tasks and skips SUCCESS ones. "
+                        f"If you really want a fresh pass, run `retest-models` (same sref) "
+                        f"or `set-sref` (new sref) — both open a new pass and preserve this one."
                     ),
                 )
 
@@ -157,8 +159,10 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
                 return StepResult(
                     ok=False,
                     message=(
-                        f"generate force=true would overwrite SUCCESS data in round-{round_num:03d}. "
-                        f"Run `refine` to open the next round instead."
+                        f"`generate --force` would overwrite SUCCESS data in round-{round_num:03d}. "
+                        f"You usually don't need --force: a plain `generate` already retries "
+                        f"FAILED tasks and skips SUCCESS ones. "
+                        f"To start a clean round, run `refine` first — it opens the next round."
                     ),
                 )
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
 
 from tqdm import tqdm
 
@@ -10,7 +9,7 @@ from styleclaw.core.checkpoint import Checkpoint
 from styleclaw.core.models import BatchCase, BatchConfig, TaskRecord, TaskStatus
 from styleclaw.core.prompt_builder import build_params
 from styleclaw.providers.runninghub.client import RunningHubClient
-from styleclaw.providers.runninghub.models import get_model
+from styleclaw.providers.runninghub.models import build_i2i_params, get_model
 from styleclaw.providers.runninghub.tasks import submit_task
 from styleclaw.storage import project_store
 
@@ -56,10 +55,7 @@ async def batch_submit_t2i(
         )
         record = await submit_task(client, model_config.t2i_endpoint, params, model_id)
         project_store.save_batch_task_record(name, batch_num, case.id, record)
-        checkpoint.save(
-            "submitted",
-            sorted(set(checkpoint.get("submitted", [])) | {case.id}),
-        )
+        checkpoint.add_to_set("submitted", case.id)
         return record
 
     async with asyncio.TaskGroup() as tg:
@@ -110,12 +106,7 @@ async def batch_submit_i2i(
 
     async def _submit_one(idx: int, image_url: str) -> TaskRecord:
         case_id = f"i2i-{idx:03d}"
-        params: dict[str, Any] = {
-            "prompt": trigger_phrase,
-            "imageUrls": [image_url],
-        }
-        if model_config.model_id in ("mj-v7", "niji7"):
-            params = {"prompt": trigger_phrase, "imageUrl": image_url, "iw": 0.5}
+        params = build_i2i_params(model_config, trigger_phrase, image_url)
 
         record = await submit_task(client, model_config.i2i_endpoint, params, model_id)
         project_store.save_i2i_task_record(name, batch_num, case_id, record)

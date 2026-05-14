@@ -39,6 +39,27 @@ class TestRunningHubClient:
             await rh_client.post("/api/test", {})
 
     @respx.mock
+    async def test_post_retries_on_429_rate_limit(self, rh_client: RunningHubClient) -> None:
+        from unittest.mock import AsyncMock, patch
+        route = respx.post("https://www.runninghub.cn/api/test")
+        route.side_effect = [
+            httpx.Response(429, text="rate limited"),
+            httpx.Response(429, text="rate limited"),
+            httpx.Response(200, json={"ok": True}),
+        ]
+        with patch("styleclaw.providers.runninghub.client.asyncio.sleep", new_callable=AsyncMock):
+            result = await rh_client.post("/api/test", {})
+        assert result["ok"] is True
+        assert route.call_count == 3
+
+    @respx.mock
+    async def test_post_no_retry_on_400(self, rh_client: RunningHubClient) -> None:
+        route = respx.post("https://www.runninghub.cn/api/test").respond(status_code=400)
+        with pytest.raises(httpx.HTTPStatusError):
+            await rh_client.post("/api/test", {})
+        assert route.call_count == 1
+
+    @respx.mock
     async def test_upload_success(self, rh_client: RunningHubClient, tmp_path) -> None:
         test_file = tmp_path / "test.png"
         test_file.write_bytes(b"fake image data")

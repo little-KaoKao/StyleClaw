@@ -136,6 +136,24 @@ class TestRunningHubLLMRetry:
             await provider.invoke("s", [])
         await provider.close()
 
+    @respx.mock
+    async def test_retries_on_429_rate_limit(self, provider: RunningHubLLMProvider) -> None:
+        route = respx.post("https://llm.test/v1/chat/completions")
+        n = {"i": 0}
+
+        def side_effect(_request: httpx.Request) -> httpx.Response:
+            n["i"] += 1
+            if n["i"] <= 2:
+                return httpx.Response(429, text="rate limited")
+            return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+        route.mock(side_effect=side_effect)
+        with patch("styleclaw.providers.llm.runninghub_llm.asyncio.sleep", new_callable=AsyncMock):
+            text = await provider.invoke("s", [])
+        assert text == "ok"
+        assert route.call_count == 3
+        await provider.close()
+
 
 class TestRunningHubLLMAsyncContextManager:
     async def test_aenter_returns_self(self, provider: RunningHubLLMProvider) -> None:

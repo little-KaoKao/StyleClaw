@@ -64,6 +64,7 @@ async def submit_task(
         prompt=params.get("prompt", ""),
         params=params,
         results=results,
+        endpoint=endpoint,
     )
     logger.debug("Submitted task %s to %s (status=%s)", task_id, endpoint, record.status)
     return record

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from styleclaw.core.case_generator import generate_case_skeleton
 from styleclaw.core.models import BatchCase, BatchConfig
-from styleclaw.core.text_utils import clean_json, sanitize_braces
+from styleclaw.core.text_utils import clean_json, recover_truncated_json, sanitize_braces
 from styleclaw.providers.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -49,23 +49,13 @@ async def design_cases(
     raw = await llm.invoke(system=system_prompt, messages=messages, max_tokens=16384)
 
     cleaned = clean_json(raw)
-    truncated_recovery = False
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError:
-        last_brace = cleaned.rfind("}")
-        if last_brace < 0:
-            raise
-        truncated = cleaned[: last_brace + 1]
-        bracket = truncated.rfind("]")
-        if bracket < 0:
-            raise
-        candidate = truncated[: bracket + 1].rsplit(",", 1)[0] + "]}"
-        try:
-            data = json.loads(candidate)
-            truncated_recovery = True
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Could not recover truncated JSON from LLM: {exc}") from exc
+    recovered = recover_truncated_json(cleaned)
+    truncated_recovery = recovered != cleaned
+    # If recovery couldn't produce valid JSON, json.loads raises
+    # JSONDecodeError — matching the original contract so callers can
+    # distinguish "LLM emitted unrecoverable garbage" from later validation
+    # failures.
+    data = json.loads(recovered)
 
     if "cases" not in data:
         raise ValueError("LLM response missing 'cases' key")

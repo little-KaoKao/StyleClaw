@@ -214,7 +214,8 @@ class RunningHubLLMProvider:
                     )
                     await asyncio.sleep(wait)
             except httpx.HTTPStatusError as exc:
-                if exc.response.status_code < 500:
+                status = exc.response.status_code
+                if status < 500 and status != 429:
                     raise
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:

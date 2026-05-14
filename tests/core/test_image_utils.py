@@ -124,3 +124,56 @@ class TestVerifyRefImage:
         p.write_bytes(b"\x89PNG\r\n\x1a\n" + b"garbage" * 100)
         with pytest.raises(ValueError, match="Not a valid image"):
             verify_ref_image(p)
+
+    def test_rejects_truncated_png(self, tmp_path: Path) -> None:
+        """A real PNG truncated mid-IDAT passes Image.verify() (which only
+        checks headers) but fails Image.load() (full decode). verify_ref_image
+        must perform a full decode so the failure surfaces at init time
+        rather than later inside an async resize."""
+        good = tmp_path / "good.png"
+        Image.new("RGB", (64, 64), color=(255, 0, 0)).save(good, "PNG")
+        data = good.read_bytes()
+        bad = tmp_path / "truncated.png"
+        # Cut off the last 8 bytes (within IDAT) — header still valid.
+        bad.write_bytes(data[: len(data) // 2])
+        with pytest.raises(ValueError, match="Not a valid image"):
+            verify_ref_image(bad)
+
+    def test_rejects_png_with_corrupt_idat_zlib(self, tmp_path: Path) -> None:
+        """Image.verify() walks PNG chunks and checks CRCs but does NOT
+        decompress the IDAT zlib stream — so a chunk with valid CRC but
+        garbage zlib data slips through verify() and only fails at load().
+        verify_ref_image must use full decode (Image.open().load()) to catch
+        this, otherwise the failure surfaces deep inside an async resize."""
+        import io
+        import struct
+        import zlib
+
+        buf = io.BytesIO()
+        Image.new("RGB", (64, 64), color=(0, 0, 0)).save(buf, "PNG")
+        data = buf.getvalue()
+
+        i = 8  # skip PNG signature
+        new_data: bytes | None = None
+        while i < len(data):
+            length = struct.unpack(">I", data[i : i + 4])[0]
+            ctype = data[i + 4 : i + 8]
+            if ctype == b"IDAT":
+                body_start = i + 8
+                body_end = body_start + length
+                new_body = b"\xde\xad\xbe\xef" + data[body_start + 4 : body_end]
+                crc = zlib.crc32(ctype + new_body) & 0xFFFFFFFF
+                new_data = (
+                    data[:i]
+                    + data[i : i + 8]
+                    + new_body
+                    + struct.pack(">I", crc)
+                    + data[body_end + 4 :]
+                )
+                break
+            i = i + 8 + length + 4
+        assert new_data is not None
+        bad = tmp_path / "corrupt-idat.png"
+        bad.write_bytes(new_data)
+        with pytest.raises(ValueError, match="Not a valid image"):
+            verify_ref_image(bad)

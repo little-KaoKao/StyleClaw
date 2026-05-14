@@ -29,7 +29,7 @@ class TestConfigDefaults:
 
     def test_concurrency_limit_default(self):
         from styleclaw.core.config import CONCURRENCY_LIMIT
-        assert CONCURRENCY_LIMIT == 5
+        assert CONCURRENCY_LIMIT == 10
 
     def test_task_timeout_default(self):
         from styleclaw.core.config import TASK_TIMEOUT
@@ -90,3 +90,33 @@ class TestConfigEnvOverrides:
         import styleclaw.core.config as config_mod
         importlib.reload(config_mod)
         assert config_mod.MAX_POLL_CYCLES == 120
+
+
+class TestStreamDisplayDefault:
+    """STREAM_DISPLAY should default to True only when stdout is a TTY, so
+    `print(delta, end='', flush=True)` doesn't blast token bytes into piped
+    output, CI logs, or interleave across parallel async LLM calls."""
+
+    def test_default_false_when_stdout_not_tty(self, monkeypatch) -> None:
+        monkeypatch.delenv("STYLECLAW_STREAM_DISPLAY", raising=False)
+        import sys
+        # pytest captures stdout, so isatty() is already False here.
+        assert sys.stdout.isatty() is False
+        import importlib
+        import styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+        assert config_mod.STREAM_DISPLAY is False
+
+    def test_explicit_env_overrides_isatty(self, monkeypatch) -> None:
+        monkeypatch.setenv("STYLECLAW_STREAM_DISPLAY", "1")
+        import importlib
+        import styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+        assert config_mod.STREAM_DISPLAY is True
+
+    def test_env_zero_disables(self, monkeypatch) -> None:
+        monkeypatch.setenv("STYLECLAW_STREAM_DISPLAY", "0")
+        import importlib
+        import styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+        assert config_mod.STREAM_DISPLAY is False

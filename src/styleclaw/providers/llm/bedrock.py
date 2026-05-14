@@ -99,11 +99,15 @@ class BedrockProvider:
         max_tokens: int = 4096,
         thinking_budget: int = 5000,
     ) -> LLMResponse:
+        # Anthropic requires thinking.budget_tokens < max_tokens. When the
+        # caller's max_tokens leaves no room for a non-trivial response after
+        # the thinking budget, lift it so the API doesn't reject the request.
+        effective_max_tokens = max(max_tokens, thinking_budget + 1024)
         body = {
             "anthropic_version": "bedrock-2023-05-31",
             "system": system,
             "messages": messages,
-            "max_tokens": max_tokens,
+            "max_tokens": effective_max_tokens,
             # Extended thinking requires temperature == 1.0.
             "temperature": 1.0,
             "thinking": {"type": "enabled", "budget_tokens": thinking_budget},
@@ -140,7 +144,9 @@ class BedrockProvider:
                     )
                     await asyncio.sleep(wait)
             except httpx.HTTPStatusError as exc:
-                if exc.response.status_code < 500:
+                # Retry on 5xx and 429 (rate limit); fail fast on other 4xx.
+                status = exc.response.status_code
+                if status < 500 and status != 429:
                     raise
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:

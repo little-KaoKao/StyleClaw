@@ -10,6 +10,12 @@ class SrefMode(StrEnum):
     PROMPT = "prompt"
 
 
+class I2IParamStyle(StrEnum):
+    """How a model's i2i endpoint expects the input image to be passed."""
+    SINGLE_URL_IW = "single_url_iw"  # MJ family: imageUrl=<url>, iw=0.5
+    MULTI_URLS = "multi_urls"        # everyone else: imageUrls=[<url>, ...]
+
+
 @dataclass(frozen=True)
 class ModelConfig:
     model_id: str
@@ -22,6 +28,7 @@ class ModelConfig:
     aspect_ratio_values: tuple[str, ...] = ("1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3")
     default_params: dict[str, Any] = field(default_factory=dict)
     uses_width_height: bool = False
+    i2i_param_style: I2IParamStyle = I2IParamStyle.MULTI_URLS
 
 
 MODEL_REGISTRY: dict[str, ModelConfig] = {
@@ -33,6 +40,7 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         max_prompt_length=8192,
         sref_mode=SrefMode.PARAM,
         default_params={"stylize": 200},
+        i2i_param_style=I2IParamStyle.SINGLE_URL_IW,
     ),
     "niji7": ModelConfig(
         model_id="niji7",
@@ -42,6 +50,7 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         max_prompt_length=8192,
         sref_mode=SrefMode.PARAM,
         default_params={"stylize": 200},
+        i2i_param_style=I2IParamStyle.SINGLE_URL_IW,
     ),
     "nb2": ModelConfig(
         model_id="nb2",
@@ -80,3 +89,13 @@ def get_model(model_id: str) -> ModelConfig:
             f"Unknown model '{model_id}'. Available: {list(MODEL_REGISTRY.keys())}"
         )
     return MODEL_REGISTRY[model_id]
+
+
+def build_i2i_params(model: ModelConfig, trigger_phrase: str, image_url: str) -> dict[str, Any]:
+    """Build the request body for an i2i submission, routing based on the
+    model's declared i2i_param_style. Adding a new model only requires
+    setting its i2i_param_style — no caller code changes."""
+    if model.i2i_param_style == I2IParamStyle.SINGLE_URL_IW:
+        return {"prompt": trigger_phrase, "imageUrl": image_url, "iw": 0.5}
+    return {"prompt": trigger_phrase, "imageUrls": [image_url]}
+

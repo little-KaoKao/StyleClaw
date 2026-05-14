@@ -60,6 +60,10 @@ class TaskRecord(_FrozenModel):
     error_message: str = ""
     created_at: str = Field(default_factory=_utcnow_iso)
     completed_at: str = ""
+    # Endpoint used for the original submission. Empty string for older task
+    # records that pre-date this field; callers that need to resubmit should
+    # fall back to the model's t2i_endpoint when this is empty.
+    endpoint: str = ""
 
 
 class StyleAnalysis(_FrozenModel):

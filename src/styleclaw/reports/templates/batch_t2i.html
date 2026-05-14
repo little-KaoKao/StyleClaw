@@ -19,6 +19,7 @@
   .badge.success { background: #d4edda; color: #155724; }
   .badge.pending { background: #e2e3e5; color: #383d41; }
   .badge.failed { background: #f8d7da; color: #721c24; }
+  .download-warn { background: #fff3cd; color: #856404; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #ffc107; }
 </style>
 </head>
 <body>
@@ -27,6 +28,9 @@
   <p><strong>Trigger:</strong> {{ trigger_phrase }}</p>
   <p class="progress">Progress: {{ completed }}/{{ total }} completed</p>
 </div>
+{% if download_failures %}
+<div class="download-warn">⚠️ {{ download_failures }} image download(s) failed during polling — see <code>failed_downloads.json</code> in case directories for the lost URLs.</div>
+{% endif %}
 
 <div class="grid">
   {% for c in cases %}

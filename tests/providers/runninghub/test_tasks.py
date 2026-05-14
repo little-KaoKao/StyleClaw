@@ -46,6 +46,15 @@ class TestSubmitTask:
         record = await submit_task(mock_client, "/api/gen", {"prompt": "hello"}, "nb2")
         assert record.prompt == "hello"
 
+    async def test_captures_endpoint_in_record(self, mock_client: AsyncMock) -> None:
+        """The endpoint must be persisted so resubmits target the same
+        endpoint (e.g. an i2i task should not be silently retried via t2i)."""
+        mock_client.post.return_value = {"taskId": "t1"}
+        record = await submit_task(
+            mock_client, "/openapi/v2/foo/image-to-image", {"prompt": "x"}, "nb2",
+        )
+        assert record.endpoint == "/openapi/v2/foo/image-to-image"
+
 
 class TestQueryTask:
     async def test_query_posts_task_id(self, mock_client: AsyncMock) -> None:

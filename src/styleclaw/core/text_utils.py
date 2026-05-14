@@ -35,6 +35,36 @@ def clean_json(raw: str) -> str:
     return cleaned
 
 
+def recover_truncated_json(cleaned: str) -> str:
+    """Try to make a valid JSON string out of an LLM response that was cut
+    off mid-output. Strategy: find the last fully-closed object, then close
+    the enclosing array and root object.
+
+    Returns the input unchanged when it already parses, or when no recovery
+    is possible (so the caller's json.loads surfaces a useful error)."""
+    try:
+        json.loads(cleaned)
+        return cleaned
+    except json.JSONDecodeError:
+        pass
+    last_brace = cleaned.rfind("}")
+    if last_brace < 0:
+        return cleaned
+    truncated = cleaned[: last_brace + 1]
+    bracket = truncated.rfind("]")
+    # `bracket` may be inside the last complete object; rsplit-then-close
+    # handles the common "{...},{...}, {incomplete" pattern.
+    if bracket < 0:
+        candidate = truncated + "]}"
+    else:
+        candidate = truncated[: bracket + 1].rsplit(",", 1)[0] + "]}"
+    try:
+        json.loads(candidate)
+        return candidate
+    except json.JSONDecodeError:
+        return cleaned
+
+
 def parse_llm_response(raw: str, model_cls: type[T], label: str = "") -> T:
     desc = label or model_cls.__name__
     cleaned = clean_json(raw)
@@ -60,3 +90,4 @@ def parse_llm_response(raw: str, model_cls: type[T], label: str = "") -> T:
 
 def sanitize_braces(s: str) -> str:
     return s.replace("{", "{{").replace("}", "}}")
+

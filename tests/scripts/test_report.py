@@ -192,6 +192,33 @@ class TestGenerateBatchT2iReport:
         assert "data:image" not in html
         assert 'src="results/am-001/output-001.png"' in html
 
+    def test_surfaces_failed_downloads(self, setup_project) -> None:
+        """When poll.py wrote failed_downloads.json next to a case (because
+        some result images couldn't be fetched), the report must surface the
+        count so the user notices missing images."""
+        import json
+
+        cases = [
+            BatchCase(id="am-001", category="adult_male", description="test char", status="SUCCESS"),
+        ]
+        batch_config = BatchConfig(batch=1, trigger_phrase="t", cases=cases)
+        project_store.save_batch_config("test-proj", 1, batch_config)
+        project_store.save_batch_task_record(
+            "test-proj", 1, "am-001",
+            TaskRecord(task_id="t1", model_id="mj-v7", status="SUCCESS"),
+        )
+
+        case_dir = project_store.batch_t2i_case_dir("test-proj", 1, "am-001")
+        Image.new("RGB", (100, 100)).save(case_dir / "output-001.png")
+        (case_dir / "failed_downloads.json").write_text(
+            json.dumps({"failed_urls": ["http://cdn/x.png", "http://cdn/y.png"]}),
+            encoding="utf-8",
+        )
+
+        path = generate_batch_t2i_report("test-proj", 1)
+        html = path.read_text(encoding="utf-8")
+        assert "2 image" in html and "download" in html.lower()
+
 
 class TestGenerateBatchI2iReport:
     def test_generates_html(self, setup_project) -> None:

@@ -293,9 +293,13 @@ async def _resubmit_from_record(
     except (KeyError, ValueError) as exc:
         logger.warning("Cannot resubmit task %s: %s", record.task_id, exc)
         return None
+    # Prefer the endpoint stored on the record so an i2i task is resubmitted
+    # via i2i. Legacy records (pre-endpoint field) have an empty string here;
+    # fall back to t2i_endpoint to keep them working.
+    endpoint = record.endpoint or config.t2i_endpoint
     try:
         return await submit_task(
-            client, config.t2i_endpoint, record.params, record.model_id,
+            client, endpoint, record.params, record.model_id,
         )
     except (RuntimeError, httpx.HTTPError) as exc:
         logger.warning("Resubmit failed for %s: %s", record.task_id, exc)

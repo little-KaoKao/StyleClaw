@@ -14,6 +14,7 @@
   .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; }
   .badge.success { background: #d4edda; color: #155724; }
   .badge.pending { background: #e2e3e5; color: #383d41; }
+  .download-warn { background: #fff3cd; color: #856404; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #ffc107; }
 </style>
 </head>
 <body>
@@ -21,6 +22,9 @@
 <div class="meta">
   <p class="progress">Progress: {{ completed }}/{{ total }} completed</p>
 </div>
+{% if download_failures %}
+<div class="download-warn">⚠️ {{ download_failures }} image download(s) failed during polling — see <code>failed_downloads.json</code> in case directories for the lost URLs.</div>
+{% endif %}
 
 {% for p in pairs %}
 <div class="pair">

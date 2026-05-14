@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from pathlib import Path
 
@@ -10,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 DOWNLOAD_RETRIES = 3
 DOWNLOAD_RETRY_DELAY = 2
+
+FAILED_DOWNLOADS_FILE = "failed_downloads.json"
 
 _CONTENT_TYPE_TO_EXT: dict[str, str] = {
     "image/png": ".png",
@@ -38,6 +41,22 @@ def list_output_images(dir_path: Path, prefix: str = "output-") -> list[Path]:
     for ext in OUTPUT_IMAGE_EXTENSIONS:
         images.extend(dir_path.glob(f"{prefix}*{ext}"))
     return sorted(images, key=lambda p: p.name)
+
+
+def count_failed_downloads(dir_path: Path) -> int:
+    """Count entries in a `failed_downloads.json` sidecar written by
+    scripts/poll.py. Returns 0 when the file is missing or unparseable —
+    this is informational only and shouldn't block report rendering."""
+    sidecar = dir_path / FAILED_DOWNLOADS_FILE
+    if not sidecar.exists():
+        return 0
+    try:
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+        urls = data.get("failed_urls", [])
+        return len(urls) if isinstance(urls, list) else 0
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Could not read %s: %s", sidecar, exc)
+        return 0
 
 
 async def download_image(

@@ -6,7 +6,11 @@ from typing import Any, Self
 
 import httpx
 
-from styleclaw.core.config import CONCURRENCY_LIMIT
+from styleclaw.core.config import (
+    CONCURRENCY_LIMIT,
+    RH_CLIENT_CONNECT_TIMEOUT,
+    RH_CLIENT_TIMEOUT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +25,7 @@ class RunningHubClient:
         self._client = httpx.AsyncClient(
             base_url=BASE_URL,
             headers={"Authorization": f"Bearer {api_key}"},
-            timeout=60,
+            timeout=httpx.Timeout(RH_CLIENT_TIMEOUT, connect=RH_CLIENT_CONNECT_TIMEOUT),
         )
 
     async def __aenter__(self) -> Self:
@@ -48,7 +52,8 @@ class RunningHubClient:
                 resp.raise_for_status()
                 return resp.json()
             except httpx.HTTPStatusError as exc:
-                if exc.response.status_code < 500:
+                status = exc.response.status_code
+                if status < 500 and status != 429:
                     raise
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:
@@ -85,7 +90,8 @@ class RunningHubClient:
                 resp.raise_for_status()
                 return resp.json()
             except httpx.HTTPStatusError as exc:
-                if exc.response.status_code < 500:
+                status = exc.response.status_code
+                if status < 500 and status != 429:
                     raise
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:

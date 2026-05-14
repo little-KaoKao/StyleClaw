@@ -154,6 +154,20 @@ class TestBedrockRetry:
         assert route.call_count == 1
 
     @respx.mock
+    async def test_retries_on_429_rate_limit(self, provider: BedrockProvider) -> None:
+        route = respx.post(
+            "https://bedrock-runtime.us-east-1.amazonaws.com/model/test-model/invoke"
+        )
+        route.side_effect = [
+            httpx.Response(429, text="rate limited"),
+            httpx.Response(429, text="rate limited"),
+            httpx.Response(200, json={"content": [{"type": "text", "text": "ok"}]}),
+        ]
+        result = await provider.invoke(system="s", messages=[])
+        assert result == "ok"
+        assert route.call_count == 3
+
+    @respx.mock
     async def test_retries_on_transport_error(self, provider: BedrockProvider) -> None:
         route = respx.post(
             "https://bedrock-runtime.us-east-1.amazonaws.com/model/test-model/invoke"

@@ -7,9 +7,25 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
+from styleclaw.core.config import IMAGE_ENCODE_CONCURRENCY
+
 MAX_REF_IMAGE_BYTES = 50 * 1024 * 1024
 
 MAX_LONG_EDGE = 1024
+
+# Bound the number of Pillow-decoding worker threads so building image
+# blocks for an evaluate call (often 20+ images) doesn't spawn one thread
+# per image.
+_ENCODE_SEMAPHORE: asyncio.Semaphore | None = None
+
+
+def _encode_semaphore() -> asyncio.Semaphore:
+    # Lazy init because event-loop-aware primitives can't be constructed at
+    # import time (no running loop yet).
+    global _ENCODE_SEMAPHORE
+    if _ENCODE_SEMAPHORE is None:
+        _ENCODE_SEMAPHORE = asyncio.Semaphore(IMAGE_ENCODE_CONCURRENCY)
+    return _ENCODE_SEMAPHORE
 
 
 def verify_ref_image(path: Path | str, max_bytes: int = MAX_REF_IMAGE_BYTES) -> None:
@@ -28,9 +44,13 @@ def verify_ref_image(path: Path | str, max_bytes: int = MAX_REF_IMAGE_BYTES) -> 
             f"Image too large: {p.name} is {mb:.1f} MB (limit: {limit_mb:.0f} MB)"
         )
     try:
+        # Image.verify() only checks chunk CRCs and headers — it does NOT
+        # decompress the pixel data. Use load() so a PNG with corrupt zlib
+        # inside IDAT (valid CRC, garbage payload) is rejected at init time
+        # instead of crashing later inside an async resize.
         with Image.open(p) as img:
-            img.verify()
-    except (UnidentifiedImageError, OSError, SyntaxError) as exc:
+            img.load()
+    except (UnidentifiedImageError, OSError, SyntaxError, ValueError) as exc:
         raise ValueError(f"Not a valid image: {p.name} ({exc})") from exc
 
 
@@ -59,7 +79,9 @@ def resize_for_llm(image_path: Path | str) -> tuple[bytes, str]:
             scale = MAX_LONG_EDGE / long_edge
             new_w = int(w * scale)
             new_h = int(h * scale)
-            resized = img.resize((new_w, new_h), Image.LANCZOS)
+            # BICUBIC is roughly 2× faster than LANCZOS; the difference is
+            # invisible after the LLM's vision encoder downsamples again.
+            resized = img.resize((new_w, new_h), Image.BICUBIC)
             img.close()
             img = resized
 
@@ -105,9 +127,11 @@ async def build_image_block_async(image_path: Path | str) -> dict:
     """Async variant that offloads Pillow decode/resize/encode to a worker
     thread, so the event loop stays responsive while processing many images.
     """
-    return await asyncio.to_thread(build_image_block, image_path)
+    async with _encode_semaphore():
+        return await asyncio.to_thread(build_image_block, image_path)
 
 
 async def build_image_blocks_async(image_paths: list[Path | str]) -> list[dict]:
-    """Build image blocks for several paths concurrently (one thread each)."""
+    """Build image blocks for several paths concurrently (one thread each,
+    capped by IMAGE_ENCODE_CONCURRENCY)."""
     return list(await asyncio.gather(*(build_image_block_async(p) for p in image_paths)))
