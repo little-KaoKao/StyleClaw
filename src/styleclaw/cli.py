@@ -419,7 +419,6 @@ def analyze(
 @app.command()
 def generate(
     name: str = typer.Argument(..., help="Project name"),
-    retry_failed: bool = typer.Option(False, "--retry-failed", help="Retry only failed tasks"),
     force: bool = typer.Option(False, "--force", "-f", help="Re-submit even if SUCCESS record exists"),
     models: Optional[str] = typer.Option(
         None, "--models",
@@ -427,7 +426,11 @@ def generate(
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show planned operations and exit"),
 ) -> None:
-    """Submit generation tasks (auto-detects phase)."""
+    """Submit generation tasks (auto-detects phase).
+
+    Default behavior already skips SUCCESS tasks and resubmits missing/FAILED
+    ones — there is no separate "retry only failed" mode.
+    """
     state = project_store.load_state(name)
 
     if state.phase == Phase.STYLE_REFINE and state.current_round < 1:
@@ -468,7 +471,7 @@ def generate(
             typer.echo(f"  Estimated tasks: {len(state.selected_models)}")
         return
 
-    action_args: dict[str, Any] = {"retry_failed": retry_failed, "force": force}
+    action_args: dict[str, Any] = {"force": force}
     if models:
         action_args["models"] = models
     result = _run_action(name, "generate", action_args)
@@ -525,12 +528,12 @@ def evaluate(
 
     if show_thinking:
         project_dir = project_store.project_dir(name)
+        pass_num = state.current_model_select_pass or 1
         if state.phase == Phase.MODEL_SELECT:
-            pass_num = state.current_model_select_pass or 1
             md = project_dir / "model-select" / f"pass-{pass_num:03d}" / "evaluation.thinking.md"
         else:
             md = (
-                project_dir / "style-refine"
+                project_dir / "style-refine" / f"pass-{pass_num:03d}"
                 / f"round-{state.current_round:03d}" / "evaluation.thinking.md"
             )
         if md.exists():
@@ -609,8 +612,9 @@ def refine(
 
     if show_thinking:
         new_state = project_store.load_state(name)
+        pass_num = new_state.current_model_select_pass or 1
         md = (
-            project_store.project_dir(name) / "style-refine"
+            project_store.project_dir(name) / "style-refine" / f"pass-{pass_num:03d}"
             / f"round-{new_state.current_round:03d}" / "prompt.thinking.md"
         )
         if md.exists():
@@ -896,12 +900,13 @@ def report(
     )
 
     state = project_store.load_state(name)
+    pass_num = state.current_model_select_pass or 1
 
     if state.phase == Phase.MODEL_SELECT:
-        path = generate_model_select_report(name)
+        path = generate_model_select_report(name, pass_num=pass_num)
         typer.echo(f"Model-select report generated: {path}")
     elif state.phase == Phase.STYLE_REFINE:
-        path = generate_style_refine_report(name, state.current_round)
+        path = generate_style_refine_report(name, state.current_round, pass_num=pass_num)
         typer.echo(f"Report generated: {path}")
     elif state.phase == Phase.BATCH_I2I or i2i:
         path = generate_batch_i2i_report(name, state.current_batch)

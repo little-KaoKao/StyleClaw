@@ -250,7 +250,6 @@ uv run styleclaw init <name> \
 
 uv run styleclaw generate <name> \
   --force \
-  --retry-failed \
   --models mj-v7,niji7 \   # MODEL_SELECT only — limit submission to a subset
   --dry-run                # Show planned operations and exit
 

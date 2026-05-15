@@ -407,6 +407,24 @@ class TestReportCommand:
         assert result.exit_code == 1
         assert "No report available" in result.output
 
+    @patch("styleclaw.scripts.report.generate_model_select_report")
+    def test_model_select_passes_current_pass_num(self, mock_report, setup_project) -> None:
+        _set_state(Phase.MODEL_SELECT, current_model_select_pass=3)
+        mock_report.return_value = Path("/fake/p3.html")
+        result = runner.invoke(app, ["report", "test-proj"])
+        assert result.exit_code == 0
+        assert mock_report.call_args.kwargs.get("pass_num") == 3
+
+    @patch("styleclaw.scripts.report.generate_style_refine_report")
+    def test_style_refine_passes_current_pass_num(self, mock_report, setup_project) -> None:
+        _set_state(Phase.STYLE_REFINE, current_round=2, current_model_select_pass=2)
+        mock_report.return_value = Path("/fake/r2.html")
+        result = runner.invoke(app, ["report", "test-proj"])
+        assert result.exit_code == 0
+        assert mock_report.call_args.kwargs.get("pass_num") == 2
+        # round_num is the second positional arg (after name)
+        assert mock_report.call_args.args[1] == 2
+
 
 class TestGetCurrentTrigger:
     def test_from_round(self, setup_project) -> None:

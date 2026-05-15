@@ -433,7 +433,6 @@ uv run styleclaw init <name> \
 
 uv run styleclaw generate <name> \
   --force \                 # 强制重新提交所有任务（包括已成功的）
-  --retry-failed \          # 仅重试失败的任务
   --models mj-v7,niji7 \    # MODEL_SELECT 阶段限定只跑这几个模型
   --dry-run                 # 只打印将要提交的任务，不实际提交
 

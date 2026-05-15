@@ -484,6 +484,20 @@ async def do_design_cases(ctx: ExecutionContext, args: dict[str, Any]) -> StepRe
     from styleclaw.agents.design_cases import design_cases
 
     state = project_store.load_state(ctx.project)
+
+    if state.phase != Phase.BATCH_T2I:
+        return StepResult(
+            ok=False,
+            message=f"design-cases requires BATCH_T2I phase (current: {state.phase}). "
+                    f"Run 'approve' from STYLE_REFINE first.",
+        )
+    if state.current_round < 1:
+        return StepResult(
+            ok=False,
+            message="design-cases requires a refined trigger phrase — "
+                    "no STYLE_REFINE round has been completed (current_round=0).",
+        )
+
     config = project_store.load_config(ctx.project)
     batch_num = state.current_batch + 1
 

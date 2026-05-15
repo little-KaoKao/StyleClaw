@@ -536,6 +536,20 @@ class TestDoDesignCases:
         state = project_store.load_state(name)
         assert state.current_batch == 1
 
+    async def test_wrong_phase_rejected(self) -> None:
+        name = _create_project(phase=Phase.STYLE_REFINE, current_round=1)
+        result = await do_design_cases(_ctx(name, llm=AsyncMock()), {})
+        assert result.ok is False
+        assert "BATCH_T2I" in result.message
+
+    async def test_zero_round_rejected(self) -> None:
+        """In BATCH_T2I with current_round=0, there's no prompt.json to load —
+        action must fail with a clean message instead of FileNotFoundError."""
+        name = _create_project(phase=Phase.BATCH_T2I, current_round=0)
+        result = await do_design_cases(_ctx(name, llm=AsyncMock()), {})
+        assert result.ok is False
+        assert "current_round=0" in result.message
+
 
 class TestDoBatchSubmit:
     async def test_no_model_selected(self) -> None:
