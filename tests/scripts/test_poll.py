@@ -133,10 +133,10 @@ class TestDownloadResults:
             await _download_results(results, tmp_path)
             assert mock_dl.call_count == 2
             assert mock_dl.call_args_list[0] == call(
-                "http://example.com/img1.png", tmp_path / "output-001.png"
+                "http://example.com/img1.png", tmp_path / "output-001.png", client=None,
             )
             assert mock_dl.call_args_list[1] == call(
-                "http://example.com/img2.png", tmp_path / "output-002.png"
+                "http://example.com/img2.png", tmp_path / "output-002.png", client=None,
             )
 
     async def test_skips_empty_urls(self, tmp_path) -> None:

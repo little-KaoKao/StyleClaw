@@ -39,6 +39,7 @@ class DownloadStats:
 
 async def _download_results(
     results: list[dict[str, Any]], dest_dir: Path,
+    download_client: httpx.AsyncClient | None = None,
 ) -> DownloadStats:
     attempted = 0
     succeeded = 0
@@ -51,7 +52,7 @@ async def _download_results(
         attempted += 1
         dest = dest_dir / f"output-{i:03d}.png"
         try:
-            actual = await download_image(url, dest)
+            actual = await download_image(url, dest, client=download_client)
             succeeded += 1
             logger.debug("Downloaded %s -> %s", url[:60], actual.name)
         except RuntimeError as exc:
@@ -93,6 +94,7 @@ async def _poll_one_model_select(
     record: TaskRecord,
     client: RunningHubClient,
     pass_num: int,
+    download_client: httpx.AsyncClient | None = None,
 ) -> tuple[str, TaskRecord, DownloadStats]:
     if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
         logger.debug("Task %s already terminal (%s), skipping.", record.task_id, record.status)
@@ -117,7 +119,7 @@ async def _poll_one_model_select(
         project_store.save_task_record(name, key, new_record, pass_num=pass_num)
         results_dir = project_store.model_results_dir(name, key, pass_num=pass_num)
 
-    stats = await _download_results(new_record.results, results_dir)
+    stats = await _download_results(new_record.results, results_dir, download_client)
     return key, new_record, stats
 
 
@@ -135,18 +137,24 @@ async def poll_model_select(
     updated: dict[str, TaskRecord] = {}
     total_stats = DownloadStats()
 
-    async with asyncio.TaskGroup() as tg:
-        tasks = {
-            key: tg.create_task(
-                _poll_one_model_select(name, key, record, client, pass_num)
-            )
-            for key, record in records.items()
-        }
+    # One shared HTTP client for all output downloads; keep-alive avoids
+    # re-handshaking for every image when many tasks complete in the same
+    # poll cycle.
+    async with httpx.AsyncClient(timeout=60) as download_client:
+        async with asyncio.TaskGroup() as tg:
+            tasks = {
+                key: tg.create_task(
+                    _poll_one_model_select(
+                        name, key, record, client, pass_num, download_client,
+                    )
+                )
+                for key, record in records.items()
+            }
 
-    for key, task in tasks.items():
-        _, new_record, stats = task.result()
-        updated[key] = new_record
-        total_stats += stats
+        for key, task in tasks.items():
+            _, new_record, stats = task.result()
+            updated[key] = new_record
+            total_stats += stats
 
     _log_download_summary(f"Pass {pass_num}", total_stats, len(updated))
     return updated
@@ -159,6 +167,7 @@ async def _poll_one_style_refine(
     record: TaskRecord,
     client: RunningHubClient,
     pass_num: int,
+    download_client: httpx.AsyncClient | None = None,
 ) -> tuple[str, TaskRecord, DownloadStats]:
     if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
         logger.debug("Task %s already completed, skipping.", record.task_id)
@@ -177,7 +186,7 @@ async def _poll_one_style_refine(
     results_dir = project_store.round_results_dir(
         name, round_num, model_id, pass_num=pass_num,
     )
-    stats = await _download_results(new_record.results, results_dir)
+    stats = await _download_results(new_record.results, results_dir, download_client)
 
     return model_id, new_record, stats
 
@@ -197,13 +206,17 @@ async def poll_style_refine(
     updated: dict[str, TaskRecord] = {}
     total_stats = DownloadStats()
 
-    async with asyncio.TaskGroup() as tg:
-        tasks = {
-            model_id: tg.create_task(
-                _poll_one_style_refine(name, round_num, model_id, record, client, pass_num)
-            )
-            for model_id, record in records.items()
-        }
+    async with httpx.AsyncClient(timeout=60) as download_client:
+        async with asyncio.TaskGroup() as tg:
+            tasks = {
+                model_id: tg.create_task(
+                    _poll_one_style_refine(
+                        name, round_num, model_id, record, client, pass_num,
+                        download_client,
+                    )
+                )
+                for model_id, record in records.items()
+            }
 
     for model_id, task in tasks.items():
         _, new_record, stats = task.result()
@@ -221,6 +234,7 @@ async def _poll_one_batch(
     record: TaskRecord,
     client: RunningHubClient,
     phase: str,
+    download_client: httpx.AsyncClient | None = None,
 ) -> tuple[str, TaskRecord, DownloadStats]:
     if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
         return case_id, record, DownloadStats()
@@ -239,7 +253,7 @@ async def _poll_one_batch(
         project_store.save_batch_task_record(name, batch_num, case_id, new_record)
         case_dir = project_store.batch_t2i_case_dir(name, batch_num, case_id)
 
-    stats = await _download_results(new_record.results, case_dir)
+    stats = await _download_results(new_record.results, case_dir, download_client)
 
     return case_id, new_record, stats
 
@@ -261,13 +275,17 @@ async def poll_batch(
     updated: dict[str, TaskRecord] = {}
     total_stats = DownloadStats()
 
-    async with asyncio.TaskGroup() as tg:
-        tasks = {
-            case_id: tg.create_task(
-                _poll_one_batch(name, batch_num, case_id, record, client, phase)
-            )
-            for case_id, record in records.items()
-        }
+    async with httpx.AsyncClient(timeout=60) as download_client:
+        async with asyncio.TaskGroup() as tg:
+            tasks = {
+                case_id: tg.create_task(
+                    _poll_one_batch(
+                        name, batch_num, case_id, record, client, phase,
+                        download_client,
+                    )
+                )
+                for case_id, record in records.items()
+            }
 
     for case_id, task in tasks.items():
         _, new_record, stats = task.result()

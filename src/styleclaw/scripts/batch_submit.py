@@ -43,8 +43,6 @@ async def batch_submit_t2i(
             batch_num, len(submitted_ids),
         )
 
-    tasks: dict[str, asyncio.Task] = {}
-
     async def _submit_one(case: BatchCase) -> TaskRecord:
         params = build_params(
             model_id=model_id,
@@ -58,21 +56,41 @@ async def batch_submit_t2i(
         checkpoint.add_to_set("submitted", case.id)
         return record
 
-    async with asyncio.TaskGroup() as tg:
-        progress = tqdm(total=len(pending), desc=f"Submitting batch-t2i {batch_num}", unit="case") if pending else None
-        for case in pending:
-            t = tg.create_task(_submit_one(case))
+    progress = (
+        tqdm(total=len(pending), desc=f"Submitting batch-t2i {batch_num}", unit="case")
+        if pending else None
+    )
+
+    async def _wrapped(case: BatchCase) -> TaskRecord:
+        try:
+            return await _submit_one(case)
+        finally:
             if progress is not None:
-                t.add_done_callback(lambda _t, p=progress: p.update(1))
-            tasks[case.id] = t
+                progress.update(1)
+
+    # Use gather(return_exceptions=True) so one failed submission doesn't
+    # cancel the other 99. Each case's success/failure is recorded
+    # independently — checkpoint updates only on success, so retrying picks
+    # the failures back up.
+    raw_results = await asyncio.gather(
+        *[_wrapped(c) for c in pending],
+        return_exceptions=True,
+    )
     if pending and progress is not None:
         progress.close()
 
     records: dict[str, TaskRecord] = {}
+    failures: list[tuple[str, str]] = []
+    for case, outcome in zip(pending, raw_results):
+        if isinstance(outcome, BaseException):
+            failures.append((case.id, f"{type(outcome).__name__}: {outcome}"))
+            logger.error("Submit failed for case %s: %s", case.id, outcome)
+            continue
+        records[case.id] = outcome
+
     updated_cases: list[BatchCase] = []
     for case in config.cases:
-        if case.id in tasks:
-            records[case.id] = tasks[case.id].result()
+        if case.id in records:
             updated_cases.append(case.model_copy(update={"status": "submitted"}))
         else:
             updated_cases.append(case)
@@ -83,7 +101,14 @@ async def batch_submit_t2i(
     if all(c.status != "pending" for c in updated_cases):
         checkpoint.clear()
 
-    logger.info("Submitted %d batch-t2i tasks for batch %d.", len(records), batch_num)
+    if failures:
+        logger.warning(
+            "batch-t2i %d: submitted %d/%d cases; %d failed (rerun to retry): %s",
+            batch_num, len(records), len(pending), len(failures),
+            ", ".join(f"{cid} ({err[:60]})" for cid, err in failures[:5]),
+        )
+    else:
+        logger.info("Submitted %d batch-t2i tasks for batch %d.", len(records), batch_num)
     return records
 
 
@@ -102,8 +127,6 @@ async def batch_submit_i2i(
         cid for cid, rec in existing.items() if rec.status != TaskStatus.FAILED
     }
 
-    tasks: dict[str, asyncio.Task] = {}
-
     async def _submit_one(idx: int, image_url: str) -> TaskRecord:
         case_id = f"i2i-{idx:03d}"
         params = build_i2i_params(model_config, trigger_phrase, image_url)
@@ -112,34 +135,48 @@ async def batch_submit_i2i(
         project_store.save_i2i_task_record(name, batch_num, case_id, record)
         return record
 
-    async with asyncio.TaskGroup() as tg:
-        to_submit = [
-            (i, upload) for i, upload in enumerate(uploads, 1)
-            if f"i2i-{i:03d}" not in submitted_case_ids
-        ]
-        progress = tqdm(total=len(to_submit), desc=f"Submitting batch-i2i {batch_num}", unit="case") if to_submit else None
-        for i, upload in enumerate(uploads, 1):
-            case_id = f"i2i-{i:03d}"
-            if case_id in submitted_case_ids:
-                logger.debug("Skipping already submitted case %s.", case_id)
-                continue
-            t = tg.create_task(_submit_one(i, upload.url))
+    to_submit = [
+        (i, upload) for i, upload in enumerate(uploads, 1)
+        if f"i2i-{i:03d}" not in submitted_case_ids
+    ]
+    progress = (
+        tqdm(total=len(to_submit), desc=f"Submitting batch-i2i {batch_num}", unit="case")
+        if to_submit else None
+    )
+
+    async def _wrapped(idx: int, url: str) -> TaskRecord:
+        try:
+            return await _submit_one(idx, url)
+        finally:
             if progress is not None:
-                t.add_done_callback(lambda _t, p=progress: p.update(1))
-            tasks[case_id] = t
+                progress.update(1)
+
+    raw_results = await asyncio.gather(
+        *[_wrapped(i, upload.url) for i, upload in to_submit],
+        return_exceptions=True,
+    )
     if progress is not None:
         progress.close()
 
     records: dict[str, TaskRecord] = {}
-    new_cases: dict[str, BatchCase] = {}
-    for case_id, task in tasks.items():
-        records[case_id] = task.result()
-        new_cases[case_id] = BatchCase(
+    failures: list[tuple[str, str]] = []
+    for (i, _upload), outcome in zip(to_submit, raw_results):
+        case_id = f"i2i-{i:03d}"
+        if isinstance(outcome, BaseException):
+            failures.append((case_id, f"{type(outcome).__name__}: {outcome}"))
+            logger.error("Submit failed for case %s: %s", case_id, outcome)
+            continue
+        records[case_id] = outcome
+
+    new_cases: dict[str, BatchCase] = {
+        case_id: BatchCase(
             id=case_id,
             category="i2i",
             description="Image-to-image from uploaded reference",
             status="submitted",
         )
+        for case_id in records
+    }
 
     try:
         prev_config = project_store.load_i2i_batch_config(name, batch_num)
@@ -155,5 +192,12 @@ async def batch_submit_i2i(
     )
     project_store.save_i2i_batch_config(name, batch_num, i2i_config)
 
-    logger.info("Submitted %d batch-i2i tasks for batch %d.", len(records), batch_num)
+    if failures:
+        logger.warning(
+            "batch-i2i %d: submitted %d/%d cases; %d failed (rerun to retry): %s",
+            batch_num, len(records), len(to_submit), len(failures),
+            ", ".join(f"{cid} ({err[:60]})" for cid, err in failures[:5]),
+        )
+    else:
+        logger.info("Submitted %d batch-i2i tasks for batch %d.", len(records), batch_num)
     return records

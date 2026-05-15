@@ -62,6 +62,41 @@ class TestBatchSubmitT2i:
         updated = project_store.load_batch_config("test-proj", 1)
         assert updated.cases[0].status == "submitted"
 
+    async def test_partial_failure_keeps_other_submissions(self, setup_project) -> None:
+        from unittest.mock import patch
+
+        cases = [
+            BatchCase(id="c-001", category="adult_male", description="ok 1"),
+            BatchCase(id="c-002", category="adult_male", description="will fail"),
+            BatchCase(id="c-003", category="adult_male", description="ok 2"),
+        ]
+        batch_config = BatchConfig(batch=1, trigger_phrase="t", cases=cases)
+        project_store.save_batch_config("test-proj", 1, batch_config)
+
+        from unittest.mock import AsyncMock as _AM
+        client = _AM()
+
+        async def _flaky_submit(client, endpoint, params, model_id):
+            desc = params.get("prompt", "")
+            if "will fail" in desc:
+                raise RuntimeError("simulated network failure")
+            return TaskRecord(task_id=f"t-{params.get('prompt', '')[:5]}", model_id=model_id)
+
+        with patch(
+            "styleclaw.scripts.batch_submit.submit_task",
+            side_effect=_flaky_submit,
+        ):
+            records = await batch_submit_t2i("test-proj", client, 1, "mj-v7")
+
+        # c-001 and c-003 succeeded; c-002 failed but didn't cancel siblings
+        assert set(records.keys()) == {"c-001", "c-003"}
+
+        updated = project_store.load_batch_config("test-proj", 1)
+        status_by_id = {c.id: c.status for c in updated.cases}
+        assert status_by_id["c-001"] == "submitted"
+        assert status_by_id["c-002"] == "pending"  # rerun will retry
+        assert status_by_id["c-003"] == "submitted"
+
 
 class TestBatchSubmitI2i:
     async def test_submits_for_uploads(self, setup_project, mock_client) -> None:

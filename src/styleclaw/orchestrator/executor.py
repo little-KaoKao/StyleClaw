@@ -115,6 +115,13 @@ def display_plan(plan: ActionPlan, project: str) -> None:
     if plan.stop_summary:
         typer.echo(f"\n  执行完后：{plan.stop_summary}")
 
+    from styleclaw.orchestrator.cost_estimate import estimate_plan, format_plan_estimate
+    cost_lines = format_plan_estimate(estimate_plan(plan, project))
+    if cost_lines:
+        typer.echo("\n  成本预估：")
+        for line in cost_lines:
+            typer.echo(f"    {line}")
+
     typer.echo("")
 
 

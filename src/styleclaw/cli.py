@@ -1221,8 +1221,15 @@ def run(
             raise typer.Exit(1)
 
     from styleclaw.orchestrator.actions import ACTION_REGISTRY
+    from styleclaw.orchestrator.audit_log import AuditLogger
     from styleclaw.orchestrator.executor import display_plan, execute
     from styleclaw.orchestrator.planner import plan
+
+    # Audit log only applies to projects that exist on disk. In init mode
+    # (no project yet) we skip — the project will be born during this run
+    # and historical audit logs aren't relevant.
+    project_exists = project in project_store.list_projects()
+    audit = AuditLogger.create(project, intent) if project_exists else None
 
     async def _plan_and_execute() -> None:
         llm = _build_llm_provider()
@@ -1237,8 +1244,13 @@ def run(
             typer.echo("(dry-run) 未执行；去掉 --dry-run 后再跑即可")
             return
 
+        if audit is not None:
+            audit.record_plan(action_plan)
+
         if not yes and not typer.confirm("Execute?"):
             typer.echo("Cancelled.")
+            if audit is not None:
+                audit.cancelled()
             raise typer.Exit(0)
 
         needs_client = any(
@@ -1252,12 +1264,16 @@ def run(
 
         def _on_start(i: int, name: str, desc: str) -> None:
             typer.echo(f"\n  [{i + 1}/{len(action_plan.steps)}] {name} — {desc}")
+            if audit is not None:
+                audit.step_started(i)
 
         def _on_done(i: int, name: str, result: StepResult) -> None:
             if result.ok:
                 typer.echo(f"  -> {result.message}")
             else:
                 typer.echo(f"  x  {result.message}", err=True)
+            if audit is not None:
+                audit.step_finished(i, name, result.ok, result.message)
 
         confirm_fn = None if yes else _confirm_dispatch
 
