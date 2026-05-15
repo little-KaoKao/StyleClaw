@@ -20,6 +20,7 @@ from styleclaw.core.models import (
     RoundScore,
     StyleAnalysis,
     TaskRecord,
+    TaskStatus,
     UploadRecord,
 )
 from styleclaw.orchestrator.actions import (
@@ -914,3 +915,53 @@ class TestDoGenerateModelsFilter:
         assert result.ok is True
         assert captured["models"] is None
         assert "filtered" not in result.message
+
+
+class TestArgsBoundChecks:
+    async def test_poll_max_cycles_negative_rejected(self) -> None:
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        result = await do_poll(_ctx(name), {"max_cycles": 0})
+        assert result.ok is False
+        assert ">= 1" in result.message
+
+    async def test_poll_max_cycles_non_integer_rejected(self) -> None:
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        result = await do_poll(_ctx(name), {"max_cycles": "lots"})
+        assert result.ok is False
+        assert "integer" in result.message
+
+    async def test_poll_max_cycles_clamped_to_config(self, monkeypatch) -> None:
+        # Tiny clamp so the test isn't slow.
+        import styleclaw.orchestrator.actions as actions_mod
+        monkeypatch.setattr(actions_mod, "MAX_POLL_CYCLES", 2)
+
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        # All tasks already SUCCESS so we exit fast — the clamp itself is the
+        # behavior under test.
+        project_store.save_task_record(
+            name, "mj-v7",
+            TaskRecord(task_id="t1", model_id="mj-v7", status=TaskStatus.SUCCESS),
+        )
+
+        with patch(
+            "styleclaw.scripts.poll.poll_model_select",
+            new_callable=AsyncMock,
+            return_value={
+                "mj-v7": TaskRecord(task_id="t1", model_id="mj-v7", status=TaskStatus.SUCCESS),
+            },
+        ):
+            result = await do_poll(_ctx(name), {"max_cycles": 99})
+        # Even with max_cycles=99 the action shouldn't crash; clamp produces
+        # a successful exit.
+        assert result.ok is True
+
+    async def test_batch_submit_unknown_model_rejected(self) -> None:
+        name = _create_project(
+            phase=Phase.BATCH_T2I, selected_models=["mj-v7"], current_batch=1,
+        )
+        result = await do_batch_submit(
+            _ctx(name, client=AsyncMock()),
+            {"model": "not-a-model"},
+        )
+        assert result.ok is False
+        assert "Unknown model" in result.message

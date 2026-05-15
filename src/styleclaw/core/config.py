@@ -51,6 +51,12 @@ LLM_WRITE_TIMEOUT: float = _float_env("STYLECLAW_LLM_WRITE_TIMEOUT", "300")
 LLM_READ_TIMEOUT: float = _float_env("STYLECLAW_LLM_READ_TIMEOUT", "300")
 LLM_CONNECT_TIMEOUT: float = _float_env("STYLECLAW_LLM_CONNECT_TIMEOUT", "30")
 
+# Hard cap on a single downloaded image file. Trips early during streaming
+# so a runaway URL can't fill the disk. Default is 50MB — typical model
+# outputs are well under 5MB; 50MB leaves room for occasional large i2i
+# results.
+MAX_DOWNLOAD_BYTES_PER_FILE: int = _int_env("STYLECLAW_MAX_DOWNLOAD_BYTES", "52428800")
+
 # httpx timeouts for the RunningHub image-gen client (in seconds).
 # submit/query POSTs are tiny JSON bodies; the read budget mainly covers
 # RunningHub's own queue-side latency.

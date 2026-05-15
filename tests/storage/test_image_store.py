@@ -69,3 +69,29 @@ class TestDownloadImage:
         ]
         result = await download_image("https://cdn.example.com/image.png", dest)
         assert result.read_bytes() == b"data"
+
+    async def test_rejects_non_http_url(self, tmp_path: Path) -> None:
+        dest = tmp_path / "x.png"
+        with pytest.raises(RuntimeError, match="non-HTTP"):
+            await download_image("file:///etc/passwd", dest)
+        with pytest.raises(RuntimeError, match="non-HTTP"):
+            await download_image("ftp://example.com/x", dest)
+
+    @respx.mock
+    async def test_aborts_when_body_exceeds_size_cap(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        # Small cap so a tiny body trips it.
+        monkeypatch.setattr(
+            "styleclaw.storage.image_store.MAX_DOWNLOAD_BYTES_PER_FILE", 100,
+        )
+        dest = tmp_path / "huge.png"
+        big_body = b"x" * 5000  # well over the 100-byte cap
+        respx.get("https://cdn.example.com/huge.png").respond(
+            content=big_body, headers={"content-type": "image/png"},
+        )
+        with pytest.raises(RuntimeError, match="size cap"):
+            await download_image("https://cdn.example.com/huge.png", dest)
+        # Temp file must have been cleaned up.
+        assert not list(tmp_path.glob("*.tmp"))
+        assert not dest.exists()

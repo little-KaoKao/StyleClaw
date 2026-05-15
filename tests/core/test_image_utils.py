@@ -12,6 +12,14 @@ from styleclaw.core.image_utils import (
     resize_for_llm,
     verify_ref_image,
 )
+from styleclaw.storage import project_store
+
+
+@pytest.fixture(autouse=True)
+def isolate_data_root(tmp_path, monkeypatch):
+    """Point DATA_ROOT at tmp_path so the LLM image cache writes here
+    instead of polluting the real data/projects/.cache directory."""
+    monkeypatch.setattr(project_store, "DATA_ROOT", tmp_path / "_data_root")
 
 
 @pytest.fixture
@@ -177,3 +185,61 @@ class TestVerifyRefImage:
         bad.write_bytes(new_data)
         with pytest.raises(ValueError, match="Not a valid image"):
             verify_ref_image(bad)
+
+
+class TestImageCache:
+    def test_second_call_reads_from_cache(self, small_image, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_LLM_IMAGE_CACHE", "1")
+
+        # First call computes and saves
+        data1, mt1 = resize_for_llm(small_image)
+
+        # Patch PIL.Image.open to detect re-encoding on the second call.
+        from styleclaw.core import image_utils
+
+        call_count = {"n": 0}
+        real_open = image_utils.Image.open
+
+        def _spy_open(*args, **kwargs):
+            call_count["n"] += 1
+            return real_open(*args, **kwargs)
+
+        monkeypatch.setattr(image_utils.Image, "open", _spy_open)
+        data2, mt2 = resize_for_llm(small_image)
+
+        assert data2 == data1
+        assert mt2 == mt1
+        # Cache hit should NOT touch PIL at all.
+        assert call_count["n"] == 0
+
+    def test_cache_invalidates_on_file_change(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_LLM_IMAGE_CACHE", "1")
+        path = tmp_path / "changing.png"
+        Image.new("RGB", (50, 50), color=(255, 0, 0)).save(path, "PNG")
+        data_before, _ = resize_for_llm(path)
+
+        # Rewrite with a different image — mtime + size change → cache miss.
+        import time
+        time.sleep(0.01)
+        Image.new("RGB", (60, 60), color=(0, 255, 0)).save(path, "PNG")
+        data_after, _ = resize_for_llm(path)
+
+        assert data_before != data_after
+
+    def test_disabled_via_env(self, small_image, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_LLM_IMAGE_CACHE", "0")
+
+        from styleclaw.core import image_utils
+        call_count = {"n": 0}
+        real_open = image_utils.Image.open
+
+        def _spy_open(*args, **kwargs):
+            call_count["n"] += 1
+            return real_open(*args, **kwargs)
+
+        monkeypatch.setattr(image_utils.Image, "open", _spy_open)
+
+        resize_for_llm(small_image)
+        resize_for_llm(small_image)
+        # With cache disabled, both calls hit PIL.
+        assert call_count["n"] == 2

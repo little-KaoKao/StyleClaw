@@ -40,6 +40,41 @@ class ActionDef:
     requires_confirmation: bool = False
 
 
+# Per-action allowed arg keys. Any key in step.args that isn't in this set
+# is rejected with a clear error — protects against the LLM hallucinating
+# extra parameters (or a typo silently dropping into "ignored args").
+# Actions without entries here accept no args.
+ACTION_ALLOWED_ARGS: dict[str, frozenset[str]] = {
+    "init":          frozenset({"ref_dir", "ip_info", "description", "force"}),
+    "generate":      frozenset({"force", "models"}),
+    "poll":          frozenset({"max_cycles"}),
+    "select-model":  frozenset({"models", "variant"}),
+    "refine":        frozenset({"direction"}),
+    "approve":       frozenset({"target"}),
+    "design-cases":  frozenset({"feedback"}),
+    "batch-submit":  frozenset({"model"}),
+    "set-sref":      frozenset({"index"}),
+    "set-pass":      frozenset({"pass_num"}),
+    "add-refs":      frozenset({"image_dir"}),
+}
+
+
+def _reject_unknown_args(action_name: str, args: dict[str, Any]) -> StepResult | None:
+    """Return a failure StepResult if args has keys not allowed for this
+    action, else None. Keys are case-sensitive."""
+    allowed = ACTION_ALLOWED_ARGS.get(action_name, frozenset())
+    unknown = sorted(set(args) - allowed)
+    if not unknown:
+        return None
+    return StepResult(
+        ok=False,
+        message=(
+            f"{action_name}: unknown args {unknown}. "
+            f"Allowed: {sorted(allowed) or '(none)'}."
+        ),
+    )
+
+
 async def do_analyze(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     from styleclaw.agents.analyze_style import analyze_style, analyze_style_with_thinking
     from styleclaw.core.state_machine import advance
@@ -185,7 +220,22 @@ async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
         retry_failed_style_refine,
     )
 
-    max_cycles = args.get("max_cycles", MAX_POLL_CYCLES)
+    max_cycles_raw = args.get("max_cycles", MAX_POLL_CYCLES)
+    try:
+        max_cycles = int(max_cycles_raw)
+    except (TypeError, ValueError):
+        return StepResult(
+            ok=False,
+            message=f"poll args.max_cycles must be an integer (got {max_cycles_raw!r})",
+        )
+    if max_cycles < 1:
+        return StepResult(ok=False, message=f"poll args.max_cycles must be >= 1 (got {max_cycles})")
+    if max_cycles > MAX_POLL_CYCLES:
+        logger.warning(
+            "poll args.max_cycles=%d exceeds STYLECLAW_MAX_POLL_CYCLES=%d; clamping.",
+            max_cycles, MAX_POLL_CYCLES,
+        )
+        max_cycles = MAX_POLL_CYCLES
     state = project_store.load_state(ctx.project)
 
     for cycle in range(max_cycles):
@@ -522,12 +572,18 @@ async def do_design_cases(ctx: ExecutionContext, args: dict[str, Any]) -> StepRe
 
 
 async def do_batch_submit(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
+    from styleclaw.providers.runninghub.models import MODEL_REGISTRY
     from styleclaw.scripts.batch_submit import batch_submit_i2i, batch_submit_t2i
 
     state = project_store.load_state(ctx.project)
     model_id = args.get("model") or (state.selected_models[0] if state.selected_models else None)
     if not model_id:
         return StepResult(ok=False, message="No model selected")
+    if model_id not in MODEL_REGISTRY:
+        return StepResult(
+            ok=False,
+            message=f"Unknown model '{model_id}'. Choose from: {', '.join(MODEL_REGISTRY.keys())}",
+        )
 
     if state.phase == Phase.BATCH_T2I:
         uploads = project_store.load_uploads(ctx.project)

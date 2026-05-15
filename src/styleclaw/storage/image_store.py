@@ -3,14 +3,19 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncIterator
 
 import httpx
+
+from styleclaw.core.config import MAX_DOWNLOAD_BYTES_PER_FILE
 
 logger = logging.getLogger(__name__)
 
 DOWNLOAD_RETRIES = 3
 DOWNLOAD_RETRY_DELAY = 2
+DOWNLOAD_CHUNK_SIZE = 64 * 1024
 
 FAILED_DOWNLOADS_FILE = "failed_downloads.json"
 
@@ -64,22 +69,45 @@ async def download_image(
     dest: Path,
     client: httpx.AsyncClient | None = None,
 ) -> Path:
+    if not url.startswith(("http://", "https://")):
+        raise RuntimeError(f"Refusing to download non-HTTP URL: {url[:80]}")
+
     dest.parent.mkdir(parents=True, exist_ok=True)
     last_exc: Exception | None = None
 
+    @asynccontextmanager
+    async def _acquire_client() -> AsyncIterator[httpx.AsyncClient]:
+        if client is not None:
+            yield client
+        else:
+            async with httpx.AsyncClient(timeout=60) as new_client:
+                yield new_client
+
     for attempt in range(DOWNLOAD_RETRIES):
         try:
-            if client is not None:
-                resp = await client.get(url)
-            else:
-                async with httpx.AsyncClient(timeout=60) as c:
-                    resp = await c.get(url)
-            resp.raise_for_status()
-
-            ext = _ext_from_response(resp, dest.suffix or ".png")
-            actual_dest = dest.with_suffix(ext)
-            tmp = actual_dest.with_suffix(actual_dest.suffix + ".tmp")
-            tmp.write_bytes(resp.content)
+            async with _acquire_client() as c:
+                async with c.stream("GET", url) as resp:
+                    resp.raise_for_status()
+                    ext = _ext_from_response(resp, dest.suffix or ".png")
+                    actual_dest = dest.with_suffix(ext)
+                    tmp = actual_dest.with_suffix(actual_dest.suffix + ".tmp")
+                    total = 0
+                    try:
+                        with open(tmp, "wb") as fh:
+                            async for chunk in resp.aiter_bytes(DOWNLOAD_CHUNK_SIZE):
+                                total += len(chunk)
+                                if total > MAX_DOWNLOAD_BYTES_PER_FILE:
+                                    fh.close()
+                                    tmp.unlink(missing_ok=True)
+                                    raise RuntimeError(
+                                        f"Download exceeded "
+                                        f"{MAX_DOWNLOAD_BYTES_PER_FILE} bytes "
+                                        f"for {url[:80]} (size cap)"
+                                    )
+                                fh.write(chunk)
+                    except BaseException:
+                        tmp.unlink(missing_ok=True)
+                        raise
             tmp.replace(actual_dest)
             return actual_dest
         except (httpx.TransportError, httpx.HTTPStatusError) as exc:

@@ -61,6 +61,8 @@ All defined in `core/config.py` via `_int_env` / `_float_env`. Invalid values ra
 | `STYLECLAW_LLM_WRITE_TIMEOUT` | `300` | httpx write timeout (seconds) for LLM requests. Evaluate POSTs many base64 images at once — raise on slow upload links (e.g. `600`). |
 | `STYLECLAW_LLM_READ_TIMEOUT` | `300` | httpx read timeout (seconds) for LLM streaming responses. |
 | `STYLECLAW_LLM_CONNECT_TIMEOUT` | `30` | httpx connect timeout (seconds) for LLM connections. |
+| `STYLECLAW_MAX_DOWNLOAD_BYTES` | `52428800` | Hard cap on a single downloaded image file (default 50MB). Aborts mid-stream if exceeded. |
+| `STYLECLAW_LLM_IMAGE_CACHE` | `1` | Enable disk cache of resized/encoded images under `DATA_ROOT/.cache/llm-images/`. Set `0` to disable. |
 
 ## Tech Stack
 

@@ -7,7 +7,12 @@ from typing import Any, Callable
 import typer
 
 from styleclaw.core.models import ActionPlan, LoopConfig, RoundEvaluation
-from styleclaw.orchestrator.actions import ACTION_REGISTRY, ExecutionContext, StepResult
+from styleclaw.orchestrator.actions import (
+    ACTION_REGISTRY,
+    ExecutionContext,
+    StepResult,
+    _reject_unknown_args,
+)
 from styleclaw.storage import project_store
 
 logger = logging.getLogger(__name__)
@@ -174,6 +179,13 @@ async def execute(
 
         if on_step_start:
             on_step_start(i, step.name, step.description)
+
+        unknown = _reject_unknown_args(step.name, step.args)
+        if unknown is not None:
+            results.append(unknown)
+            if on_step_done:
+                on_step_done(i, step.name, unknown)
+            return results
 
         result = await action_def.fn(ctx, step.args)
         results.append(result)

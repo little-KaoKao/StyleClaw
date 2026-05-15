@@ -2,16 +2,84 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import io
+import json
+import logging
+import os
 from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
 from styleclaw.core.config import IMAGE_ENCODE_CONCURRENCY
 
+logger = logging.getLogger(__name__)
+
 MAX_REF_IMAGE_BYTES = 50 * 1024 * 1024
 
 MAX_LONG_EDGE = 1024
+
+
+def _cache_enabled() -> bool:
+    raw = os.getenv("STYLECLAW_LLM_IMAGE_CACHE", "1").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def _cache_dir() -> Path:
+    # Read DATA_ROOT lazily so test monkeypatches take effect.
+    from styleclaw.storage import project_store
+
+    return project_store.DATA_ROOT / ".cache" / "llm-images"
+
+
+def _cache_key(path: Path) -> str:
+    """sha256 of absolute path + mtime_ns + size — automatically invalidates
+    when the source file changes."""
+    st = path.stat()
+    h = hashlib.sha256()
+    h.update(str(path.resolve()).encode("utf-8"))
+    h.update(str(st.st_mtime_ns).encode("ascii"))
+    h.update(b":")
+    h.update(str(st.st_size).encode("ascii"))
+    return h.hexdigest()
+
+
+def _cache_load(path: Path) -> tuple[bytes, str] | None:
+    if not _cache_enabled():
+        return None
+    try:
+        cache_file = _cache_dir() / f"{_cache_key(path)}.json"
+    except OSError:
+        return None
+    if not cache_file.exists():
+        return None
+    try:
+        payload = json.loads(cache_file.read_text(encoding="utf-8"))
+        return base64.b64decode(payload["data_b64"]), payload["media_type"]
+    except (OSError, json.JSONDecodeError, KeyError, ValueError) as exc:
+        logger.debug("LLM image cache miss (corrupt entry %s): %s", cache_file.name, exc)
+        return None
+
+
+def _cache_save(path: Path, data: bytes, media_type: str) -> None:
+    if not _cache_enabled():
+        return
+    try:
+        cache_file = _cache_dir() / f"{_cache_key(path)}.json"
+    except OSError:
+        return
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(
+        {"media_type": media_type, "data_b64": base64.b64encode(data).decode("ascii")}
+    )
+    tmp = cache_file.with_suffix(cache_file.suffix + ".tmp")
+    try:
+        tmp.write_text(payload, encoding="utf-8")
+        tmp.replace(cache_file)
+    except OSError as exc:
+        logger.debug("Failed to write LLM image cache for %s: %s", path.name, exc)
+        tmp.unlink(missing_ok=True)
+
 
 # Bound the number of Pillow-decoding worker threads so building image
 # blocks for an evaluate call (often 20+ images) doesn't spawn one thread
@@ -70,6 +138,10 @@ def resize_for_llm(image_path: Path | str) -> tuple[bytes, str]:
     if not path.is_file():
         raise FileNotFoundError(f"Image not found: {path}")
 
+    cached = _cache_load(path)
+    if cached is not None:
+        return cached
+
     img = Image.open(path)
     try:
         w, h = img.size
@@ -106,7 +178,9 @@ def resize_for_llm(image_path: Path | str) -> tuple[bytes, str]:
         media_type = "image/png"
     else:
         media_type = "image/jpeg"
-    return buf.getvalue(), media_type
+    data = buf.getvalue()
+    _cache_save(path, data, media_type)
+    return data, media_type
 
 
 

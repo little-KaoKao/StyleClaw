@@ -254,3 +254,56 @@ class TestExecute:
             results = await execute(plan, ctx)
 
         assert call_count == 4
+
+
+class TestArgsValidation:
+    async def test_unknown_arg_key_rejected(self, setup_project, ctx):
+        from styleclaw.orchestrator.actions import ACTION_REGISTRY
+
+        plan = ActionPlan(
+            summary="x",
+            steps=[Action(name="generate", description="x", args={"banana": 1})],
+        )
+        # Real action registry; the unknown key should never reach action.fn.
+        mock_fn = AsyncMock(return_value=StepResult(ok=True, message="should not run"))
+        mock_action = type(ACTION_REGISTRY["generate"])(
+            fn=mock_fn,
+            needs_client=False,
+            needs_llm=False,
+        )
+        with patch.dict(
+            "styleclaw.orchestrator.executor.ACTION_REGISTRY",
+            {"generate": mock_action},
+        ):
+            results = await execute(plan, ctx)
+
+        assert len(results) == 1
+        assert results[0].ok is False
+        assert "unknown args" in results[0].message
+        assert "banana" in results[0].message
+        mock_fn.assert_not_called()
+
+    async def test_known_arg_passes_through(self, setup_project, ctx):
+        from styleclaw.orchestrator.actions import ACTION_REGISTRY
+
+        plan = ActionPlan(
+            summary="x",
+            steps=[Action(name="generate", description="x", args={"force": True})],
+        )
+        captured = {}
+
+        async def _capture(c, args):
+            captured.update(args)
+            return StepResult(ok=True, message="captured")
+
+        mock_action = type(ACTION_REGISTRY["generate"])(
+            fn=_capture, needs_client=False, needs_llm=False,
+        )
+        with patch.dict(
+            "styleclaw.orchestrator.executor.ACTION_REGISTRY",
+            {"generate": mock_action},
+        ):
+            results = await execute(plan, ctx)
+
+        assert results[0].ok is True
+        assert captured == {"force": True}
