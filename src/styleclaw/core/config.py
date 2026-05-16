@@ -64,6 +64,44 @@ RH_CLIENT_TIMEOUT: float = _float_env("STYLECLAW_RH_TIMEOUT", "60")
 RH_CLIENT_CONNECT_TIMEOUT: float = _float_env("STYLECLAW_RH_CONNECT_TIMEOUT", "30")
 
 
+def _list_env(name: str, default: str = "") -> list[str]:
+    raw = os.getenv(name, default)
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+
+# --- Three-model panel toggles (default OFF). When either is on,
+# STYLECLAW_PANEL_MODELS must list exactly 3 model ids; labels (optional)
+# must match length. validate_panel_config() reports problems instead of
+# raising at import time so unit tests can still load config_mod cleanly.
+PANEL_REFINE_ENABLED: bool = _bool_env("STYLECLAW_PANEL_REFINE", False)
+PANEL_MODEL_SELECT_ENABLED: bool = _bool_env("STYLECLAW_PANEL_MODEL_SELECT", False)
+PANEL_MODELS: list[str] = _list_env("STYLECLAW_PANEL_MODELS")
+_PANEL_LABELS_RAW: list[str] = _list_env("STYLECLAW_PANEL_LABELS")
+PANEL_LABELS: list[str] = _PANEL_LABELS_RAW or list(PANEL_MODELS)
+
+
+def validate_panel_config() -> list[str]:
+    """Return error strings if panel envs are inconsistent.
+
+    No-op when both toggles are off.
+    """
+    errors: list[str] = []
+    if not (PANEL_REFINE_ENABLED or PANEL_MODEL_SELECT_ENABLED):
+        return errors
+    if len(PANEL_MODELS) != 3:
+        errors.append(
+            "STYLECLAW_PANEL_MODELS must list exactly 3 comma-separated model "
+            f"ids when STYLECLAW_PANEL_REFINE or STYLECLAW_PANEL_MODEL_SELECT "
+            f"is set (got {len(PANEL_MODELS)}: {PANEL_MODELS!r})."
+        )
+    if _PANEL_LABELS_RAW and len(_PANEL_LABELS_RAW) != len(PANEL_MODELS):
+        errors.append(
+            "STYLECLAW_PANEL_LABELS length must match STYLECLAW_PANEL_MODELS "
+            f"(got {len(_PANEL_LABELS_RAW)} labels for {len(PANEL_MODELS)} models)."
+        )
+    return errors
+
+
 def env_truthy(name: str) -> bool:
     raw = (os.getenv(name) or "").strip().lower()
     return raw in ("1", "true", "yes", "on")
@@ -85,5 +123,6 @@ def validate_env() -> list[str]:
             "No LLM credentials found. Set AWS_BEARER_TOKEN_BEDROCK, "
             "OPENAI_COMPAT_API_KEY, or RUNNINGHUB_LLM=1 (uses RUNNINGHUB_API_KEY)."
         )
+    errors.extend(validate_panel_config())
     return errors
 

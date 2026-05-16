@@ -243,3 +243,29 @@ class ActionPlan(BaseModel):
     steps: list[Action]
     loop: LoopConfig | None = None
     stop_summary: str = ""
+
+
+class PanelProposal(_FrozenModel):
+    """One participant's submitted artifact in a panel round."""
+    model_id: str
+    label: str = ""
+    payload: dict[str, Any]
+    thinking: str = ""
+
+
+class PanelScore(_FrozenModel):
+    """One evaluator's score for one proposal (never the evaluator's own)."""
+    evaluator_model_id: str
+    target_model_id: str
+    score: float
+    rationale: str = ""
+
+
+class PanelResult(_FrozenModel):
+    """Aggregate outcome of a three-model panel round."""
+    proposals: list[PanelProposal] = Field(default_factory=list)
+    scores: list[PanelScore] = Field(default_factory=list)
+    winner_model_id: str = ""
+    averages: dict[str, float] = Field(default_factory=dict)
+    degraded: bool = False
+    error_log: list[str] = Field(default_factory=list)
