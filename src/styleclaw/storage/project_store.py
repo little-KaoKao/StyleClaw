@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from styleclaw.core.models import (
     BatchConfig,
     ModelEvaluation,
+    PanelResult,
     ProjectConfig,
     ProjectState,
     PromptConfig,
@@ -328,6 +329,39 @@ def load_round_evaluation(
         RoundEvaluation,
         _resolve_round_file(name, round_num, pass_num, "evaluation.json"),
     )
+
+
+# --- Panel sidecar storage (model-select and style-refine rounds) ---
+
+
+def save_round_panel_result(
+    name: str, round_num: int, result: PanelResult, pass_num: int = 1,
+) -> None:
+    _save_model(result, round_dir(name, round_num, pass_num) / "panel.json")
+
+
+def load_round_panel_result(
+    name: str, round_num: int, pass_num: int = 1,
+) -> PanelResult | None:
+    path = round_dir(name, round_num, pass_num) / "panel.json"
+    if not path.exists():
+        return None
+    return _load_model(PanelResult, path)
+
+
+def save_model_select_panel_result(
+    name: str, result: PanelResult, pass_num: int = 1,
+) -> None:
+    _save_model(result, model_select_dir(name, pass_num) / "panel.json")
+
+
+def load_model_select_panel_result(
+    name: str, pass_num: int = 1,
+) -> PanelResult | None:
+    path = model_select_dir(name, pass_num) / "panel.json"
+    if not path.exists():
+        return None
+    return _load_model(PanelResult, path)
 
 
 # --- Phase 4: batch-t2i storage ---
