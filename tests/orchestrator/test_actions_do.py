@@ -917,6 +917,112 @@ class TestDoGenerateModelsFilter:
         assert "filtered" not in result.message
 
 
+class TestDoRefinePanel:
+    """do_refine should branch on STYLECLAW_PANEL_REFINE."""
+
+    @pytest.mark.asyncio
+    async def test_panel_off_routes_to_single_model(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("STYLECLAW_PANEL_REFINE", raising=False)
+        name = _create_project(phase=Phase.STYLE_REFINE, selected_models=["mj-v7"])
+        # Seed analysis so the round-1 path can read a current_trigger.
+        project_store.save_analysis(name, StyleAnalysis(trigger_phrase="seed"))
+
+        with patch(
+            "styleclaw.agents.refine_prompt.refine_prompt",
+            new=AsyncMock(return_value=PromptConfig(round=1, trigger_phrase="single-model-win")),
+        ) as single, patch(
+            "styleclaw.agents.refine_panel.refine_with_panel",
+            new=AsyncMock(),
+        ) as panel:
+            result = await do_refine(_ctx(name, llm=AsyncMock()), {})
+
+        assert result.ok
+        single.assert_awaited_once()
+        panel.assert_not_awaited()
+        # No panel.json sidecar.
+        round_d = project_store.round_dir(name, 1)
+        assert not (round_d / "panel.json").exists()
+
+    @pytest.mark.asyncio
+    async def test_panel_on_routes_through_panel_and_writes_sidecar(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.setenv("STYLECLAW_PANEL_REFINE", "1")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "m1,m2,m3")
+        monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://x")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
+        import importlib, styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+
+        from styleclaw.core.models import PanelProposal, PanelResult
+
+        name = _create_project(phase=Phase.STYLE_REFINE, selected_models=["mj-v7"])
+        project_store.save_analysis(name, StyleAnalysis(trigger_phrase="seed"))
+
+        panel_result = PanelResult(
+            proposals=[PanelProposal(model_id="m1", payload={"trigger_phrase": "panel-win"})],
+            scores=[],
+            winner_model_id="m1",
+            averages={"m1": 9.0},
+        )
+        panel_prompt = PromptConfig(round=1, trigger_phrase="panel-win", derived_from="initial-analysis")
+
+        with patch(
+            "styleclaw.providers.llm.panel_factory.build_panel_providers",
+            return_value=[(AsyncMock(_model_id=f"m{i}"), f"L{i}") for i in (1, 2, 3)],
+        ), patch(
+            "styleclaw.providers.llm.panel_factory.close_panel_providers",
+            new=AsyncMock(),
+        ), patch(
+            "styleclaw.agents.refine_panel.refine_with_panel",
+            new=AsyncMock(return_value=(panel_prompt, panel_result)),
+        ) as panel_call, patch(
+            "styleclaw.agents.refine_prompt.refine_prompt",
+            new=AsyncMock(),
+        ) as single_call:
+            result = await do_refine(_ctx(name, llm=AsyncMock()), {})
+
+        assert result.ok
+        panel_call.assert_awaited_once()
+        single_call.assert_not_awaited()
+
+        # Main artifact contains winner's trigger phrase (unchanged downstream contract).
+        loaded = project_store.load_prompt_config(name, round_num=1)
+        assert loaded.trigger_phrase == "panel-win"
+
+        # Sidecar exists.
+        loaded_panel = project_store.load_round_panel_result(name, round_num=1)
+        assert loaded_panel is not None
+        assert loaded_panel.winner_model_id == "m1"
+
+    @pytest.mark.asyncio
+    async def test_panel_failure_returns_step_failure(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_REFINE", "1")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "m1,m2,m3")
+        monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://x")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
+        import importlib, styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+
+        name = _create_project(phase=Phase.STYLE_REFINE, selected_models=["mj-v7"])
+        project_store.save_analysis(name, StyleAnalysis(trigger_phrase="seed"))
+
+        with patch(
+            "styleclaw.providers.llm.panel_factory.build_panel_providers",
+            return_value=[(AsyncMock(_model_id=f"m{i}"), f"L{i}") for i in (1, 2, 3)],
+        ), patch(
+            "styleclaw.providers.llm.panel_factory.close_panel_providers",
+            new=AsyncMock(),
+        ), patch(
+            "styleclaw.agents.refine_panel.refine_with_panel",
+            new=AsyncMock(side_effect=RuntimeError("Refine panel produced no winner")),
+        ):
+            result = await do_refine(_ctx(name, llm=AsyncMock()), {})
+
+        assert result.ok is False
+        assert "panel" in result.message.lower()
+
+
 class TestArgsBoundChecks:
     async def test_poll_max_cycles_negative_rejected(self) -> None:
         name = _create_project(phase=Phase.MODEL_SELECT)

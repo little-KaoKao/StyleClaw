@@ -433,19 +433,19 @@ async def do_select_model(ctx: ExecutionContext, args: dict[str, Any]) -> StepRe
 
 
 async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
+    import styleclaw.core.config as _cfg
     from styleclaw.agents.refine_prompt import refine_prompt, refine_prompt_with_thinking
     from styleclaw.core.models import RoundEvaluation
 
     state = project_store.load_state(ctx.project)
-    
-    # Phase guard: refine only works in STYLE_REFINE
+
     if state.phase != Phase.STYLE_REFINE:
         return StepResult(
             ok=False,
             message=f"refine requires STYLE_REFINE phase (current: {state.phase}). "
                     f"Run 'select-model' first to advance from MODEL_SELECT."
         )
-    
+
     config = project_store.load_config(ctx.project)
     root = project_store.project_dir(ctx.project)
     ref_paths = [root / r for r in config.ref_images]
@@ -482,6 +482,44 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
         current_trigger = prev_prompt.trigger_phrase
 
     direction = args.get("direction", "")
+
+    if _cfg.PANEL_REFINE_ENABLED:
+        from styleclaw.agents.refine_panel import refine_with_panel
+        from styleclaw.providers.llm.panel_factory import (
+            build_panel_providers,
+            close_panel_providers,
+        )
+
+        pairs = build_panel_providers()
+        try:
+            llms = [p for p, _ in pairs]
+            labels = [label for _, label in pairs]
+            try:
+                prompt_config, panel_result = await refine_with_panel(
+                    llms, labels, ref_paths, current_trigger, round_num,
+                    config.ip_info, evaluations, direction,
+                )
+            except RuntimeError as exc:
+                return StepResult(ok=False, message=f"refine panel failed: {exc}")
+        finally:
+            await close_panel_providers(pairs)
+
+        project_store.save_prompt_config(
+            ctx.project, round_num, prompt_config, pass_num=pass_num,
+        )
+        project_store.save_round_panel_result(
+            ctx.project, round_num, panel_result, pass_num=pass_num,
+        )
+
+        new_state = state.with_round(round_num)
+        project_store.save_state(ctx.project, new_state)
+
+        msg = f"Round {round_num} [panel:{panel_result.winner_model_id}]: {prompt_config.trigger_phrase}"
+        if panel_result.degraded:
+            msg += f" (degraded; see panel.json — {len(panel_result.error_log)} issue(s))"
+        return StepResult(ok=True, message=msg, data={"panel": True, "degraded": panel_result.degraded})
+
+    # Single-model path (unchanged).
     thinking = ""
     if ctx.show_thinking:
         prompt_config, thinking = await refine_prompt_with_thinking(
