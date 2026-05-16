@@ -295,6 +295,7 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
     ref_paths = [root / r for r in config.ref_images]
 
     if state.phase == Phase.MODEL_SELECT:
+        import styleclaw.core.config as _cfg
         from styleclaw.agents.select_model import (
             evaluate_models,
             evaluate_models_with_thinking,
@@ -323,6 +324,49 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         if not model_images:
             return StepResult(ok=False, message="No generated images found")
 
+        if _cfg.PANEL_MODEL_SELECT_ENABLED:
+            from styleclaw.agents.select_model_panel import select_models_with_panel
+            from styleclaw.providers.llm.panel_factory import (
+                build_panel_providers,
+                close_panel_providers,
+            )
+
+            pairs = build_panel_providers()
+            try:
+                llms = [p for p, _ in pairs]
+                labels = [label for _, label in pairs]
+                try:
+                    evaluation, panel_result = await select_models_with_panel(
+                        llms, labels, ref_paths, model_images,
+                    )
+                except RuntimeError as exc:
+                    return StepResult(ok=False, message=f"model-select panel failed: {exc}")
+            finally:
+                await close_panel_providers(pairs)
+
+            project_store.save_evaluation(ctx.project, evaluation, pass_num=pass_num)
+            project_store.save_model_select_panel_result(
+                ctx.project, panel_result, pass_num=pass_num,
+            )
+            generate_model_select_report(ctx.project, pass_num=pass_num)
+
+            msg = (
+                f"Recommendation: {evaluation.recommendation} "
+                f"[panel:{panel_result.winner_model_id}] (pass {pass_num})"
+            )
+            if panel_result.degraded:
+                msg += f" (degraded; see panel.json — {len(panel_result.error_log)} issue(s))"
+            return StepResult(
+                ok=True, message=msg,
+                data={
+                    "recommendation": evaluation.recommendation,
+                    "pass_num": pass_num,
+                    "panel": True,
+                    "degraded": panel_result.degraded,
+                },
+            )
+
+        # Single-model path (unchanged).
         thinking = ""
         if ctx.show_thinking:
             evaluation, thinking = await evaluate_models_with_thinking(

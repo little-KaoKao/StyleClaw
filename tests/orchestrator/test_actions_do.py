@@ -1071,3 +1071,94 @@ class TestArgsBoundChecks:
         )
         assert result.ok is False
         assert "Unknown model" in result.message
+
+
+class TestDoEvaluatePanel:
+    """do_evaluate (MODEL_SELECT) should branch on STYLECLAW_PANEL_MODEL_SELECT."""
+
+    @pytest.mark.asyncio
+    async def test_panel_off_routes_to_single_model(self, monkeypatch):
+        monkeypatch.delenv("STYLECLAW_PANEL_MODEL_SELECT", raising=False)
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        # Seed at least one model output so the path doesn't short-circuit.
+        results_dir = project_store.model_results_dir(name, "mj-v7", variant="prompt-only")
+        import PIL.Image
+        PIL.Image.new("RGB", (64, 64), color="red").save(str(results_dir / "output-001.png"))
+        project_store.save_task_record(
+            name, "mj-v7",
+            TaskRecord(task_id="t", model_id="mj-v7", status="SUCCESS"),
+            variant="prompt-only",
+        )
+
+        single_eval = ModelEvaluation(recommendation="mj-v7", recommended_variant="prompt-only")
+        with patch(
+            "styleclaw.agents.select_model.evaluate_models",
+            new=AsyncMock(return_value=single_eval),
+        ) as single, patch(
+            "styleclaw.agents.select_model_panel.select_models_with_panel",
+            new=AsyncMock(),
+        ) as panel, patch(
+            "styleclaw.scripts.report.generate_model_select_report",
+            return_value=Path("/tmp/x.html"),
+        ):
+            result = await do_evaluate(_ctx(name, llm=AsyncMock()), {})
+
+        assert result.ok
+        single.assert_awaited_once()
+        panel.assert_not_awaited()
+        assert project_store.load_model_select_panel_result(name) is None
+
+    @pytest.mark.asyncio
+    async def test_panel_on_routes_through_panel_and_writes_sidecar(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_MODEL_SELECT", "1")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "m1,m2,m3")
+        monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://x")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
+        import importlib, styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+
+        from styleclaw.core.models import PanelProposal, PanelResult
+
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        results_dir = project_store.model_results_dir(name, "mj-v7", variant="prompt-only")
+        import PIL.Image
+        PIL.Image.new("RGB", (64, 64), color="red").save(str(results_dir / "output-001.png"))
+        project_store.save_task_record(
+            name, "mj-v7",
+            TaskRecord(task_id="t", model_id="mj-v7", status="SUCCESS"),
+            variant="prompt-only",
+        )
+
+        panel_eval = ModelEvaluation(recommendation="mj-v7", recommended_variant="prompt-sref")
+        panel_result = PanelResult(
+            proposals=[PanelProposal(model_id="m1", payload=panel_eval.model_dump())],
+            scores=[],
+            winner_model_id="m1",
+            averages={"m1": 9.0},
+        )
+
+        with patch(
+            "styleclaw.providers.llm.panel_factory.build_panel_providers",
+            return_value=[(AsyncMock(_model_id=f"m{i}"), f"L{i}") for i in (1, 2, 3)],
+        ), patch(
+            "styleclaw.providers.llm.panel_factory.close_panel_providers",
+            new=AsyncMock(),
+        ), patch(
+            "styleclaw.agents.select_model_panel.select_models_with_panel",
+            new=AsyncMock(return_value=(panel_eval, panel_result)),
+        ), patch(
+            "styleclaw.scripts.report.generate_model_select_report",
+            return_value=Path("/tmp/x.html"),
+        ):
+            result = await do_evaluate(_ctx(name, llm=AsyncMock()), {})
+
+        assert result.ok
+        loaded = project_store.load_evaluation(name)
+        assert loaded.recommendation == "mj-v7"
+        assert loaded.recommended_variant == "prompt-sref"
+        loaded_panel = project_store.load_model_select_panel_result(name)
+        assert loaded_panel is not None
+        assert loaded_panel.winner_model_id == "m1"
+        # Restore config module so subsequent tests see clean env state.
+        monkeypatch.delenv("STYLECLAW_PANEL_MODEL_SELECT", raising=False)
+        importlib.reload(config_mod)
