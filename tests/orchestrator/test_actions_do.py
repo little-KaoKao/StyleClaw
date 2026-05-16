@@ -920,6 +920,21 @@ class TestDoGenerateModelsFilter:
 class TestDoRefinePanel:
     """do_refine should branch on STYLECLAW_PANEL_REFINE."""
 
+    @pytest.fixture(autouse=True)
+    def _reset_config_after_test(self, monkeypatch):
+        # Tests in this class flip STYLECLAW_PANEL_REFINE on and importlib.reload
+        # config_mod so do_refine sees the new state. monkeypatch reverts the env
+        # at teardown but does NOT re-reload the module, leaving PANEL_REFINE_ENABLED
+        # stuck True for downstream tests. Force a clean reload after each test.
+        yield
+        monkeypatch.delenv("STYLECLAW_PANEL_REFINE", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_MODEL_SELECT", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_MODELS", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_LABELS", raising=False)
+        import importlib
+        import styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+
     @pytest.mark.asyncio
     async def test_panel_off_routes_to_single_model(self, tmp_path, monkeypatch):
         monkeypatch.delenv("STYLECLAW_PANEL_REFINE", raising=False)
@@ -1075,6 +1090,18 @@ class TestArgsBoundChecks:
 
 class TestDoEvaluatePanel:
     """do_evaluate (MODEL_SELECT) should branch on STYLECLAW_PANEL_MODEL_SELECT."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_config_after_test(self, monkeypatch):
+        # Same rationale as TestDoRefinePanel._reset_config_after_test.
+        yield
+        monkeypatch.delenv("STYLECLAW_PANEL_REFINE", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_MODEL_SELECT", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_MODELS", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_LABELS", raising=False)
+        import importlib
+        import styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
 
     @pytest.mark.asyncio
     async def test_panel_off_routes_to_single_model(self, monkeypatch):

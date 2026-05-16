@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 
@@ -8,6 +10,24 @@ def _reload_config():
     import styleclaw.core.config as config_mod
     importlib.reload(config_mod)
     return config_mod
+
+
+@pytest.fixture(autouse=True)
+def _reset_panel_state(monkeypatch):
+    """Clear panel env + reload config + close any leaked providers after each test.
+
+    Some tests in this module instantiate real OpenAICompatProvider via
+    build_panel_providers (which creates httpx clients + asyncio.Semaphores
+    bound to the current event loop). Without explicit cleanup, those clients
+    leak into other tests' event loops and emit "Semaphore bound to a different
+    loop" errors.
+    """
+    yield
+    monkeypatch.delenv("STYLECLAW_PANEL_REFINE", raising=False)
+    monkeypatch.delenv("STYLECLAW_PANEL_MODEL_SELECT", raising=False)
+    monkeypatch.delenv("STYLECLAW_PANEL_MODELS", raising=False)
+    monkeypatch.delenv("STYLECLAW_PANEL_LABELS", raising=False)
+    _reload_config()
 
 
 class TestBuildPanelProviders:
@@ -36,12 +56,18 @@ class TestBuildPanelProviders:
         monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://x")
         monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
         _reload_config()
-        from styleclaw.providers.llm.panel_factory import build_panel_providers
+        from styleclaw.providers.llm.panel_factory import (
+            build_panel_providers,
+            close_panel_providers,
+        )
         pairs = build_panel_providers()
-        assert [label for _, label in pairs] == ["One", "Two", "Three"]
-        assert [p._model_id for p, _ in pairs] == ["m1", "m2", "m3"]
-        # All share the same base URL.
-        assert all(p._base_url == "http://x" for p, _ in pairs)
+        try:
+            assert [label for _, label in pairs] == ["One", "Two", "Three"]
+            assert [p._model_id for p, _ in pairs] == ["m1", "m2", "m3"]
+            # All share the same base URL.
+            assert all(p._base_url == "http://x" for p, _ in pairs)
+        finally:
+            asyncio.run(close_panel_providers(pairs))
 
     def test_labels_fall_back_to_model_ids(self, monkeypatch):
         monkeypatch.setenv("STYLECLAW_PANEL_REFINE", "1")
@@ -50,6 +76,12 @@ class TestBuildPanelProviders:
         monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://x")
         monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
         _reload_config()
-        from styleclaw.providers.llm.panel_factory import build_panel_providers
+        from styleclaw.providers.llm.panel_factory import (
+            build_panel_providers,
+            close_panel_providers,
+        )
         pairs = build_panel_providers()
-        assert [label for _, label in pairs] == ["m1", "m2", "m3"]
+        try:
+            assert [label for _, label in pairs] == ["m1", "m2", "m3"]
+        finally:
+            asyncio.run(close_panel_providers(pairs))

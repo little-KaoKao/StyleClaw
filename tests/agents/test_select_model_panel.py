@@ -26,7 +26,12 @@ def _stub(model_id: str, recommendation: str, score: float):
 
 
 @pytest.mark.asyncio
-async def test_select_models_with_panel(tmp_path):
+async def test_select_models_with_panel(tmp_path, monkeypatch):
+    # Disable the LLM image cache: this test runs 3 concurrent proposals that
+    # all encode the same images, and the cache writer (single .tmp filename
+    # per cache key) races on Windows file replace.
+    monkeypatch.setenv("STYLECLAW_LLM_IMAGE_CACHE", "0")
+
     refs = [tmp_path / "ref1.png"]
     img_dir = tmp_path / "imgs"
     img_dir.mkdir()
