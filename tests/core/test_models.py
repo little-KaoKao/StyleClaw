@@ -1,5 +1,11 @@
+import pytest
+from pydantic import ValidationError
+
 from styleclaw.core.models import (
     Phase,
+    PanelProposal,
+    PanelResult,
+    PanelScore,
     ProjectConfig,
     ProjectState,
 )
@@ -54,3 +60,53 @@ def test_with_round_returns_new_state():
     assert new_state is not state
     assert new_state.current_round == 3
     assert state.current_round == 0
+
+
+class TestPanelModels:
+    def test_proposal_defaults(self):
+        p = PanelProposal(model_id="m1", payload={"trigger_phrase": "foo"})
+        assert p.label == ""
+        assert p.thinking == ""
+        assert p.payload == {"trigger_phrase": "foo"}
+
+    def test_proposal_is_frozen(self):
+        p = PanelProposal(model_id="m1", payload={})
+        with pytest.raises(ValidationError):
+            p.model_id = "m2"
+
+    def test_score_required_fields(self):
+        s = PanelScore(evaluator_model_id="e", target_model_id="t", score=8.5)
+        assert s.rationale == ""
+
+    def test_result_defaults(self):
+        r = PanelResult(
+            proposals=[],
+            scores=[],
+            winner_model_id="",
+            averages={},
+        )
+        assert r.degraded is False
+        assert r.error_log == []
+
+    def test_result_holds_full_panel(self):
+        proposals = [
+            PanelProposal(model_id="a", payload={"x": 1}),
+            PanelProposal(model_id="b", payload={"x": 2}),
+            PanelProposal(model_id="c", payload={"x": 3}),
+        ]
+        scores = [
+            PanelScore(evaluator_model_id="a", target_model_id="b", score=7.0),
+            PanelScore(evaluator_model_id="a", target_model_id="c", score=6.0),
+            PanelScore(evaluator_model_id="b", target_model_id="a", score=8.0),
+            PanelScore(evaluator_model_id="b", target_model_id="c", score=7.5),
+            PanelScore(evaluator_model_id="c", target_model_id="a", score=9.0),
+            PanelScore(evaluator_model_id="c", target_model_id="b", score=8.5),
+        ]
+        r = PanelResult(
+            proposals=proposals,
+            scores=scores,
+            winner_model_id="a",
+            averages={"a": 8.5, "b": 7.75, "c": 6.75},
+        )
+        assert r.winner_model_id == "a"
+        assert len(r.scores) == 6

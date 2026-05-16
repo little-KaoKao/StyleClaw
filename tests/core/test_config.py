@@ -120,3 +120,71 @@ class TestStreamDisplayDefault:
         import styleclaw.core.config as config_mod
         importlib.reload(config_mod)
         assert config_mod.STREAM_DISPLAY is False
+
+
+class TestPanelConfig:
+    """STYLECLAW_PANEL_* validation.
+
+    Both toggles default off. Either toggle on requires exactly 3 model ids;
+    labels (if given) must match length. Both off → panel env is fully ignored.
+    """
+
+    def _reload(self):
+        import importlib
+        import styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+        return config_mod
+
+    def test_both_off_ignores_panel_envs(self, monkeypatch):
+        monkeypatch.delenv("STYLECLAW_PANEL_REFINE", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_MODEL_SELECT", raising=False)
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "only-one")
+        monkeypatch.setenv("STYLECLAW_PANEL_LABELS", "A,B")  # mismatched len, ignored
+        cfg = self._reload()
+        assert cfg.PANEL_REFINE_ENABLED is False
+        assert cfg.PANEL_MODEL_SELECT_ENABLED is False
+        # Models list is parsed but not validated when both toggles off.
+        # validate_panel_config() returns no errors.
+        assert cfg.validate_panel_config() == []
+
+    def test_refine_on_requires_three_models(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_REFINE", "1")
+        monkeypatch.delenv("STYLECLAW_PANEL_MODEL_SELECT", raising=False)
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "a,b")
+        monkeypatch.delenv("STYLECLAW_PANEL_LABELS", raising=False)
+        cfg = self._reload()
+        errs = cfg.validate_panel_config()
+        assert any("STYLECLAW_PANEL_MODELS" in e and "exactly 3" in e for e in errs)
+
+    def test_select_on_with_three_models_ok(self, monkeypatch):
+        monkeypatch.delenv("STYLECLAW_PANEL_REFINE", raising=False)
+        monkeypatch.setenv("STYLECLAW_PANEL_MODEL_SELECT", "1")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "a, b ,c")
+        monkeypatch.delenv("STYLECLAW_PANEL_LABELS", raising=False)
+        cfg = self._reload()
+        assert cfg.PANEL_MODELS == ["a", "b", "c"]
+        assert cfg.validate_panel_config() == []
+
+    def test_labels_must_match_length(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_REFINE", "1")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "a,b,c")
+        monkeypatch.setenv("STYLECLAW_PANEL_LABELS", "Opus,GPT")
+        cfg = self._reload()
+        errs = cfg.validate_panel_config()
+        assert any("STYLECLAW_PANEL_LABELS" in e for e in errs)
+
+    def test_labels_default_to_model_ids(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_REFINE", "1")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "a,b,c")
+        monkeypatch.delenv("STYLECLAW_PANEL_LABELS", raising=False)
+        cfg = self._reload()
+        assert cfg.PANEL_LABELS == ["a", "b", "c"]
+
+    def test_validate_env_calls_panel_validator(self, monkeypatch):
+        monkeypatch.setenv("RUNNINGHUB_API_KEY", "k")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
+        monkeypatch.setenv("STYLECLAW_PANEL_REFINE", "1")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "only-one")
+        cfg = self._reload()
+        errs = cfg.validate_env()
+        assert any("STYLECLAW_PANEL_MODELS" in e for e in errs)
