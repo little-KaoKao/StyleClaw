@@ -63,6 +63,10 @@ All defined in `core/config.py` via `_int_env` / `_float_env`. Invalid values ra
 | `STYLECLAW_LLM_CONNECT_TIMEOUT` | `30` | httpx connect timeout (seconds) for LLM connections. |
 | `STYLECLAW_MAX_DOWNLOAD_BYTES` | `52428800` | Hard cap on a single downloaded image file (default 50MB). Aborts mid-stream if exceeded. |
 | `STYLECLAW_LLM_IMAGE_CACHE` | `1` | Enable disk cache of resized/encoded images under `DATA_ROOT/.cache/llm-images/`. Set `0` to disable. |
+| `STYLECLAW_PANEL_REFINE` | unset | When truthy, `do_refine` runs a three-model panel (propose + cross-score + winner) instead of a single-model call |
+| `STYLECLAW_PANEL_MODEL_SELECT` | unset | When truthy, `do_evaluate` in MODEL_SELECT runs the same three-model panel |
+| `STYLECLAW_PANEL_MODELS` | unset | Required when either panel toggle is on — exactly 3 comma-separated OpenAI-compat model ids |
+| `STYLECLAW_PANEL_LABELS` | unset | Optional human-readable labels (same length as `STYLECLAW_PANEL_MODELS`); falls back to model ids in reports/logs |
 
 ## Tech Stack
 
@@ -484,6 +488,7 @@ styleclaw rollback <project-name> --to STYLE_REFINE --round 2
 - **Thinking traces**: When `--show-thinking` is on, each `*_with_thinking` agent writes `<artifact>.thinking.md` alongside the JSON it produced (e.g. `evaluation.thinking.md` next to `evaluation.json`).
 - **Checkpointing**: Long-running batch ops use `core.checkpoint.Checkpoint` (atomic write via `.tmp` + `replace`) so interrupted runs can resume by skipping already-recorded items.
 - **Cross-phase planning**: The planner extends action whitelist only from `INIT / STYLE_REFINE / BATCH_T2I / BATCH_I2I`; `MODEL_SELECT` stays gated so `select-model` cannot be autoplanned in. `select-model / approve / retest-models / add-refs` are excluded from cross-phase extension regardless.
+- **Panel mode**: When `STYLECLAW_PANEL_REFINE` or `STYLECLAW_PANEL_MODEL_SELECT` is on, the corresponding orchestrator action routes through `core.panel.run_panel` (3 proposals + ≤6 cross-evaluations, no self-scoring). The winner's payload still lands in the existing main artifact (`prompt.json` / `evaluation.json`), so downstream code is unchanged; full `PanelResult` is persisted alongside as `panel.json`. See `docs/superpowers/specs/2026-05-14-three-model-panel-design.md`.
 
 ## Commands
 
