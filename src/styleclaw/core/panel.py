@@ -39,8 +39,9 @@ async def run_panel(
 
     ``llms`` and ``labels`` are positional pairs. ``propose`` is called once per
     provider; ``score`` is called for every (evaluator, proposal) pair where
-    evaluator != proposal author. Failures in either phase are captured in
-    ``error_log`` rather than raised.
+    evaluator != proposal author. Only LLMs whose proposals succeeded participate
+    as evaluators in Phase 2; failed proposers do not score others. Failures in
+    either phase are captured in ``error_log`` rather than raised.
 
     Args:
         llms: List of LLMProvider instances; one per panel participant.

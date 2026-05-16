@@ -139,3 +139,16 @@ class TestRunPanel:
         # Tie-break: earliest position wins.
         assert result.winner_model_id == "a"
         assert result.degraded is False
+
+    async def test_llms_labels_length_mismatch_raises(self):
+        llms = [_llm("a"), _llm("b")]
+        labels = ["A", "B", "C"]  # mismatch
+
+        async def propose(llm):
+            return {}
+
+        async def score(evaluator, payload):
+            return 7.0, ""
+
+        with pytest.raises(ValueError, match="same length"):
+            await run_panel(llms, labels, propose, score)
