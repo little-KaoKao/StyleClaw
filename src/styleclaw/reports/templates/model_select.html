@@ -57,6 +57,45 @@
   Female: {{ test_subject_female }}
 </div>
 
+{% if panel %}
+<section class="panel-review">
+  <h2>Panel review {% if panel.degraded %}<span class="warn">(degraded)</span>{% endif %}</h2>
+  <div class="proposals">
+    {% for p in panel.proposals %}
+      <div class="proposal {% if p.model_id == panel.winner_model_id %}winner{% endif %}">
+        <h3>{{ p.label or p.model_id }}{% if p.model_id == panel.winner_model_id %} — winner{% endif %}</h3>
+        <pre>{{ p.payload | tojson(indent=2) }}</pre>
+      </div>
+    {% endfor %}
+  </div>
+  <table class="scores">
+    <thead>
+      <tr><th>Evaluator \\ Target</th>{% for p in panel.proposals %}<th>{{ p.label or p.model_id }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      {% for ev in panel.proposals %}
+        <tr>
+          <th>{{ ev.label or ev.model_id }}</th>
+          {% for tg in panel.proposals %}
+            {% if ev.model_id == tg.model_id %}
+              <td class="self">—</td>
+            {% else %}
+              {% set match = panel.scores | selectattr('evaluator_model_id', 'equalto', ev.model_id) | selectattr('target_model_id', 'equalto', tg.model_id) | list %}
+              <td>{% if match %}{{ '%.1f' | format(match[0].score) }}{% else %}—{% endif %}</td>
+            {% endif %}
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if panel.error_log %}
+    <details><summary>Errors ({{ panel.error_log | length }})</summary>
+      <ul>{% for e in panel.error_log %}<li>{{ e }}</li>{% endfor %}</ul>
+    </details>
+  {% endif %}
+</section>
+{% endif %}
+
 {% for m in models %}
 <div class="model-card">
   <h3>{{ m.model }}

@@ -86,6 +86,9 @@ def generate_model_select_report(name: str, pass_num: int = 1) -> Path:
             "images": [_relative_img_src(p, dest_dir) for p in all_images],
         })
 
+    _panel = project_store.load_model_select_panel_result(name, pass_num=pass_num)
+    panel = _panel.model_dump() if _panel is not None else None
+
     template = _env.get_template("model_select.html")
     html = template.render(
         project_name=name,
@@ -98,6 +101,7 @@ def generate_model_select_report(name: str, pass_num: int = 1) -> Path:
         test_subject_male=TEST_SUBJECTS["male"],
         test_subject_female=TEST_SUBJECTS["female"],
         models=model_data,
+        panel=panel,
     )
 
     dest = dest_dir / "report.html"
@@ -141,6 +145,9 @@ def generate_style_refine_report(
             "images": [_relative_img_src(p, dest_dir) for p in images],
         })
 
+    _panel = project_store.load_round_panel_result(name, round_num=round_num, pass_num=pass_num)
+    panel = _panel.model_dump() if _panel is not None else None
+
     template = _env.get_template("style_refine.html")
     html = template.render(
         project_name=name,
@@ -152,6 +159,7 @@ def generate_style_refine_report(
         test_subject_male=TEST_SUBJECTS["male"],
         test_subject_female=TEST_SUBJECTS["female"],
         models=model_data,
+        panel=panel,
     )
 
     dest = dest_dir / "report.html"
