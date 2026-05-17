@@ -82,6 +82,11 @@ PANEL_MODEL_SELECT_ENABLED: bool = _bool_env("STYLECLAW_PANEL_MODEL_SELECT", Fal
 PANEL_MODELS: list[str] = _list_env("STYLECLAW_PANEL_MODELS")
 _PANEL_LABELS_RAW: list[str] = _list_env("STYLECLAW_PANEL_LABELS")
 PANEL_LABELS: list[str] = _PANEL_LABELS_RAW or list(PANEL_MODELS)
+# When a panel run comes back as degraded (one or more proposer/scorer
+# failures, or no winner), default is to refuse persisting the result so a
+# bogus winner doesn't silently propagate downstream. Set this env to allow
+# saving degraded results anyway (useful for triage / forensics).
+ALLOW_DEGRADED_PANEL: bool = _bool_env("STYLECLAW_ALLOW_DEGRADED_PANEL", False)
 
 
 def validate_panel_config() -> list[str]:

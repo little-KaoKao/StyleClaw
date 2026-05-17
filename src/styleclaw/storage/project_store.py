@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import os
 import re
+from contextlib import contextmanager
 from pathlib import Path
-from typing import TypeVar
+from typing import Callable, Iterator, TypeVar
 
+from filelock import FileLock
 from pydantic import BaseModel
 
 from styleclaw.core.models import (
@@ -24,6 +26,7 @@ from styleclaw.core.models import (
 DATA_ROOT = Path(os.getenv("STYLECLAW_DATA_ROOT", "data/projects"))
 
 _PROJECT_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
+_PROJECT_LOCK_TIMEOUT = 30  # seconds; a stuck process beyond this surfaces, not waits forever
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -113,6 +116,60 @@ def load_state(name: str) -> ProjectState:
 
 def save_state(name: str, state: ProjectState) -> None:
     _save_model(state, project_dir(name) / "state.json")
+
+
+@contextmanager
+def project_lock(name: str, timeout: float = _PROJECT_LOCK_TIMEOUT) -> Iterator[None]:
+    """Inter-process advisory lock scoped to a single project.
+
+    Wraps any read-modify-write sequence that touches ``state.json``,
+    ``config.json``, or other per-project files. Uses ``filelock`` so the
+    same lock semantics hold on POSIX and Windows.
+
+    Locks per-project on disk at ``<project>/.lock`` — concurrent invocations
+    of ``styleclaw`` on different projects don't block each other.
+
+    Times out after ``timeout`` seconds rather than blocking forever; that
+    surfaces a stuck process as an error instead of hanging the CLI.
+    """
+    root = project_dir(name)
+    # The project dir is created by ``create_project``; for the rare case
+    # where a caller locks before init (defensive), create it first.
+    root.mkdir(parents=True, exist_ok=True)
+    lock_path = root / ".lock"
+    lock = FileLock(str(lock_path), timeout=timeout)
+    with lock:
+        yield
+
+
+def update_state(
+    name: str,
+    mutator: Callable[[ProjectState], ProjectState],
+) -> ProjectState:
+    """Atomic read-modify-write of ``state.json`` under the project lock.
+
+    ``mutator`` receives the current state and must return a new state
+    (typically via ``state.with_X(...)`` / ``model_copy(update=...)``).
+    The lock ensures two concurrent ``styleclaw`` invocations cannot
+    silently lose updates by both loading the same baseline.
+    """
+    with project_lock(name):
+        state = load_state(name)
+        new_state = mutator(state)
+        save_state(name, new_state)
+        return new_state
+
+
+def update_config(
+    name: str,
+    mutator: Callable[[ProjectConfig], ProjectConfig],
+) -> ProjectConfig:
+    """Atomic read-modify-write of ``config.json`` under the project lock."""
+    with project_lock(name):
+        config = load_config(name)
+        new_config = mutator(config)
+        save_config(name, new_config)
+        return new_config
 
 
 def load_uploads(name: str) -> list[UploadRecord]:

@@ -743,7 +743,6 @@ def rollback(
     """Rollback project to an earlier phase."""
     from styleclaw.core.state_machine import rollback as do_rollback
 
-    state = project_store.load_state(name)
     try:
         target = Phase(to.upper())
     except ValueError:
@@ -751,19 +750,24 @@ def rollback(
         typer.echo(f"Error: Invalid phase '{to}'. Valid phases: {valid}", err=True)
         raise typer.Exit(1)
 
-    new_state = do_rollback(state, target)
-    if round_num is not None:
-        if round_num < 0:
-            typer.echo(f"Error: Round number must be non-negative, got {round_num}", err=True)
+    if round_num is not None and round_num < 0:
+        typer.echo(f"Error: Round number must be non-negative, got {round_num}", err=True)
+        raise typer.Exit(1)
+
+    if round_num is not None and target == Phase.STYLE_REFINE and round_num > 0:
+        style_refine_root = project_store.project_dir(name) / "style-refine"
+        pass_dirs = sorted(style_refine_root.glob(f"pass-*/round-{round_num:03d}"))
+        if not pass_dirs:
+            typer.echo(f"Error: Round {round_num} does not exist on disk.", err=True)
             raise typer.Exit(1)
-        if target == Phase.STYLE_REFINE and round_num > 0:
-            style_refine_root = project_store.project_dir(name) / "style-refine"
-            pass_dirs = sorted(style_refine_root.glob(f"pass-*/round-{round_num:03d}"))
-            if not pass_dirs:
-                typer.echo(f"Error: Round {round_num} does not exist on disk.", err=True)
-                raise typer.Exit(1)
-        new_state = new_state.with_round(round_num)
-    project_store.save_state(name, new_state)
+
+    def _rollback(state):
+        new_state = do_rollback(state, target)
+        if round_num is not None:
+            new_state = new_state.with_round(round_num)
+        return new_state
+
+    new_state = project_store.update_state(name, _rollback)
 
     typer.echo(f"Rolled back to {new_state.phase} (round={new_state.current_round})")
 

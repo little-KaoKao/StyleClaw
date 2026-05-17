@@ -243,9 +243,10 @@ async def do_analyze(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
             thinking,
         )
 
-    state = project_store.load_state(ctx.project)
-    new_state = advance(state, Phase.MODEL_SELECT).with_model_select_pass(pass_num)
-    project_store.save_state(ctx.project, new_state)
+    project_store.update_state(
+        ctx.project,
+        lambda s: advance(s, Phase.MODEL_SELECT).with_model_select_pass(pass_num),
+    )
 
     msg = f"Trigger: {analysis.trigger_phrase}"
     if thinking:
@@ -495,10 +496,32 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
             finally:
                 await close_panel_providers(pairs)
 
-            project_store.save_evaluation(ctx.project, evaluation, pass_num=pass_num)
+            # Persist panel.json regardless — it's the forensic record. The
+            # main evaluation.json and report only land when the panel is
+            # healthy or the user explicitly opts into degraded results.
             project_store.save_model_select_panel_result(
                 ctx.project, panel_result, pass_num=pass_num,
             )
+
+            if panel_result.degraded and not _cfg.ALLOW_DEGRADED_PANEL:
+                return StepResult(
+                    ok=False,
+                    message=(
+                        f"model-select panel returned degraded "
+                        f"({len(panel_result.error_log)} issue(s), winner='{panel_result.winner_model_id}'). "
+                        f"Refusing to save evaluation.json or advance — a blind winner "
+                        f"would propagate into refinement. "
+                        f"See panel.json for details; re-run `evaluate` once the issue clears, "
+                        f"or set STYLECLAW_ALLOW_DEGRADED_PANEL=1 to accept this run as-is."
+                    ),
+                    data={
+                        "panel": True, "degraded": True,
+                        "pass_num": pass_num,
+                        "error_log": panel_result.error_log,
+                    },
+                )
+
+            project_store.save_evaluation(ctx.project, evaluation, pass_num=pass_num)
             generate_model_select_report(ctx.project, pass_num=pass_num)
 
             msg = (
@@ -506,7 +529,7 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
                 f"[panel:{panel_result.winner_model_id}] (pass {pass_num})"
             )
             if panel_result.degraded:
-                msg += f" (degraded; see panel.json — {len(panel_result.error_log)} issue(s))"
+                msg += f" (degraded; accepted via STYLECLAW_ALLOW_DEGRADED_PANEL — {len(panel_result.error_log)} issue(s))"
             return StepResult(
                 ok=True, message=msg,
                 data={
@@ -611,20 +634,21 @@ async def do_select_model(ctx: ExecutionContext, args: dict[str, Any]) -> StepRe
     if variant and variant not in ("prompt-sref", "prompt-only"):
         return StepResult(ok=False, message=f"Unknown variant: {variant}. Use 'prompt-sref' or 'prompt-only'.")
 
-    state = project_store.load_state(ctx.project)
-    if state.phase == Phase.MODEL_SELECT:
-        new_state = advance(state, Phase.STYLE_REFINE)
-        new_state = new_state.with_selected_models(selected, variant=variant)
-        project_store.save_state(ctx.project, new_state)
-        v_info = f" [{variant}]" if variant else ""
-        return StepResult(ok=True, message=f"Selected {', '.join(selected)}{v_info}, advanced to STYLE_REFINE")
-    elif state.phase == Phase.STYLE_REFINE:
-        new_state = state.with_selected_models(selected, variant=variant)
-        project_store.save_state(ctx.project, new_state)
-        v_info = f" [{variant}]" if variant else ""
-        return StepResult(ok=True, message=f"Updated models: {', '.join(selected)}{v_info}")
+    with project_store.project_lock(ctx.project):
+        state = project_store.load_state(ctx.project)
+        if state.phase == Phase.MODEL_SELECT:
+            new_state = advance(state, Phase.STYLE_REFINE)
+            new_state = new_state.with_selected_models(selected, variant=variant)
+            project_store.save_state(ctx.project, new_state)
+            v_info = f" [{variant}]" if variant else ""
+            return StepResult(ok=True, message=f"Selected {', '.join(selected)}{v_info}, advanced to STYLE_REFINE")
+        elif state.phase == Phase.STYLE_REFINE:
+            new_state = state.with_selected_models(selected, variant=variant)
+            project_store.save_state(ctx.project, new_state)
+            v_info = f" [{variant}]" if variant else ""
+            return StepResult(ok=True, message=f"Updated models: {', '.join(selected)}{v_info}")
 
-    return StepResult(ok=False, message=f"Cannot select model in {state.phase}")
+        return StepResult(ok=False, message=f"Cannot select model in {state.phase}")
 
 
 async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
@@ -708,19 +732,40 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
         finally:
             await close_panel_providers(pairs)
 
-        project_store.save_prompt_config(
-            ctx.project, round_num, prompt_config, pass_num=pass_num,
-        )
+        # Persist panel.json regardless — forensic record. The main
+        # prompt.json and state advance only happen on a healthy panel or
+        # when the user opts into degraded results.
         project_store.save_round_panel_result(
             ctx.project, round_num, panel_result, pass_num=pass_num,
         )
 
-        new_state = state.with_round(round_num)
-        project_store.save_state(ctx.project, new_state)
+        if panel_result.degraded and not _cfg.ALLOW_DEGRADED_PANEL:
+            return StepResult(
+                ok=False,
+                message=(
+                    f"refine panel for round {round_num} returned degraded "
+                    f"({len(panel_result.error_log)} issue(s), winner='{panel_result.winner_model_id}'). "
+                    f"Refusing to save prompt.json or advance — a half-validated "
+                    f"trigger would taint downstream rounds. "
+                    f"See panel.json for details; re-run `refine` once the issue clears, "
+                    f"or set STYLECLAW_ALLOW_DEGRADED_PANEL=1 to accept this run as-is."
+                ),
+                data={
+                    "panel": True, "degraded": True,
+                    "round": round_num,
+                    "error_log": panel_result.error_log,
+                },
+            )
+
+        project_store.save_prompt_config(
+            ctx.project, round_num, prompt_config, pass_num=pass_num,
+        )
+
+        project_store.update_state(ctx.project, lambda s: s.with_round(round_num))
 
         msg = f"Round {round_num} [panel:{panel_result.winner_model_id}]: {prompt_config.trigger_phrase}"
         if panel_result.degraded:
-            msg += f" (degraded; see panel.json — {len(panel_result.error_log)} issue(s))"
+            msg += f" (degraded; accepted via STYLECLAW_ALLOW_DEGRADED_PANEL — {len(panel_result.error_log)} issue(s))"
         return StepResult(ok=True, message=msg, data={"panel": True, "degraded": panel_result.degraded})
 
     # Single-model path (unchanged).
@@ -744,8 +789,7 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
         round_d = project_store.round_dir(ctx.project, round_num, pass_num=pass_num)
         project_store.save_thinking(round_d / "prompt.json", thinking)
 
-    new_state = state.with_round(round_num)
-    project_store.save_state(ctx.project, new_state)
+    project_store.update_state(ctx.project, lambda s: s.with_round(round_num))
 
     msg = f"Round {round_num}: {prompt_config.trigger_phrase}"
     if thinking:
@@ -756,19 +800,20 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
 async def do_approve(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     from styleclaw.core.state_machine import advance
 
-    state = project_store.load_state(ctx.project)
     target = args.get("target", "batch-t2i")
 
-    if target == "completed":
-        if state.phase != Phase.BATCH_I2I:
-            return StepResult(ok=False, message=f"Must be in BATCH_I2I (current: {state.phase})")
-        new_state = advance(state, Phase.COMPLETED)
-    else:
-        if state.phase != Phase.STYLE_REFINE:
-            return StepResult(ok=False, message=f"Must be in STYLE_REFINE (current: {state.phase})")
-        new_state = advance(state, Phase.BATCH_T2I)
+    with project_store.project_lock(ctx.project):
+        state = project_store.load_state(ctx.project)
+        if target == "completed":
+            if state.phase != Phase.BATCH_I2I:
+                return StepResult(ok=False, message=f"Must be in BATCH_I2I (current: {state.phase})")
+            new_state = advance(state, Phase.COMPLETED)
+        else:
+            if state.phase != Phase.STYLE_REFINE:
+                return StepResult(ok=False, message=f"Must be in STYLE_REFINE (current: {state.phase})")
+            new_state = advance(state, Phase.BATCH_T2I)
 
-    project_store.save_state(ctx.project, new_state)
+        project_store.save_state(ctx.project, new_state)
     return StepResult(ok=True, message=f"Advanced to {new_state.phase}")
 
 
@@ -804,8 +849,7 @@ async def do_design_cases(ctx: ExecutionContext, args: dict[str, Any]) -> StepRe
     )
     project_store.save_batch_config(ctx.project, batch_num, batch_config)
 
-    new_state = state.with_batch(batch_num)
-    project_store.save_state(ctx.project, new_state)
+    project_store.update_state(ctx.project, lambda s: s.with_batch(batch_num))
 
     msg = f"Designed {len(batch_config.cases)} cases (batch {batch_num})"
     if feedback:
@@ -870,46 +914,50 @@ async def do_retest_models(ctx: ExecutionContext, args: dict[str, Any]) -> StepR
     from styleclaw.core.models import StyleAnalysis
     from styleclaw.core.state_machine import advance
 
-    state = project_store.load_state(ctx.project)
-    if state.phase not in (Phase.MODEL_SELECT, Phase.STYLE_REFINE, Phase.BATCH_T2I):
-        return StepResult(
-            ok=False,
-            message=f"retest-models requires MODEL_SELECT, STYLE_REFINE, or BATCH_T2I (current: {state.phase})",
-        )
-
-    old_pass = state.current_model_select_pass or 1
-    current_trigger = ""
-    if state.current_round >= 1:
-        try:
-            prompt_cfg = project_store.load_prompt_config(
-                ctx.project, state.current_round, pass_num=old_pass,
+    # Whole action mutates state + writes analysis under the same logical
+    # transaction; serialize against concurrent runs that might also flip the
+    # phase or bump the pass.
+    with project_store.project_lock(ctx.project):
+        state = project_store.load_state(ctx.project)
+        if state.phase not in (Phase.MODEL_SELECT, Phase.STYLE_REFINE, Phase.BATCH_T2I):
+            return StepResult(
+                ok=False,
+                message=f"retest-models requires MODEL_SELECT, STYLE_REFINE, or BATCH_T2I (current: {state.phase})",
             )
-            current_trigger = prompt_cfg.trigger_phrase
-        except FileNotFoundError:
-            pass
-    if not current_trigger:
-        try:
-            prev_analysis = project_store.load_analysis(ctx.project, pass_num=old_pass)
-            current_trigger = prev_analysis.trigger_phrase
-        except FileNotFoundError:
-            pass
 
-    new_pass = old_pass + 1
-    project_store.save_analysis(
-        ctx.project, StyleAnalysis(trigger_phrase=current_trigger), pass_num=new_pass,
-    )
+        old_pass = state.current_model_select_pass or 1
+        current_trigger = ""
+        if state.current_round >= 1:
+            try:
+                prompt_cfg = project_store.load_prompt_config(
+                    ctx.project, state.current_round, pass_num=old_pass,
+                )
+                current_trigger = prompt_cfg.trigger_phrase
+            except FileNotFoundError:
+                pass
+        if not current_trigger:
+            try:
+                prev_analysis = project_store.load_analysis(ctx.project, pass_num=old_pass)
+                current_trigger = prev_analysis.trigger_phrase
+            except FileNotFoundError:
+                pass
 
-    # advance() only allows forward transitions, so only call it when leaving
-    # a later phase. From MODEL_SELECT we stay in MODEL_SELECT and just bump
-    # the pass counter.
-    if state.phase == Phase.MODEL_SELECT:
-        new_state = state.with_model_select_pass(new_pass)
-    else:
-        new_state = (
-            advance(state, Phase.MODEL_SELECT)
-            .with_model_select_pass(new_pass)
+        new_pass = old_pass + 1
+        project_store.save_analysis(
+            ctx.project, StyleAnalysis(trigger_phrase=current_trigger), pass_num=new_pass,
         )
-    project_store.save_state(ctx.project, new_state)
+
+        # advance() only allows forward transitions, so only call it when leaving
+        # a later phase. From MODEL_SELECT we stay in MODEL_SELECT and just bump
+        # the pass counter.
+        if state.phase == Phase.MODEL_SELECT:
+            new_state = state.with_model_select_pass(new_pass)
+        else:
+            new_state = (
+                advance(state, Phase.MODEL_SELECT)
+                .with_model_select_pass(new_pass)
+            )
+        project_store.save_state(ctx.project, new_state)
     return StepResult(
         ok=True,
         message=f"Entered MODEL_SELECT pass {new_pass} for re-test",
@@ -920,14 +968,15 @@ async def do_retest_models(ctx: ExecutionContext, args: dict[str, Any]) -> StepR
 async def do_back_to_t2i(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     from styleclaw.core.state_machine import advance
 
-    state = project_store.load_state(ctx.project)
-    if state.phase != Phase.BATCH_I2I:
-        return StepResult(
-            ok=False,
-            message=f"back-to-t2i requires BATCH_I2I (current: {state.phase})",
-        )
-    new_state = advance(state, Phase.BATCH_T2I)
-    project_store.save_state(ctx.project, new_state)
+    with project_store.project_lock(ctx.project):
+        state = project_store.load_state(ctx.project)
+        if state.phase != Phase.BATCH_I2I:
+            return StepResult(
+                ok=False,
+                message=f"back-to-t2i requires BATCH_I2I (current: {state.phase})",
+            )
+        new_state = advance(state, Phase.BATCH_T2I)
+        project_store.save_state(ctx.project, new_state)
     return StepResult(ok=True, message="Returned to BATCH_T2I")
 
 
@@ -978,30 +1027,33 @@ async def do_set_sref(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
     except (TypeError, ValueError):
         return StepResult(ok=False, message=f"set-sref args.index must be an integer (got {args['index']!r})")
 
-    config = project_store.load_config(ctx.project)
-    if index < 0 or index >= len(config.ref_images):
-        return StepResult(
-            ok=False,
-            message=f"index {index} out of range (0–{len(config.ref_images) - 1})",
-        )
+    # set-sref may bump the pass and rewrite config+analysis+state — keep
+    # those linked writes atomic against any concurrent run.
+    with project_store.project_lock(ctx.project):
+        config = project_store.load_config(ctx.project)
+        if index < 0 or index >= len(config.ref_images):
+            return StepResult(
+                ok=False,
+                message=f"index {index} out of range (0–{len(config.ref_images) - 1})",
+            )
 
-    state = project_store.load_state(ctx.project)
-    bumped_to: int | None = None
-    if state.phase == Phase.MODEL_SELECT:
-        old_pass = state.current_model_select_pass or 1
-        existing = project_store.load_all_task_records(ctx.project, pass_num=old_pass)
-        if any(r.status == TaskStatus.SUCCESS for r in existing.values()):
-            new_pass = old_pass + 1
-            try:
-                prev_analysis = project_store.load_analysis(ctx.project, pass_num=old_pass)
-            except FileNotFoundError:
-                prev_analysis = StyleAnalysis()
-            project_store.save_analysis(ctx.project, prev_analysis, pass_num=new_pass)
-            project_store.save_state(ctx.project, state.with_model_select_pass(new_pass))
-            bumped_to = new_pass
+        state = project_store.load_state(ctx.project)
+        bumped_to: int | None = None
+        if state.phase == Phase.MODEL_SELECT:
+            old_pass = state.current_model_select_pass or 1
+            existing = project_store.load_all_task_records(ctx.project, pass_num=old_pass)
+            if any(r.status == TaskStatus.SUCCESS for r in existing.values()):
+                new_pass = old_pass + 1
+                try:
+                    prev_analysis = project_store.load_analysis(ctx.project, pass_num=old_pass)
+                except FileNotFoundError:
+                    prev_analysis = StyleAnalysis()
+                project_store.save_analysis(ctx.project, prev_analysis, pass_num=new_pass)
+                project_store.save_state(ctx.project, state.with_model_select_pass(new_pass))
+                bumped_to = new_pass
 
-    new_config = config.model_copy(update={"sref_index": index})
-    project_store.save_config(ctx.project, new_config)
+        new_config = config.model_copy(update={"sref_index": index})
+        project_store.save_config(ctx.project, new_config)
 
     msg = f"sref set to ref-{index + 1:03d}: {config.ref_images[index]}"
     if bumped_to is not None:
@@ -1020,9 +1072,7 @@ async def do_set_pass(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
     if pass_num < 1:
         return StepResult(ok=False, message=f"pass_num must be >= 1 (got {pass_num})")
 
-    state = project_store.load_state(ctx.project)
-    new_state = state.with_model_select_pass(pass_num)
-    project_store.save_state(ctx.project, new_state)
+    project_store.update_state(ctx.project, lambda s: s.with_model_select_pass(pass_num))
     return StepResult(ok=True, message=f"Active pass set to {pass_num}")
 
 
@@ -1071,37 +1121,49 @@ async def do_add_refs(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         except ValueError as exc:
             return StepResult(ok=False, message=f"invalid ref image {img.name}: {exc}")
 
-    if state.phase == Phase.BATCH_T2I:
-        state = advance(state, Phase.BATCH_I2I)
-        project_store.save_state(ctx.project, state)
+    # The state read here is just to decide whether to phase-advance and pick
+    # a batch number; the actual flip and i2i uploads append happen inside
+    # the lock so a parallel run can't race on the phase or duplicate uploads.
+    state = project_store.load_state(ctx.project)
+    if state.phase not in (Phase.BATCH_T2I, Phase.BATCH_I2I):
+        return StepResult(
+            ok=False,
+            message=f"add-refs requires BATCH_T2I or BATCH_I2I (current: {state.phase})",
+        )
 
-    batch_num = state.current_batch or 1
-    source_dir = project_store.batch_i2i_dir(ctx.project, batch_num) / "source-images"
-    source_dir.mkdir(parents=True, exist_ok=True)
+    with project_store.project_lock(ctx.project):
+        state = project_store.load_state(ctx.project)
+        if state.phase == Phase.BATCH_T2I:
+            state = advance(state, Phase.BATCH_I2I)
+            project_store.save_state(ctx.project, state)
 
-    local_dests: list[Path] = []
-    for img in images:
-        dest = source_dir / img.name
-        shutil.copy2(img, dest)
-        local_dests.append(dest)
+        batch_num = state.current_batch or 1
+        source_dir = project_store.batch_i2i_dir(ctx.project, batch_num) / "source-images"
+        source_dir.mkdir(parents=True, exist_ok=True)
 
-    new_records: dict[int, UploadRecord] = {}
+        local_dests: list[Path] = []
+        for img in images:
+            dest = source_dir / img.name
+            shutil.copy2(img, dest)
+            local_dests.append(dest)
 
-    async def _one(idx: int, dest: Path) -> None:
-        new_records[idx] = await upload_file(ctx.client, dest)
+        new_records: dict[int, UploadRecord] = {}
 
-    async with asyncio.TaskGroup() as tg:
-        for idx, dest in enumerate(local_dests):
-            tg.create_task(_one(idx, dest))
+        async def _one(idx: int, dest: Path) -> None:
+            new_records[idx] = await upload_file(ctx.client, dest)
 
-    appended = [new_records[i] for i in sorted(new_records)]
-    if appended:
-        existing = project_store.load_i2i_uploads(ctx.project, batch_num)
-        project_store.save_i2i_uploads(ctx.project, batch_num, existing + appended)
+        async with asyncio.TaskGroup() as tg:
+            for idx, dest in enumerate(local_dests):
+                tg.create_task(_one(idx, dest))
 
-    if state.current_batch != batch_num:
-        new_state = state.with_batch(batch_num)
-        project_store.save_state(ctx.project, new_state)
+        appended = [new_records[i] for i in sorted(new_records)]
+        if appended:
+            existing = project_store.load_i2i_uploads(ctx.project, batch_num)
+            project_store.save_i2i_uploads(ctx.project, batch_num, existing + appended)
+
+        if state.current_batch != batch_num:
+            new_state = state.with_batch(batch_num)
+            project_store.save_state(ctx.project, new_state)
 
     return StepResult(
         ok=True,

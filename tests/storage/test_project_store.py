@@ -224,3 +224,63 @@ class TestSaveThinking:
 
         md = target.with_suffix(".thinking.md")
         assert not md.exists()
+
+
+class TestUpdateState:
+    """``update_state`` is the atomic load-modify-save wrapper. It guards
+    against the classic lost-update pattern where two CLI invocations both
+    load the same baseline and one's write clobbers the other's."""
+
+    def test_basic_increment(self, sample_config):
+        project_store.create_project(sample_config)
+        new_state = project_store.update_state(
+            sample_config.name, lambda s: s.with_round(s.current_round + 1),
+        )
+        assert new_state.current_round == 1
+        assert project_store.load_state(sample_config.name).current_round == 1
+
+    def test_concurrent_increments_no_lost_update(self, sample_config):
+        # Spawn N threads that each increment current_round under the lock.
+        # If lost-update protection works, the final value equals N.
+        import threading
+
+        project_store.create_project(sample_config)
+        N = 8
+        errors: list[BaseException] = []
+
+        def bump() -> None:
+            try:
+                project_store.update_state(
+                    sample_config.name,
+                    lambda s: s.with_round(s.current_round + 1),
+                )
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        threads = [threading.Thread(target=bump) for _ in range(N)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f"thread failures: {errors}"
+        final = project_store.load_state(sample_config.name)
+        assert final.current_round == N, (
+            f"expected {N} increments to all stick, got {final.current_round} "
+            f"— lost-update protection is broken"
+        )
+
+    def test_project_lock_releases_on_exception(self, sample_config):
+        # If the mutator raises, the lock must still be released so the next
+        # caller doesn't deadlock.
+        project_store.create_project(sample_config)
+        with pytest.raises(RuntimeError, match="boom"):
+            def _bad(_s):
+                raise RuntimeError("boom")
+            project_store.update_state(sample_config.name, _bad)
+
+        # This must complete promptly, not block forever on a stuck lock.
+        new_state = project_store.update_state(
+            sample_config.name, lambda s: s.with_round(42),
+        )
+        assert new_state.current_round == 42

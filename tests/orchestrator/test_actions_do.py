@@ -1037,6 +1037,98 @@ class TestDoRefinePanel:
         assert result.ok is False
         assert "panel" in result.message.lower()
 
+    @pytest.mark.asyncio
+    async def test_degraded_panel_refuses_to_persist_prompt_or_advance(
+        self, monkeypatch,
+    ):
+        # A degraded panel result must NOT save prompt.json or advance the
+        # state — otherwise a half-validated trigger taints downstream rounds.
+        # panel.json IS saved (forensic record).
+        monkeypatch.setenv("STYLECLAW_PANEL_REFINE", "1")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "m1,m2,m3")
+        monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://x")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
+        monkeypatch.delenv("STYLECLAW_ALLOW_DEGRADED_PANEL", raising=False)
+        import importlib, styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+
+        from styleclaw.core.models import PanelProposal, PanelResult
+
+        name = _create_project(phase=Phase.STYLE_REFINE, selected_models=["mj-v7"])
+        project_store.save_analysis(name, StyleAnalysis(trigger_phrase="seed"))
+
+        degraded = PanelResult(
+            proposals=[PanelProposal(model_id="m1", payload={"trigger_phrase": "shaky"})],
+            scores=[], winner_model_id="m1", averages={"m1": 7.0},
+            degraded=True, error_log=["propose[m2]: TimeoutError: ..."],
+        )
+        panel_prompt = PromptConfig(round=1, trigger_phrase="shaky", derived_from="initial-analysis")
+
+        with patch(
+            "styleclaw.providers.llm.panel_factory.build_panel_providers",
+            return_value=[(AsyncMock(_model_id=f"m{i}"), f"L{i}") for i in (1, 2, 3)],
+        ), patch(
+            "styleclaw.providers.llm.panel_factory.close_panel_providers",
+            new=AsyncMock(),
+        ), patch(
+            "styleclaw.agents.refine_panel.refine_with_panel",
+            new=AsyncMock(return_value=(panel_prompt, degraded)),
+        ):
+            result = await do_refine(_ctx(name, llm=AsyncMock()), {})
+
+        assert result.ok is False
+        assert "degraded" in result.message.lower()
+        assert "STYLECLAW_ALLOW_DEGRADED_PANEL" in result.message
+
+        # panel.json IS saved (forensic), prompt.json is NOT, state didn't advance.
+        loaded_panel = project_store.load_round_panel_result(name, round_num=1)
+        assert loaded_panel is not None
+        assert loaded_panel.degraded is True
+        with pytest.raises(FileNotFoundError):
+            project_store.load_prompt_config(name, round_num=1)
+        state = project_store.load_state(name)
+        assert state.current_round == 0  # unchanged
+
+    @pytest.mark.asyncio
+    async def test_allow_degraded_env_overrides_refusal(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_REFINE", "1")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "m1,m2,m3")
+        monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://x")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
+        monkeypatch.setenv("STYLECLAW_ALLOW_DEGRADED_PANEL", "1")
+        import importlib, styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+
+        from styleclaw.core.models import PanelProposal, PanelResult
+
+        name = _create_project(phase=Phase.STYLE_REFINE, selected_models=["mj-v7"])
+        project_store.save_analysis(name, StyleAnalysis(trigger_phrase="seed"))
+
+        degraded = PanelResult(
+            proposals=[PanelProposal(model_id="m1", payload={"trigger_phrase": "shaky"})],
+            scores=[], winner_model_id="m1", averages={"m1": 7.0},
+            degraded=True, error_log=["propose[m2]: TimeoutError: ..."],
+        )
+        panel_prompt = PromptConfig(round=1, trigger_phrase="shaky", derived_from="initial-analysis")
+
+        with patch(
+            "styleclaw.providers.llm.panel_factory.build_panel_providers",
+            return_value=[(AsyncMock(_model_id=f"m{i}"), f"L{i}") for i in (1, 2, 3)],
+        ), patch(
+            "styleclaw.providers.llm.panel_factory.close_panel_providers",
+            new=AsyncMock(),
+        ), patch(
+            "styleclaw.agents.refine_panel.refine_with_panel",
+            new=AsyncMock(return_value=(panel_prompt, degraded)),
+        ):
+            result = await do_refine(_ctx(name, llm=AsyncMock()), {})
+
+        assert result.ok is True
+        # Both panel.json and prompt.json persisted; state advanced.
+        assert project_store.load_round_panel_result(name, round_num=1) is not None
+        assert project_store.load_prompt_config(name, round_num=1).trigger_phrase == "shaky"
+        assert project_store.load_state(name).current_round == 1
+
 
 class TestArgsBoundChecks:
     async def test_poll_max_cycles_negative_rejected(self) -> None:
@@ -1187,5 +1279,61 @@ class TestDoEvaluatePanel:
         assert loaded_panel is not None
         assert loaded_panel.winner_model_id == "m1"
         # Restore config module so subsequent tests see clean env state.
+        monkeypatch.delenv("STYLECLAW_PANEL_MODEL_SELECT", raising=False)
+        importlib.reload(config_mod)
+
+    @pytest.mark.asyncio
+    async def test_degraded_panel_refuses_to_save_evaluation(self, monkeypatch):
+        # A degraded MODEL_SELECT panel must not save evaluation.json — the
+        # downstream `select-model` would otherwise lock in a blind winner.
+        monkeypatch.setenv("STYLECLAW_PANEL_MODEL_SELECT", "1")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "m1,m2,m3")
+        monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://x")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
+        monkeypatch.delenv("STYLECLAW_ALLOW_DEGRADED_PANEL", raising=False)
+        import importlib, styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+
+        from styleclaw.core.models import PanelProposal, PanelResult
+
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        results_dir = project_store.model_results_dir(name, "mj-v7", variant="prompt-only")
+        import PIL.Image
+        PIL.Image.new("RGB", (64, 64), color="red").save(str(results_dir / "output-001.png"))
+        project_store.save_task_record(
+            name, "mj-v7",
+            TaskRecord(task_id="t", model_id="mj-v7", status="SUCCESS"),
+            variant="prompt-only",
+        )
+
+        panel_eval = ModelEvaluation(recommendation="mj-v7", recommended_variant="prompt-only")
+        degraded = PanelResult(
+            proposals=[PanelProposal(model_id="m1", payload=panel_eval.model_dump())],
+            scores=[], winner_model_id="m1", averages={"m1": 6.0},
+            degraded=True, error_log=["propose[m3]: TimeoutError"],
+        )
+
+        with patch(
+            "styleclaw.providers.llm.panel_factory.build_panel_providers",
+            return_value=[(AsyncMock(_model_id=f"m{i}"), f"L{i}") for i in (1, 2, 3)],
+        ), patch(
+            "styleclaw.providers.llm.panel_factory.close_panel_providers",
+            new=AsyncMock(),
+        ), patch(
+            "styleclaw.agents.select_model_panel.select_models_with_panel",
+            new=AsyncMock(return_value=(panel_eval, degraded)),
+        ), patch(
+            "styleclaw.scripts.report.generate_model_select_report",
+            return_value=Path("/tmp/x.html"),
+        ) as report_call:
+            result = await do_evaluate(_ctx(name, llm=AsyncMock()), {})
+
+        assert result.ok is False
+        assert "degraded" in result.message.lower()
+        # panel.json saved (forensic), evaluation.json NOT, report NOT generated.
+        assert project_store.load_model_select_panel_result(name) is not None
+        with pytest.raises(FileNotFoundError):
+            project_store.load_evaluation(name)
+        report_call.assert_not_called()
         monkeypatch.delenv("STYLECLAW_PANEL_MODEL_SELECT", raising=False)
         importlib.reload(config_mod)
