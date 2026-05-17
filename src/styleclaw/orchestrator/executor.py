@@ -54,10 +54,13 @@ def _format_report_path(project: str, round_num: int, pass_num: int) -> str:
         / f"round-{round_num:03d}"
         / "report.html"
     )
+    # Use forward slashes regardless of platform — the path lands in user-
+    # facing messages and Chinese terminals on Windows render backslashes
+    # awkwardly. Browsers and copy-paste both handle forward slashes.
     try:
-        return str(report_path.relative_to(Path.cwd()))
+        return report_path.relative_to(Path.cwd()).as_posix()
     except ValueError:
-        return str(report_path)
+        return report_path.as_posix()
 
 
 def _format_needs_human_hint(

@@ -242,8 +242,13 @@ def _load_variant_records(results_dir: Path) -> dict[str, TaskRecord]:
     records: dict[str, TaskRecord] = {}
     if not results_dir.exists():
         return records
-    cached = _VARIANT_RECORD_CACHE.get(str(results_dir))
+    # Compute fingerprint first, then check the cache: makes the intent
+    # explicit ("here's the state we observed; do we already have records
+    # matching it?") rather than the original "look up first, then ask
+    # whether the lookup matches reality". Equivalent on a local FS where
+    # mtime updates are atomic; clearer to read.
     fingerprint = _results_dir_fingerprint(results_dir)
+    cached = _VARIANT_RECORD_CACHE.get(str(results_dir))
     if cached is not None and cached[0] == fingerprint:
         return dict(cached[1])
     for model_dir in results_dir.iterdir():

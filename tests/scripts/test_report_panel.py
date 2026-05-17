@@ -181,3 +181,17 @@ class TestReportHtmlChrome:
         assert "show proposal payload" in html
         # Winner's <details> starts open; non-winner stays closed.
         assert "<details open>" in html
+
+    def test_degraded_panel_shows_styled_badge(self) -> None:
+        name = _create_project(phase=Phase.STYLE_REFINE, current_round=1)
+        _seed_style_refine(name)
+        degraded = _sample_panel_result("Opus")
+        degraded = degraded.model_copy(update={"degraded": True, "error_log": ["timeout"]})
+        project_store.save_round_panel_result(name, 1, degraded)
+        path = generate_style_refine_report(name, round_num=1)
+        html = Path(path).read_text(encoding="utf-8")
+        # The (degraded) marker shows up next to the heading...
+        assert "(degraded)" in html
+        # ...and the .warn class has actual visual styling (CSS rule present
+        # in the head) so it isn't just plain inline text.
+        assert ".panel-review .warn" in html

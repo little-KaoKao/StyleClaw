@@ -275,7 +275,11 @@ def init(
         async with RunningHubClient(api_key=_get_api_key()) as client:
             return await init_project(name, ref, info, description, client, force=force)
 
-    root = asyncio.run(_exec())
+    try:
+        root = asyncio.run(_exec())
+    except KeyboardInterrupt:
+        _print_interrupt_hint("init", name)
+        raise typer.Exit(130)
     typer.echo(f"Project initialized at {root}")
 
 
@@ -1106,7 +1110,11 @@ def add_refs(
                     tg.create_task(_one(idx, dest))
         return results, errors
 
-    results, errors = asyncio.run(_upload_all())
+    try:
+        results, errors = asyncio.run(_upload_all())
+    except KeyboardInterrupt:
+        _print_interrupt_hint("add-refs", name)
+        raise typer.Exit(130)
     new_records = [results[i] for i in sorted(results)]
 
     if new_records:
