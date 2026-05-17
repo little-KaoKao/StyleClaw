@@ -148,3 +148,36 @@ class TestModelSelectReportPanel:
         path = generate_model_select_report(name)
         html = Path(path).read_text(encoding="utf-8")
         assert "Panel review" not in html
+
+
+class TestReportHtmlChrome:
+    """Sanity checks for the bits of the rendered HTML the user actually
+    sees in their browser — viewport meta for mobile, collapsible payload
+    so the page isn't dominated by raw JSON."""
+
+    def test_style_refine_has_viewport_meta(self) -> None:
+        name = _create_project(phase=Phase.STYLE_REFINE, current_round=1)
+        _seed_style_refine(name)
+        path = generate_style_refine_report(name, round_num=1)
+        html = Path(path).read_text(encoding="utf-8")
+        assert 'name="viewport"' in html
+        assert "width=device-width" in html
+
+    def test_model_select_has_viewport_meta(self) -> None:
+        name = _create_project(phase=Phase.MODEL_SELECT, current_round=1)
+        _seed_model_select(name)
+        path = generate_model_select_report(name)
+        html = Path(path).read_text(encoding="utf-8")
+        assert 'name="viewport"' in html
+
+    def test_panel_payload_is_collapsible(self) -> None:
+        name = _create_project(phase=Phase.STYLE_REFINE, current_round=1)
+        _seed_style_refine(name)
+        project_store.save_round_panel_result(name, 1, _sample_panel_result("Opus"))
+        path = generate_style_refine_report(name, round_num=1)
+        html = Path(path).read_text(encoding="utf-8")
+        # Each proposal's payload sits inside a <details>.
+        assert "<details" in html
+        assert "show proposal payload" in html
+        # Winner's <details> starts open; non-winner stays closed.
+        assert "<details open>" in html

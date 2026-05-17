@@ -570,3 +570,45 @@ class TestStatusShowsTaskCounts:
         result = runner.invoke(app, ["status", "test-proj"])
         assert result.exit_code == 0
         assert "Tasks:" not in result.output
+
+
+class TestInterruptHint:
+    """Ctrl-C during a long-running action shouldn't leave the user wondering
+    whether anything stuck — print a resume hint pointing at the right
+    follow-up command."""
+
+    @patch("styleclaw.cli.asyncio.run")
+    def test_poll_prints_resume_hint_on_interrupt(self, mock_run, setup_project):
+        _set_state(Phase.MODEL_SELECT)
+        mock_run.side_effect = KeyboardInterrupt()
+        result = runner.invoke(app, ["poll", "test-proj"])
+        assert result.exit_code == 130
+        assert "中断已捕获" in result.output
+        assert "styleclaw poll test-proj" in result.output
+
+    @patch("styleclaw.cli.asyncio.run")
+    def test_batch_submit_resume_hint_mentions_checkpoint(
+        self, mock_run, setup_project,
+    ):
+        _set_state(Phase.BATCH_T2I, current_batch=1, selected_models=["mj-v7"])
+        mock_run.side_effect = KeyboardInterrupt()
+        result = runner.invoke(app, ["batch-submit", "test-proj"])
+        assert result.exit_code == 130
+        assert "checkpoint" in result.output
+
+    @patch("styleclaw.cli.asyncio.run")
+    def test_generate_resume_hint_mentions_success_skip(
+        self, mock_run, setup_project,
+    ):
+        _set_state(Phase.MODEL_SELECT)
+        mock_run.side_effect = KeyboardInterrupt()
+        result = runner.invoke(app, ["generate", "test-proj"])
+        assert result.exit_code == 130
+        assert "SUCCESS" in result.output
+
+    def test_print_interrupt_hint_handles_no_project(self):
+        # The `run` command can be invoked with no project (init flow); the
+        # hint must still be safe to print.
+        from styleclaw.cli import _print_interrupt_hint
+        # Should not raise.
+        _print_interrupt_hint("run", None)

@@ -131,6 +131,42 @@ async def _build_context(
             await _close_resource(llm, "llm")
 
 
+def _print_interrupt_hint(action_name: str, project: str | None) -> None:
+    """Print a friendly resume hint after the user hits Ctrl-C.
+
+    Ctrl-C is the most common way long-running ops (poll, batch-submit, run)
+    end; without a hint, the user is left staring at a bare ``KeyboardInterrupt``
+    traceback and wondering whether anything they did stuck. All on-disk
+    writes (state.json, task.json, panel.json, prompt.json, checkpoints) are
+    already atomic, so re-invoking the same command picks up cleanly — this
+    hint just tells the user that.
+    """
+    typer.echo("", err=True)
+    typer.echo("中断已捕获。已写入磁盘的进度保留，可直接续跑：", err=True)
+    if action_name == "poll":
+        typer.echo(f"  styleclaw poll {project}", err=True)
+    elif action_name == "batch-submit":
+        typer.echo(
+            f"  styleclaw batch-submit {project}  "
+            "(checkpoint 会跳过已提交的 case)",
+            err=True,
+        )
+    elif action_name == "generate":
+        typer.echo(
+            f"  styleclaw generate {project}  "
+            "(SUCCESS 任务自动跳过)",
+            err=True,
+        )
+    elif action_name == "run":
+        typer.echo(
+            "  重新执行刚才的 styleclaw run \"...\""
+            + (f" -p {project}" if project else ""),
+            err=True,
+        )
+    elif project:
+        typer.echo(f"  styleclaw status {project}   # 查看当前进度", err=True)
+
+
 def _run_action(
     project: str,
     action_name: str,
@@ -177,6 +213,9 @@ def _run_action(
 
     try:
         return asyncio.run(_exec())
+    except KeyboardInterrupt:
+        _print_interrupt_hint(action_name, project)
+        raise typer.Exit(130)
     except (ValueError, RuntimeError, FileNotFoundError, FileExistsError) as exc:
         from styleclaw.core.redact import redact_exc
         typer.echo(f"Error: {redact_exc(exc)}", err=True)
@@ -1376,7 +1415,11 @@ def run(
         finally:
             await _close_resource(llm, "llm")
 
-    asyncio.run(_plan_and_execute())
+    try:
+        asyncio.run(_plan_and_execute())
+    except KeyboardInterrupt:
+        _print_interrupt_hint("run", project)
+        raise typer.Exit(130)
 
     if not dry_run:
         from styleclaw.orchestrator.suggestions import suggest_next_steps

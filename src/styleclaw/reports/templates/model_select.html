@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ project_name }} — Model Selection</title>
 <style>
   body { font-family: system-ui, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
@@ -23,6 +24,10 @@
   .sref-info { background: #fff3cd; padding: 8px 12px; border-radius: 4px; margin: 12px 0; font-size: 0.9em; }
   .sref-info img { width: 100px; height: 100px; object-fit: cover; border-radius: 4px; vertical-align: middle; margin-right: 8px; }
   .test-subjects { background: #e7f3ff; padding: 8px 12px; border-radius: 4px; margin: 12px 0; font-size: 0.9em; }
+  /* Panel proposal payload: wrap lines on narrow screens, prevent the raw
+     JSON dump from blowing horizontal scroll past the page width. */
+  .proposal pre { white-space: pre-wrap; word-break: break-word; max-height: 420px; overflow-y: auto; background: #f8f8f8; padding: 8px; border-radius: 4px; font-size: 0.85em; }
+  .proposal details summary { cursor: pointer; color: #555; font-size: 0.9em; }
 </style>
 </head>
 <body>
@@ -64,7 +69,10 @@
     {% for p in panel.proposals %}
       <div class="proposal {% if p.model_id == panel.winner_model_id %}winner{% endif %}">
         <h3>{{ p.label or p.model_id }}{% if p.model_id == panel.winner_model_id %} — winner{% endif %}</h3>
-        <pre>{{ p.payload | tojson(indent=2) }}</pre>
+        <details {% if p.model_id == panel.winner_model_id %}open{% endif %}>
+          <summary>show proposal payload</summary>
+          <pre>{{ p.payload | tojson(indent=2) }}</pre>
+        </details>
       </div>
     {% endfor %}
   </div>
