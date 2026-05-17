@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
+import socket
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -32,6 +35,40 @@ OUTPUT_IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".webp", ".
 def _ext_from_response(resp: httpx.Response, default: str = ".png") -> str:
     ct = resp.headers.get("content-type", "").split(";")[0].strip().lower()
     return _CONTENT_TYPE_TO_EXT.get(ct, default)
+
+
+def _is_disallowed_host(hostname: str) -> tuple[bool, str]:
+    """Return ``(True, reason)`` if ``hostname`` resolves to an address we
+    refuse to fetch from — loopback, link-local, private RFC1918, multicast,
+    or unspecified. Used as SSRF defense for arbitrary URLs the LLM/cloud
+    APIs hand us.
+
+    Resolution failures themselves are NOT a block — let httpx surface a
+    normal connection error instead of a confusing "disallowed host" message.
+    """
+    if not hostname:
+        return True, "empty hostname"
+    lowered = hostname.lower()
+    if lowered in {"localhost", "ip6-localhost", "ip6-loopback"}:
+        return True, f"loopback hostname: {hostname}"
+
+    try:
+        results = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return False, ""
+
+    for _family, _type, _proto, _canon, sockaddr in results:
+        ip_str = sockaddr[0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        if (
+            ip.is_loopback or ip.is_link_local or ip.is_private
+            or ip.is_multicast or ip.is_unspecified or ip.is_reserved
+        ):
+            return True, f"{hostname} resolves to {ip_str} ({ip.__class__.__name__.lower()} disallowed)"
+    return False, ""
 
 
 def list_output_images(dir_path: Path, prefix: str = "output-") -> list[Path]:
@@ -72,6 +109,11 @@ async def download_image(
     if not url.startswith(("http://", "https://")):
         raise RuntimeError(f"Refusing to download non-HTTP URL: {url[:80]}")
 
+    parsed = urlsplit(url)
+    blocked, reason = await asyncio.to_thread(_is_disallowed_host, parsed.hostname or "")
+    if blocked:
+        raise RuntimeError(f"Refusing to download from {url[:80]}: {reason}")
+
     dest.parent.mkdir(parents=True, exist_ok=True)
     last_exc: Exception | None = None
 
@@ -86,7 +128,13 @@ async def download_image(
     for attempt in range(DOWNLOAD_RETRIES):
         try:
             async with _acquire_client() as c:
-                async with c.stream("GET", url) as resp:
+                async with c.stream("GET", url, follow_redirects=False) as resp:
+                    if 300 <= resp.status_code < 400:
+                        location = resp.headers.get("location", "?")
+                        raise RuntimeError(
+                            f"Refusing to follow redirect ({resp.status_code}) "
+                            f"from {url[:80]} -> {location[:80]}"
+                        )
                     resp.raise_for_status()
                     ext = _ext_from_response(resp, dest.suffix or ".png")
                     actual_dest = dest.with_suffix(ext)

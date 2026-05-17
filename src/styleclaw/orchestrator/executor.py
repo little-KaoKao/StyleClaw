@@ -11,7 +11,7 @@ from styleclaw.orchestrator.actions import (
     ACTION_REGISTRY,
     ExecutionContext,
     StepResult,
-    _reject_unknown_args,
+    _validate_action_args,
 )
 from styleclaw.storage import project_store
 
@@ -106,27 +106,39 @@ def _should_continue_loop(ctx: ExecutionContext) -> bool:
 
 def display_plan(plan: ActionPlan, project: str) -> None:
     state = project_store.load_state(project)
-    typer.echo(f"\n  Plan: {plan.summary}")
-    typer.echo(f"  Project: {project} | Phase: {state.phase}\n")
+    sep = "  " + "─" * 60
 
+    typer.echo("")
+    typer.echo(sep)
+    typer.echo(f"  Plan: {plan.summary}")
+    typer.echo(f"  Project: {project} | Phase: {state.phase}")
+    typer.echo(sep)
+
+    typer.echo("  Steps:")
     for i, step in enumerate(plan.steps):
-        prefix = f"  {i + 1}."
-        typer.echo(f"{prefix} {step.name:15s} — {step.description}")
+        typer.echo(f"    {i + 1}. {step.name:15s} — {step.description}")
 
     if plan.loop:
         s, e = plan.loop.start_step + 1, plan.loop.end_step + 1
-        typer.echo(f"\n  Loop: steps {s}-{e} repeat until pass (max {plan.loop.max_iterations}x)")
-
-    if plan.stop_summary:
-        typer.echo(f"\n  执行完后：{plan.stop_summary}")
+        typer.echo("")
+        typer.echo("  Loop:")
+        typer.echo(
+            f"    repeat steps {s}-{e} until pass (max {plan.loop.max_iterations}x)"
+        )
 
     from styleclaw.orchestrator.cost_estimate import estimate_plan, format_plan_estimate
     cost_lines = format_plan_estimate(estimate_plan(plan, project))
     if cost_lines:
-        typer.echo("\n  成本预估：")
+        typer.echo("")
+        typer.echo("  Estimate:")
         for line in cost_lines:
             typer.echo(f"    {line}")
 
+    if plan.stop_summary:
+        typer.echo("")
+        typer.echo(f"  执行完后：{plan.stop_summary}")
+
+    typer.echo(sep)
     typer.echo("")
 
 
@@ -153,6 +165,15 @@ async def execute(
                 on_step_done(i, step.name, result)
             return results
 
+        # Validate args first — it's the cheapest gate and catches the most
+        # LLM mistakes (unknown keys, out-of-range ints, oversized strings).
+        validated_args, invalid = _validate_action_args(step.name, step.args)
+        if invalid is not None:
+            results.append(invalid)
+            if on_step_done:
+                on_step_done(i, step.name, invalid)
+            return results
+
         if action_def.needs_client and ctx.client is None:
             result = StepResult(ok=False, message=f"Action '{step.name}' requires an HTTP client but none was provided")
             results.append(result)
@@ -168,26 +189,26 @@ async def execute(
             return results
 
         if action_def.requires_confirmation and on_confirm:
-            confirmed_args = on_confirm(step.name, step.args, ctx)
+            confirmed_args = on_confirm(step.name, validated_args, ctx)
             if confirmed_args is None:
                 result = StepResult(ok=False, message=f"User cancelled '{step.name}'")
                 results.append(result)
                 if on_step_done:
                     on_step_done(i, step.name, result)
                 return results
-            step = step.model_copy(update={"args": confirmed_args})
+            # Re-validate any args the confirmation callback rewrote.
+            validated_args, invalid = _validate_action_args(step.name, confirmed_args)
+            if invalid is not None:
+                results.append(invalid)
+                if on_step_done:
+                    on_step_done(i, step.name, invalid)
+                return results
+            step = step.model_copy(update={"args": validated_args})
 
         if on_step_start:
             on_step_start(i, step.name, step.description)
 
-        unknown = _reject_unknown_args(step.name, step.args)
-        if unknown is not None:
-            results.append(unknown)
-            if on_step_done:
-                on_step_done(i, step.name, unknown)
-            return results
-
-        result = await action_def.fn(ctx, step.args)
+        result = await action_def.fn(ctx, validated_args)
         results.append(result)
 
         if on_step_done:

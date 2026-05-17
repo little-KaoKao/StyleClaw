@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from styleclaw.core.text_utils import clean_json
+import pytest
+from pydantic import BaseModel
+
+from styleclaw.core.text_utils import (
+    MAX_LLM_RESPONSE_BYTES,
+    clean_json,
+    parse_llm_response,
+)
 
 
 class TestCleanJsonEdgeCases:
@@ -28,3 +35,20 @@ class TestCleanJsonEdgeCases:
     def test_extracts_array_with_objects(self) -> None:
         raw = 'output: [{"id": 1}, {"id": 2}] end'
         assert clean_json(raw) == '[{"id": 1}, {"id": 2}]'
+
+
+class _Demo(BaseModel):
+    key: str
+
+
+class TestParseLlmResponseSizeCap:
+    def test_normal_size_parses(self) -> None:
+        obj = parse_llm_response('{"key": "val"}', _Demo)
+        assert obj.key == "val"
+
+    def test_oversized_raw_refused_before_parsing(self) -> None:
+        # Padding with whitespace keeps the JSON valid, but the raw byte count
+        # blows past the cap — we should refuse before even trying to parse.
+        huge = " " * (MAX_LLM_RESPONSE_BYTES + 100) + '{"key": "val"}'
+        with pytest.raises(ValueError, match="too large"):
+            parse_llm_response(huge, _Demo)

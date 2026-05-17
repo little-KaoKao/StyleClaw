@@ -307,3 +307,39 @@ class TestArgsValidation:
 
         assert results[0].ok is True
         assert captured == {"force": True}
+
+    async def test_int_out_of_range_rejected(self, setup_project, ctx):
+        # set-sref's `index` is bounded ge=-1, le=999. 1e9 must be refused
+        # before reaching the action body.
+        plan = ActionPlan(
+            summary="x",
+            steps=[Action(name="set-sref", description="x", args={"index": 1_000_000_000})],
+        )
+        results = await execute(plan, ctx)
+        assert results[0].ok is False
+        assert "invalid args" in results[0].message
+        assert "index" in results[0].message
+
+    async def test_string_length_capped(self, setup_project, ctx):
+        # refine's `direction` is capped at 8000 chars — protects downstream
+        # prompts from being blown up by an LLM-supplied 1MB string.
+        long_text = "x" * 10_000
+        plan = ActionPlan(
+            summary="x",
+            steps=[Action(name="refine", description="x", args={"direction": long_text})],
+        )
+        results = await execute(plan, ctx)
+        assert results[0].ok is False
+        assert "invalid args" in results[0].message
+        assert "direction" in results[0].message
+
+    async def test_bool_type_enforced(self, setup_project, ctx):
+        # generate's `force` is typed bool. An int-shaped value still coerces
+        # cleanly (Pydantic lax mode), but a structured value (dict) must fail.
+        plan = ActionPlan(
+            summary="x",
+            steps=[Action(name="generate", description="x", args={"force": {"sneaky": "object"}})],
+        )
+        results = await execute(plan, ctx)
+        assert results[0].ok is False
+        assert "invalid args" in results[0].message

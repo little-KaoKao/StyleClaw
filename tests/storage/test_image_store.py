@@ -95,3 +95,29 @@ class TestDownloadImage:
         # Temp file must have been cleaned up.
         assert not list(tmp_path.glob("*.tmp"))
         assert not dest.exists()
+
+    async def test_rejects_loopback_hostname(self, tmp_path: Path) -> None:
+        dest = tmp_path / "x.png"
+        with pytest.raises(RuntimeError, match="loopback"):
+            await download_image("http://localhost/x.png", dest)
+
+    async def test_rejects_private_ip(self, tmp_path: Path, monkeypatch) -> None:
+        # Pretend example.invalid resolves to a private RFC1918 address.
+        def fake_getaddrinfo(host, *_a, **_kw):
+            return [(0, 0, 0, "", ("192.168.1.1", 0))]
+        monkeypatch.setattr(
+            "styleclaw.storage.image_store.socket.getaddrinfo", fake_getaddrinfo,
+        )
+        dest = tmp_path / "x.png"
+        with pytest.raises(RuntimeError, match="disallowed"):
+            await download_image("https://example.invalid/x.png", dest)
+
+    @respx.mock
+    async def test_refuses_to_follow_redirect(self, tmp_path: Path) -> None:
+        dest = tmp_path / "x.png"
+        respx.get("https://cdn.example.com/image.png").respond(
+            status_code=302,
+            headers={"location": "http://127.0.0.1/loot"},
+        )
+        with pytest.raises(RuntimeError, match="redirect"):
+            await download_image("https://cdn.example.com/image.png", dest)

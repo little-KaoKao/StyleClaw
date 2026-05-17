@@ -9,6 +9,14 @@ from pydantic import BaseModel, ValidationError
 T = TypeVar("T", bound=BaseModel)
 
 
+# Hard cap on the raw LLM response size we'll attempt to JSON-parse.
+# Real plans/evaluations are a few KB; anything in the megabyte range is
+# either a hallucinated dump or an OOM/regex-DoS attempt. Trips before
+# clean_json runs (it does multiple regex passes that would compound the
+# cost on pathological input).
+MAX_LLM_RESPONSE_BYTES = 2_000_000
+
+
 def clean_json(raw: str) -> str:
     cleaned = raw.strip()
     if cleaned.startswith("```"):
@@ -67,6 +75,13 @@ def recover_truncated_json(cleaned: str) -> str:
 
 def parse_llm_response(raw: str, model_cls: type[T], label: str = "") -> T:
     desc = label or model_cls.__name__
+    if len(raw) > MAX_LLM_RESPONSE_BYTES:
+        raise ValueError(
+            f"LLM response too large for {desc}: {len(raw)} bytes "
+            f"(cap is {MAX_LLM_RESPONSE_BYTES}). "
+            f"Either the LLM is hallucinating a giant dump or something is wrong "
+            f"upstream — refusing to parse."
+        )
     cleaned = clean_json(raw)
     try:
         data = json.loads(cleaned)

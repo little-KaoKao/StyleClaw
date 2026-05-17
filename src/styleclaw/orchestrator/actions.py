@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Awaitable
 
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
 from styleclaw.core.config import MAX_AUTO_ROUNDS, MAX_POLL_CYCLES, ORCHESTRATOR_POLL_INTERVAL
 from styleclaw.core.models import Phase, TaskStatus
 from styleclaw.providers.llm.base import LLMProvider
@@ -40,39 +42,181 @@ class ActionDef:
     requires_confirmation: bool = False
 
 
-# Per-action allowed arg keys. Any key in step.args that isn't in this set
-# is rejected with a clear error — protects against the LLM hallucinating
-# extra parameters (or a typo silently dropping into "ignored args").
-# Actions without entries here accept no args.
-ACTION_ALLOWED_ARGS: dict[str, frozenset[str]] = {
-    "init":          frozenset({"ref_dir", "ip_info", "description", "force"}),
-    "generate":      frozenset({"force", "models"}),
-    "poll":          frozenset({"max_cycles"}),
-    "select-model":  frozenset({"models", "variant"}),
-    "refine":        frozenset({"direction"}),
-    "approve":       frozenset({"target"}),
-    "design-cases":  frozenset({"feedback"}),
-    "batch-submit":  frozenset({"model"}),
-    "set-sref":      frozenset({"index"}),
-    "set-pass":      frozenset({"pass_num"}),
-    "add-refs":      frozenset({"image_dir"}),
+# --- Per-action argument schemas. ---
+#
+# Every action that accepts args has a Pydantic schema below. The executor
+# validates the LLM-supplied ``step.args`` dict against the schema before
+# calling the action — this enforces:
+#   - allowed key set (``extra="forbid"`` rejects hallucinated keys)
+#   - field types (``int`` is really int, not "1e9" silently coerced past sanity)
+#   - integer ranges (``index``, ``pass_num``, ``max_cycles`` are bounded)
+#   - string lengths (free-text fields capped to keep prompt injection / OOM in check)
+#
+# All fields are optional with defaults — actions are responsible for their own
+# "X is required" UX messages because that text is also surfaced through the
+# CLI confirmation callbacks. The schema's job is bounds/types, not presence.
+
+_FREE_TEXT_MAX = 8000  # direction, feedback, description — LLM-controlled text
+
+
+class _StrictArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
+
+
+class _NoArgs(_StrictArgs):
+    pass
+
+
+class InitArgs(_StrictArgs):
+    ref_dir: str = Field(default="", max_length=4096)
+    ip_info: str = Field(default="", max_length=_FREE_TEXT_MAX)
+    description: str = Field(default="", max_length=_FREE_TEXT_MAX)
+    force: bool = False
+
+
+class GenerateArgs(_StrictArgs):
+    force: bool = False
+    # LLM may emit either a comma-string or a list; both are valid and
+    # do_generate normalizes downstream. Cap list length to keep
+    # downstream filter loops bounded.
+    models: str | list[str] | None = Field(default=None, max_length=64)
+
+
+class PollArgs(_StrictArgs):
+    max_cycles: int = Field(default=MAX_POLL_CYCLES, ge=1, le=10_000)
+
+
+class SelectModelArgs(_StrictArgs):
+    models: str = Field(default="", max_length=512)
+    variant: str = Field(default="", max_length=64)
+
+
+class RefineArgs(_StrictArgs):
+    direction: str = Field(default="", max_length=_FREE_TEXT_MAX)
+
+
+class ApproveArgs(_StrictArgs):
+    target: str = Field(default="batch-t2i", max_length=64)
+
+
+class DesignCasesArgs(_StrictArgs):
+    feedback: str = Field(default="", max_length=_FREE_TEXT_MAX)
+
+
+class BatchSubmitArgs(_StrictArgs):
+    model: str = Field(default="", max_length=64)
+
+
+class SetSrefArgs(_StrictArgs):
+    # 999 is a generous upper bound — the action itself further rejects
+    # indices >= len(ref_images).
+    index: int = Field(default=-1, ge=-1, le=999)
+
+
+class SetPassArgs(_StrictArgs):
+    pass_num: int = Field(default=1, ge=1, le=999)
+
+
+class AddRefsArgs(_StrictArgs):
+    image_dir: str = Field(default="", max_length=4096)
+
+
+ACTION_ARGS_SCHEMA: dict[str, type[_StrictArgs]] = {
+    "init":          InitArgs,
+    "analyze":       _NoArgs,
+    "generate":      GenerateArgs,
+    "poll":          PollArgs,
+    "evaluate":      _NoArgs,
+    "select-model":  SelectModelArgs,
+    "refine":        RefineArgs,
+    "approve":       ApproveArgs,
+    "design-cases":  DesignCasesArgs,
+    "batch-submit":  BatchSubmitArgs,
+    "report":        _NoArgs,
+    "retest-models": _NoArgs,
+    "back-to-t2i":   _NoArgs,
+    "set-sref":      SetSrefArgs,
+    "set-pass":      SetPassArgs,
+    "add-refs":      AddRefsArgs,
 }
 
 
-def _reject_unknown_args(action_name: str, args: dict[str, Any]) -> StepResult | None:
-    """Return a failure StepResult if args has keys not allowed for this
-    action, else None. Keys are case-sensitive."""
-    allowed = ACTION_ALLOWED_ARGS.get(action_name, frozenset())
+def _validate_action_args(
+    action_name: str, args: dict[str, Any],
+) -> tuple[dict[str, Any], StepResult | None]:
+    """Return ``(validated_args, None)`` on success, or ``(args, StepResult)``
+    on validation failure. ``validated_args`` only contains keys the caller
+    explicitly set (via ``exclude_unset=True``) — actions still use
+    ``args.get(...)`` semantics for missing-key UX messages, just on
+    type/length/range-checked values."""
+    schema = ACTION_ARGS_SCHEMA.get(action_name)
+    if schema is None:
+        if args:
+            return args, StepResult(
+                ok=False,
+                message=f"{action_name}: unknown args {sorted(args)}. Allowed: (none).",
+            )
+        return args, None
+    allowed = set(schema.model_fields.keys())
     unknown = sorted(set(args) - allowed)
-    if not unknown:
+    if unknown:
+        return args, StepResult(
+            ok=False,
+            message=(
+                f"{action_name}: unknown args {unknown}. "
+                f"Allowed: {sorted(allowed) or '(none)'}."
+            ),
+        )
+    try:
+        validated = schema.model_validate(args)
+    except ValidationError as exc:
+        errs = "; ".join(
+            f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}"
+            for e in exc.errors()
+        )
+        return args, StepResult(
+            ok=False,
+            message=f"{action_name}: invalid args — {errs}",
+        )
+    return validated.model_dump(exclude_unset=True), None
+
+
+_SENSITIVE_PATH_PREFIXES: tuple[Path, ...] = tuple(
+    Path(p).resolve() for p in (
+        "/etc", "/root", "/var/log", "/var/lib",
+        "/proc", "/sys", "/boot",
+        "C:/Windows", "C:/Program Files", "C:/Program Files (x86)",
+    ) if Path(p).exists()
+)
+
+
+def _reject_sensitive_path(p: Path, label: str) -> StepResult | None:
+    """Return a refusal ``StepResult`` if ``p`` is rooted under a known
+    sensitive system directory (``/etc``, ``C:\\Windows``, ...). Lets users
+    point at anywhere else they want — the goal is to catch obvious accidents
+    and trivial path-traversal, not to be an airtight sandbox."""
+    try:
+        resolved = p.resolve()
+    except OSError:
         return None
-    return StepResult(
-        ok=False,
-        message=(
-            f"{action_name}: unknown args {unknown}. "
-            f"Allowed: {sorted(allowed) or '(none)'}."
-        ),
-    )
+    for sensitive in _SENSITIVE_PATH_PREFIXES:
+        try:
+            resolved.relative_to(sensitive)
+        except ValueError:
+            continue
+        return StepResult(
+            ok=False,
+            message=f"{label} refuses to read from system path {sensitive}: {p}",
+        )
+    home_ssh = Path.home() / ".ssh"
+    try:
+        if home_ssh.exists() and resolved.is_relative_to(home_ssh):
+            return StepResult(
+                ok=False, message=f"{label} refuses to read from {home_ssh}: {p}",
+            )
+    except (AttributeError, OSError):
+        pass
+    return None
 
 
 async def do_analyze(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
@@ -212,6 +356,8 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
 
 
 async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
+    import time
+
     from styleclaw.scripts.poll import (
         poll_batch,
         poll_model_select,
@@ -237,6 +383,7 @@ async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
         )
         max_cycles = MAX_POLL_CYCLES
     state = project_store.load_state(ctx.project)
+    poll_started = time.monotonic()
 
     for cycle in range(max_cycles):
         state = project_store.load_state(ctx.project)
@@ -282,7 +429,11 @@ async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
                 msg += f" ({failed} failed, skipping)"
             return StepResult(ok=True, message=msg, data={"succeeded": succeeded, "failed": failed})
 
-        logger.info("Waiting... %d/%d completed (cycle %d/%d)", succeeded + failed, len(records), cycle + 1, max_cycles)
+        logger.info(
+            "Waiting... %d/%d completed (cycle %d/%d, %ds elapsed)",
+            succeeded + failed, len(records), cycle + 1, max_cycles,
+            int(time.monotonic() - poll_started),
+        )
         await asyncio.sleep(ctx.poll_interval)
 
     return StepResult(ok=False, message=f"Poll timed out after {max_cycles} cycles")
@@ -506,7 +657,16 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
             break
 
     if round_num > MAX_AUTO_ROUNDS:
-        return StepResult(ok=False, message=f"Max rounds ({MAX_AUTO_ROUNDS}) reached")
+        return StepResult(
+            ok=False,
+            message=(
+                f"Max rounds ({MAX_AUTO_ROUNDS}) reached. "
+                f"Next: `approve` to move on to BATCH_T2I, or `retest-models` "
+                f"to open a new pass with a different sref / model lineup. "
+                f"You can also rollback to an earlier round and try a different "
+                f"`--direction` (rollback is non-destructive)."
+            ),
+        )
 
     evaluations: list[RoundEvaluation] = []
     for r in range(1, round_num):
@@ -780,6 +940,9 @@ async def do_init(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     ref_dir = Path(ref_dir_str).expanduser()
     if not ref_dir.is_dir():
         return StepResult(ok=False, message=f"ref_dir is not a directory: {ref_dir}")
+    refusal = _reject_sensitive_path(ref_dir, "init")
+    if refusal is not None:
+        return refusal
 
     image_exts = {".png", ".jpg", ".jpeg", ".webp"}
     refs = sorted(p for p in ref_dir.iterdir() if p.suffix.lower() in image_exts)
@@ -886,6 +1049,9 @@ async def do_add_refs(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
     image_dir = Path(image_dir_str).expanduser()
     if not image_dir.is_dir():
         return StepResult(ok=False, message=f"image_dir is not a directory: {image_dir}")
+    refusal = _reject_sensitive_path(image_dir, "add-refs")
+    if refusal is not None:
+        return refusal
 
     image_exts = {".png", ".jpg", ".jpeg", ".webp"}
     images = sorted(p for p in image_dir.iterdir() if p.suffix.lower() in image_exts)
