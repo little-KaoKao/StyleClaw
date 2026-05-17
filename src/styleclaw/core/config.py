@@ -31,6 +31,10 @@ MAX_AUTO_ROUNDS: int = _int_env("STYLECLAW_MAX_ROUNDS", "5")
 CONCURRENCY_LIMIT: int = _int_env("STYLECLAW_CONCURRENCY", "10")
 LLM_CONCURRENCY_LIMIT: int = _int_env("STYLECLAW_LLM_CONCURRENCY", "4")
 IMAGE_ENCODE_CONCURRENCY: int = _int_env("STYLECLAW_IMAGE_ENCODE_CONCURRENCY", "8")
+# Cap on concurrent image downloads when fanning out result URLs in poll.py.
+# A 100-task batch with 4 image URLs per task fans out to 400 sockets without
+# a bound; 8 keeps the connection pool sane on shared CDN endpoints.
+DOWNLOAD_CONCURRENCY: int = _int_env("STYLECLAW_DOWNLOAD_CONCURRENCY", "8")
 TASK_TIMEOUT: float = _float_env("STYLECLAW_TASK_TIMEOUT", "300")
 POLL_INTERVAL: float = _float_env("STYLECLAW_POLL_INTERVAL", "3")
 POLL_MAX_CONSECUTIVE_FAILURES: int = _int_env("STYLECLAW_POLL_MAX_CONSEC_FAIL", "5")

@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from styleclaw.core.config import DOWNLOAD_CONCURRENCY
 from styleclaw.core.models import TaskRecord, TaskStatus
 from styleclaw.providers.runninghub.client import RunningHubClient
 from styleclaw.providers.runninghub.models import get_model
@@ -40,24 +41,38 @@ class DownloadStats:
 async def _download_results(
     results: list[dict[str, Any]], dest_dir: Path,
     download_client: httpx.AsyncClient | None = None,
+    semaphore: asyncio.Semaphore | None = None,
 ) -> DownloadStats:
-    attempted = 0
-    succeeded = 0
-    failed: list[str] = []
+    candidates: list[tuple[int, str]] = []
     for i, result in enumerate(results, 1):
         url = result.get("url", "")
         if not url:
             logger.warning("Result %d has no URL, skipping download.", i)
             continue
-        attempted += 1
+        candidates.append((i, url))
+
+    if not candidates:
+        return DownloadStats()
+
+    # Bound concurrent downloads so a 100-task batch with multiple URLs each
+    # doesn't open hundreds of sockets at once. Callers can share one
+    # semaphore across all poll_one_* invocations in a cycle for a global cap.
+    sem = semaphore or asyncio.Semaphore(DOWNLOAD_CONCURRENCY)
+
+    async def _one(i: int, url: str) -> tuple[int, str, bool, str]:
         dest = dest_dir / f"output-{i:03d}.png"
-        try:
-            actual = await download_image(url, dest, client=download_client)
-            succeeded += 1
-            logger.debug("Downloaded %s -> %s", url[:60], actual.name)
-        except RuntimeError as exc:
-            logger.error("Failed to download result %d from %s: %s", i, url[:80], exc)
-            failed.append(url)
+        async with sem:
+            try:
+                actual = await download_image(url, dest, client=download_client)
+                logger.debug("Downloaded %s -> %s", url[:60], actual.name)
+                return i, url, True, ""
+            except RuntimeError as exc:
+                logger.error("Failed to download result %d from %s: %s", i, url[:80], exc)
+                return i, url, False, str(exc)
+
+    outcomes = await asyncio.gather(*[_one(i, u) for i, u in candidates])
+    succeeded = sum(1 for _i, _u, ok, _msg in outcomes if ok)
+    failed = [url for _i, url, ok, _msg in outcomes if not ok]
 
     if failed:
         record_path = dest_dir / "failed_downloads.json"
@@ -70,7 +85,7 @@ async def _download_results(
             logger.warning("Could not write %s: %s", record_path, exc)
 
     return DownloadStats(
-        attempted=attempted, succeeded=succeeded, failed_urls=tuple(failed),
+        attempted=len(candidates), succeeded=succeeded, failed_urls=tuple(failed),
     )
 
 
@@ -95,6 +110,7 @@ async def _poll_one_model_select(
     client: RunningHubClient,
     pass_num: int,
     download_client: httpx.AsyncClient | None = None,
+    download_semaphore: asyncio.Semaphore | None = None,
 ) -> tuple[str, TaskRecord, DownloadStats]:
     if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
         logger.debug("Task %s already terminal (%s), skipping.", record.task_id, record.status)
@@ -119,7 +135,9 @@ async def _poll_one_model_select(
         project_store.save_task_record(name, key, new_record, pass_num=pass_num)
         results_dir = project_store.model_results_dir(name, key, pass_num=pass_num)
 
-    stats = await _download_results(new_record.results, results_dir, download_client)
+    stats = await _download_results(
+        new_record.results, results_dir, download_client, download_semaphore,
+    )
     return key, new_record, stats
 
 
@@ -139,13 +157,17 @@ async def poll_model_select(
 
     # One shared HTTP client for all output downloads; keep-alive avoids
     # re-handshaking for every image when many tasks complete in the same
-    # poll cycle.
+    # poll cycle. Single shared semaphore caps concurrent in-flight downloads
+    # across ALL tasks in this cycle (otherwise the per-task semaphores would
+    # multiply: 100 tasks × 8 each = 800 sockets).
     async with httpx.AsyncClient(timeout=60) as download_client:
+        download_sem = asyncio.Semaphore(DOWNLOAD_CONCURRENCY)
         async with asyncio.TaskGroup() as tg:
             tasks = {
                 key: tg.create_task(
                     _poll_one_model_select(
                         name, key, record, client, pass_num, download_client,
+                        download_sem,
                     )
                 )
                 for key, record in records.items()
@@ -168,6 +190,7 @@ async def _poll_one_style_refine(
     client: RunningHubClient,
     pass_num: int,
     download_client: httpx.AsyncClient | None = None,
+    download_semaphore: asyncio.Semaphore | None = None,
 ) -> tuple[str, TaskRecord, DownloadStats]:
     if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
         logger.debug("Task %s already completed, skipping.", record.task_id)
@@ -186,7 +209,9 @@ async def _poll_one_style_refine(
     results_dir = project_store.round_results_dir(
         name, round_num, model_id, pass_num=pass_num,
     )
-    stats = await _download_results(new_record.results, results_dir, download_client)
+    stats = await _download_results(
+        new_record.results, results_dir, download_client, download_semaphore,
+    )
 
     return model_id, new_record, stats
 
@@ -207,12 +232,13 @@ async def poll_style_refine(
     total_stats = DownloadStats()
 
     async with httpx.AsyncClient(timeout=60) as download_client:
+        download_sem = asyncio.Semaphore(DOWNLOAD_CONCURRENCY)
         async with asyncio.TaskGroup() as tg:
             tasks = {
                 model_id: tg.create_task(
                     _poll_one_style_refine(
                         name, round_num, model_id, record, client, pass_num,
-                        download_client,
+                        download_client, download_sem,
                     )
                 )
                 for model_id, record in records.items()
@@ -235,6 +261,7 @@ async def _poll_one_batch(
     client: RunningHubClient,
     phase: str,
     download_client: httpx.AsyncClient | None = None,
+    download_semaphore: asyncio.Semaphore | None = None,
 ) -> tuple[str, TaskRecord, DownloadStats]:
     if record.status in (TaskStatus.SUCCESS, TaskStatus.FAILED):
         return case_id, record, DownloadStats()
@@ -253,7 +280,9 @@ async def _poll_one_batch(
         project_store.save_batch_task_record(name, batch_num, case_id, new_record)
         case_dir = project_store.batch_t2i_case_dir(name, batch_num, case_id)
 
-    stats = await _download_results(new_record.results, case_dir, download_client)
+    stats = await _download_results(
+        new_record.results, case_dir, download_client, download_semaphore,
+    )
 
     return case_id, new_record, stats
 
@@ -276,12 +305,13 @@ async def poll_batch(
     total_stats = DownloadStats()
 
     async with httpx.AsyncClient(timeout=60) as download_client:
+        download_sem = asyncio.Semaphore(DOWNLOAD_CONCURRENCY)
         async with asyncio.TaskGroup() as tg:
             tasks = {
                 case_id: tg.create_task(
                     _poll_one_batch(
                         name, batch_num, case_id, record, client, phase,
-                        download_client,
+                        download_client, download_sem,
                     )
                 )
                 for case_id, record in records.items()
