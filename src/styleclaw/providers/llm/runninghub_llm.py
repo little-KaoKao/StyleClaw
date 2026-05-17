@@ -16,12 +16,10 @@ from styleclaw.core.config import (
     LLM_WRITE_TIMEOUT,
     STREAM_DISPLAY,
 )
-from styleclaw.core.redact import redact_exc
+from styleclaw.providers.llm._retry import llm_retry_loop
 from styleclaw.providers.llm.base import LLMResponse
 
 logger = logging.getLogger(__name__)
-
-MAX_RETRIES = 3
 
 DEFAULT_BASE_URL = "https://llm.runninghub.cn/v1"
 DEFAULT_MODEL = "rh-llm-a/rh-c-o-47"
@@ -145,87 +143,59 @@ class RunningHubLLMProvider:
         return LLMResponse(text=text, thinking=thinking)
 
     async def _post(self, body: dict[str, Any]) -> dict[str, Any]:
-        last_exc: Exception | None = None
-        for attempt in range(MAX_RETRIES):
-            try:
-                async with self._semaphore:
-                    async with self._http.stream(
-                        "POST",
-                        "/chat/completions",
-                        content=json.dumps(body),
-                    ) as resp:
-                        resp.raise_for_status()
-                        content_type = resp.headers.get("content-type", "")
-                        if "text/event-stream" in content_type:
-                            chunks: list[str] = []
-                            reasoning_chunks: list[str] = []
-                            # active_stream: None | "think" | "answer" — tracks which
-                            # marker was printed last so we only emit a new prefix on
-                            # a transition (e.g. think → answer).
-                            active_stream: str | None = None
-                            async for line in resp.aiter_lines():
-                                if not line.startswith("data: "):
-                                    continue
-                                data = line[6:]
-                                if data == "[DONE]":
-                                    break
-                                try:
-                                    delta_obj = json.loads(data)["choices"][0]["delta"]
-                                except (KeyError, IndexError, json.JSONDecodeError):
-                                    continue
-                                reasoning = delta_obj.get("reasoning_content", "")
-                                if reasoning:
-                                    if STREAM_DISPLAY:
-                                        if active_stream != "think":
-                                            print("\n  💭 " if active_stream else "  💭 ", end="", flush=True)
-                                            active_stream = "think"
-                                        print(reasoning, end="", flush=True)
-                                    reasoning_chunks.append(reasoning)
-                                delta = delta_obj.get("content", "")
-                                if delta:
-                                    if STREAM_DISPLAY:
-                                        if active_stream != "answer":
-                                            print("\n  ↓ " if active_stream else "  ↓ ", end="", flush=True)
-                                            active_stream = "answer"
-                                        print(delta, end="", flush=True)
-                                    chunks.append(delta)
-                            if STREAM_DISPLAY and active_stream is not None:
-                                print()
-                            return {
-                                "choices": [{
-                                    "message": {
-                                        "content": "".join(chunks),
-                                        "reasoning_content": "".join(reasoning_chunks),
-                                    }
-                                }]
-                            }
-                        await resp.aread()
-                        return resp.json()
-            except httpx.TransportError as exc:
-                last_exc = exc
-                if attempt < MAX_RETRIES - 1:
-                    wait = 2**attempt
-                    logger.warning(
-                        "RunningHub LLM request failed (attempt %d/%d): %s. Retrying in %ds.",
-                        attempt + 1,
-                        MAX_RETRIES,
-                        redact_exc(exc),
-                        wait,
-                    )
-                    await asyncio.sleep(wait)
-            except httpx.HTTPStatusError as exc:
-                status = exc.response.status_code
-                if status < 500 and status != 429:
-                    raise
-                last_exc = exc
-                if attempt < MAX_RETRIES - 1:
-                    wait = 2**attempt
-                    logger.warning(
-                        "RunningHub LLM request failed (attempt %d/%d): %s. Retrying in %ds.",
-                        attempt + 1,
-                        MAX_RETRIES,
-                        redact_exc(exc),
-                        wait,
-                    )
-                    await asyncio.sleep(wait)
-        raise RuntimeError(f"RunningHub LLM invoke failed after {MAX_RETRIES} retries") from last_exc
+        async def _attempt() -> dict[str, Any]:
+            async with self._semaphore:
+                async with self._http.stream(
+                    "POST",
+                    "/chat/completions",
+                    content=json.dumps(body),
+                ) as resp:
+                    resp.raise_for_status()
+                    content_type = resp.headers.get("content-type", "")
+                    if "text/event-stream" in content_type:
+                        chunks: list[str] = []
+                        reasoning_chunks: list[str] = []
+                        # active_stream: None | "think" | "answer" — tracks which
+                        # marker was printed last so we only emit a new prefix on
+                        # a transition (e.g. think → answer).
+                        active_stream: str | None = None
+                        async for line in resp.aiter_lines():
+                            if not line.startswith("data: "):
+                                continue
+                            data = line[6:]
+                            if data == "[DONE]":
+                                break
+                            try:
+                                delta_obj = json.loads(data)["choices"][0]["delta"]
+                            except (KeyError, IndexError, json.JSONDecodeError):
+                                continue
+                            reasoning = delta_obj.get("reasoning_content", "")
+                            if reasoning:
+                                if STREAM_DISPLAY:
+                                    if active_stream != "think":
+                                        print("\n  💭 " if active_stream else "  💭 ", end="", flush=True)
+                                        active_stream = "think"
+                                    print(reasoning, end="", flush=True)
+                                reasoning_chunks.append(reasoning)
+                            delta = delta_obj.get("content", "")
+                            if delta:
+                                if STREAM_DISPLAY:
+                                    if active_stream != "answer":
+                                        print("\n  ↓ " if active_stream else "  ↓ ", end="", flush=True)
+                                        active_stream = "answer"
+                                    print(delta, end="", flush=True)
+                                chunks.append(delta)
+                        if STREAM_DISPLAY and active_stream is not None:
+                            print()
+                        return {
+                            "choices": [{
+                                "message": {
+                                    "content": "".join(chunks),
+                                    "reasoning_content": "".join(reasoning_chunks),
+                                }
+                            }]
+                        }
+                    await resp.aread()
+                    return resp.json()
+
+        return await llm_retry_loop("RunningHub LLM invoke", _attempt)

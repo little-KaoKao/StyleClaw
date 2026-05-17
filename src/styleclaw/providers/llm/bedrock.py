@@ -15,12 +15,10 @@ from styleclaw.core.config import (
     LLM_READ_TIMEOUT,
     LLM_WRITE_TIMEOUT,
 )
-from styleclaw.core.redact import redact_exc
+from styleclaw.providers.llm._retry import llm_retry_loop
 from styleclaw.providers.llm.base import LLMResponse
 
 logger = logging.getLogger(__name__)
-
-MAX_RETRIES = 3
 
 
 class BedrockProvider:
@@ -128,35 +126,11 @@ class BedrockProvider:
 
     async def _post(self, body: dict[str, Any]) -> dict[str, Any]:
         url = f"/model/{self._model_id}/invoke"
-        last_exc: Exception | None = None
-        for attempt in range(MAX_RETRIES):
-            try:
-                async with self._semaphore:
-                    resp = await self._http.post(url, content=json.dumps(body))
-                resp.raise_for_status()
-                return resp.json()
-            except httpx.TransportError as exc:
-                last_exc = exc
-                if attempt < MAX_RETRIES - 1:
-                    wait = 2**attempt
-                    logger.warning(
-                        "Bedrock request failed (attempt %d/%d): %s. Retrying in %ds.",
-                        attempt + 1, MAX_RETRIES, redact_exc(exc), wait,
-                    )
-                    await asyncio.sleep(wait)
-            except httpx.HTTPStatusError as exc:
-                # Retry on 5xx and 429 (rate limit); fail fast on other 4xx.
-                status = exc.response.status_code
-                if status < 500 and status != 429:
-                    raise
-                last_exc = exc
-                if attempt < MAX_RETRIES - 1:
-                    wait = 2**attempt
-                    logger.warning(
-                        "Bedrock request failed (attempt %d/%d): %s. Retrying in %ds.",
-                        attempt + 1, MAX_RETRIES, redact_exc(exc), wait,
-                    )
-                    await asyncio.sleep(wait)
-        raise RuntimeError(
-            f"Bedrock invoke failed after {MAX_RETRIES} retries"
-        ) from last_exc
+
+        async def _attempt() -> dict[str, Any]:
+            async with self._semaphore:
+                resp = await self._http.post(url, content=json.dumps(body))
+            resp.raise_for_status()
+            return resp.json()
+
+        return await llm_retry_loop("Bedrock invoke", _attempt)

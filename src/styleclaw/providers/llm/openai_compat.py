@@ -16,12 +16,10 @@ from styleclaw.core.config import (
     LLM_WRITE_TIMEOUT,
     STREAM_DISPLAY,
 )
-from styleclaw.core.redact import redact_exc
+from styleclaw.providers.llm._retry import llm_retry_loop
 from styleclaw.providers.llm.base import LLMResponse
 
 logger = logging.getLogger(__name__)
-
-MAX_RETRIES = 3
 
 
 class OpenAICompatProvider:
@@ -95,60 +93,42 @@ class OpenAICompatProvider:
         return LLMResponse(text=text)
 
     async def _post(self, body: dict[str, Any]) -> dict[str, Any]:
-        last_exc: Exception | None = None
-        for attempt in range(MAX_RETRIES):
-            try:
-                async with self._semaphore:
-                    chunks: list[str] = []
-                    stream_started = False
-                    async with self._http.stream("POST", "/chat/completions", content=json.dumps(body)) as resp:
-                        resp.raise_for_status()
-                        content_type = resp.headers.get("content-type", "")
-                        if "text/event-stream" in content_type:
-                            async for line in resp.aiter_lines():
-                                if not line.startswith("data: "):
-                                    continue
-                                data = line[6:]
-                                if data == "[DONE]":
-                                    break
-                                try:
-                                    delta = json.loads(data)["choices"][0]["delta"].get("content", "")
-                                except (KeyError, IndexError, json.JSONDecodeError):
-                                    continue
-                                if not delta:
-                                    continue
-                                if STREAM_DISPLAY:
-                                    if not stream_started:
-                                        print("  ↓ ", end="", flush=True)
-                                        stream_started = True
-                                    print(delta, end="", flush=True)
-                                chunks.append(delta)
-                            if STREAM_DISPLAY and stream_started:
-                                print()
-                            return {
-                                "choices": [{
-                                    "message": {"content": "".join(chunks)}
-                                }]
-                            }
-                        else:
-                            # Server ignored stream:true and returned JSON
-                            await resp.aread()
-                            return resp.json()
-            except httpx.TransportError as exc:
-                last_exc = exc
-                if attempt < MAX_RETRIES - 1:
-                    wait = 2**attempt
-                    logger.warning("Request failed (attempt %d/%d): %s. Retrying in %ds.",
-                                   attempt + 1, MAX_RETRIES, redact_exc(exc), wait)
-                    await asyncio.sleep(wait)
-            except httpx.HTTPStatusError as exc:
-                status = exc.response.status_code
-                if status < 500 and status != 429:
-                    raise
-                last_exc = exc
-                if attempt < MAX_RETRIES - 1:
-                    wait = 2**attempt
-                    logger.warning("Request failed (attempt %d/%d): %s. Retrying in %ds.",
-                                   attempt + 1, MAX_RETRIES, redact_exc(exc), wait)
-                    await asyncio.sleep(wait)
-        raise RuntimeError(f"LLM invoke failed after {MAX_RETRIES} retries") from last_exc
+        async def _attempt() -> dict[str, Any]:
+            async with self._semaphore:
+                chunks: list[str] = []
+                stream_started = False
+                async with self._http.stream("POST", "/chat/completions", content=json.dumps(body)) as resp:
+                    resp.raise_for_status()
+                    content_type = resp.headers.get("content-type", "")
+                    if "text/event-stream" in content_type:
+                        async for line in resp.aiter_lines():
+                            if not line.startswith("data: "):
+                                continue
+                            data = line[6:]
+                            if data == "[DONE]":
+                                break
+                            try:
+                                delta = json.loads(data)["choices"][0]["delta"].get("content", "")
+                            except (KeyError, IndexError, json.JSONDecodeError):
+                                continue
+                            if not delta:
+                                continue
+                            if STREAM_DISPLAY:
+                                if not stream_started:
+                                    print("  ↓ ", end="", flush=True)
+                                    stream_started = True
+                                print(delta, end="", flush=True)
+                            chunks.append(delta)
+                        if STREAM_DISPLAY and stream_started:
+                            print()
+                        return {
+                            "choices": [{
+                                "message": {"content": "".join(chunks)}
+                            }]
+                        }
+                    else:
+                        # Server ignored stream:true and returned JSON
+                        await resp.aread()
+                        return resp.json()
+
+        return await llm_retry_loop("OpenAI-compat LLM invoke", _attempt)
