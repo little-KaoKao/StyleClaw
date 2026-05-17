@@ -58,3 +58,56 @@ class TestCheckpoint:
         cp.save("k", {"n": 1})
         data = json.loads((tmp_path / ".checkpoint_phase.json").read_text())
         assert data == {"k": {"n": 1}}
+
+
+class TestCheckpointFlushThreshold:
+    """``flush_threshold>1`` amortizes disk writes — verify the disk only
+    sees a write after every N adds, and that explicit ``flush()`` drains
+    the tail of an incomplete batch."""
+
+    def test_disk_skipped_until_threshold_hit(self, tmp_path) -> None:
+        cp = Checkpoint(tmp_path, "phase", flush_threshold=5)
+        # 4 adds — disk should NOT have the entries yet.
+        for i in range(4):
+            cp.add_to_set("submitted", f"c-{i:03d}")
+        assert not (tmp_path / ".checkpoint_phase.json").exists()
+        # 5th add trips the threshold.
+        cp.add_to_set("submitted", "c-004")
+        data = json.loads((tmp_path / ".checkpoint_phase.json").read_text())
+        assert sorted(data["submitted"]) == [f"c-{i:03d}" for i in range(5)]
+
+    def test_explicit_flush_drains_pending(self, tmp_path) -> None:
+        cp = Checkpoint(tmp_path, "phase", flush_threshold=100)
+        for i in range(3):
+            cp.add_to_set("submitted", f"c-{i:03d}")
+        # Way below threshold, nothing on disk.
+        assert not (tmp_path / ".checkpoint_phase.json").exists()
+        cp.flush()
+        data = json.loads((tmp_path / ".checkpoint_phase.json").read_text())
+        assert sorted(data["submitted"]) == [f"c-{i:03d}" for i in range(3)]
+
+    def test_default_threshold_is_synchronous(self, tmp_path) -> None:
+        # Backward compat: no threshold arg means flush-every-call, same as
+        # before this change.
+        cp = Checkpoint(tmp_path, "phase")
+        cp.add_to_set("submitted", "c-001")
+        data = json.loads((tmp_path / ".checkpoint_phase.json").read_text())
+        assert data["submitted"] == ["c-001"]
+
+    def test_clear_resets_pending_counter(self, tmp_path) -> None:
+        # If a partial batch is cleared and then we add new items, the
+        # accumulated pending counter should not erroneously trip a flush
+        # too early or too late.
+        cp = Checkpoint(tmp_path, "phase", flush_threshold=5)
+        for i in range(3):
+            cp.add_to_set("submitted", f"c-{i:03d}")
+        cp.clear()
+        # Add 4 more — still below threshold, no disk write.
+        for i in range(4):
+            cp.add_to_set("submitted", f"d-{i:03d}")
+        assert not (tmp_path / ".checkpoint_phase.json").exists()
+
+    def test_invalid_threshold_rejected(self, tmp_path) -> None:
+        import pytest
+        with pytest.raises(ValueError, match=">= 1"):
+            Checkpoint(tmp_path, "phase", flush_threshold=0)

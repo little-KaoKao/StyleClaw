@@ -30,7 +30,11 @@ async def batch_submit_t2i(
         )
     model_config = get_model(model_id)
 
-    checkpoint = Checkpoint(project_store.project_dir(name), f"batch-t2i-{batch_num:03d}")
+    checkpoint = Checkpoint(
+        project_store.project_dir(name),
+        f"batch-t2i-{batch_num:03d}",
+        flush_threshold=10,
+    )
     submitted_ids = set(checkpoint.get("submitted", []))
 
     pending = [
@@ -72,10 +76,17 @@ async def batch_submit_t2i(
     # cancel the other 99. Each case's success/failure is recorded
     # independently — checkpoint updates only on success, so retrying picks
     # the failures back up.
-    raw_results = await asyncio.gather(
-        *[_wrapped(c) for c in pending],
-        return_exceptions=True,
-    )
+    # try/finally around gather: explicit flush() drains the last 1-9
+    # unflushed entries (we batch at threshold=10). Without this, a Ctrl-C
+    # mid-batch would re-submit them on resume — that's real money on the
+    # RunningHub side.
+    try:
+        raw_results = await asyncio.gather(
+            *[_wrapped(c) for c in pending],
+            return_exceptions=True,
+        )
+    finally:
+        checkpoint.flush()
     if pending and progress is not None:
         progress.close()
 
