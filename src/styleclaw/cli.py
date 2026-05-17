@@ -240,6 +240,46 @@ def init(
     typer.echo(f"Project initialized at {root}")
 
 
+def _task_summary_line(name: str, state: ProjectState) -> str:
+    """Render a compact one-line task summary for the current phase, e.g.
+    ``42 ok, 7 failed, 51 pending (100 total)``. Returns "" when there's
+    nothing meaningful to show (no records yet, or phase doesn't have
+    task-level state)."""
+    from styleclaw.core.models import TaskStatus
+
+    try:
+        if state.phase == Phase.MODEL_SELECT:
+            pass_num = state.current_model_select_pass or 1
+            records = project_store.load_all_task_records(name, pass_num=pass_num)
+        elif state.phase == Phase.STYLE_REFINE:
+            if state.current_round < 1:
+                return ""
+            pass_num = state.current_model_select_pass or 1
+            records = project_store.load_all_round_task_records(
+                name, state.current_round, pass_num=pass_num,
+            )
+        elif state.phase == Phase.BATCH_T2I:
+            if state.current_batch < 1:
+                return ""
+            records = project_store.load_all_batch_task_records(name, state.current_batch)
+        elif state.phase == Phase.BATCH_I2I:
+            if state.current_batch < 1:
+                return ""
+            records = project_store.load_all_i2i_task_records(name, state.current_batch)
+        else:
+            return ""
+    except (FileNotFoundError, OSError):
+        return ""
+
+    if not records:
+        return ""
+
+    ok = sum(1 for r in records.values() if r.status == TaskStatus.SUCCESS)
+    failed = sum(1 for r in records.values() if r.status == TaskStatus.FAILED)
+    pending = len(records) - ok - failed
+    return f"{ok} ok, {failed} failed, {pending} pending ({len(records)} total)"
+
+
 @app.command()
 def status(
     name: Optional[str] = typer.Argument(None, help="Project name (omit to list all)"),
@@ -265,6 +305,14 @@ def status(
     typer.echo(f"Updated: {state.last_updated}")
     if config.ip_info:
         typer.echo(f"IP Info: {config.ip_info[:100]}")
+
+    # Surface a one-line task summary for the phase the user is in. Saves a
+    # round-trip through "uh, did the batch finish?" → manually inspecting
+    # task.json files. Best-effort — missing dirs / corrupt records just
+    # mean we skip the line.
+    task_line = _task_summary_line(name, state)
+    if task_line:
+        typer.echo(f"Tasks:   {task_line}")
 
     from styleclaw.orchestrator.actions import PHASE_ACTIONS
     allowed = PHASE_ACTIONS.get(state.phase, [])

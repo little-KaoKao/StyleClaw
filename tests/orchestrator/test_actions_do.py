@@ -257,6 +257,82 @@ class TestDoPoll:
         assert result.ok is True
         assert call_count == 2
 
+    async def test_tqdm_bar_created_in_tty(self, monkeypatch) -> None:
+        # In a TTY, do_poll should create a tqdm bar instead of emitting the
+        # "Waiting..." log line. We mock sys.stdout.isatty so the test
+        # exercises the TTY path even though pytest's stdout isn't a TTY.
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        pending = {
+            "mj-v7": TaskRecord(task_id="t1", model_id="mj-v7", status="RUNNING"),
+        }
+        completed = {
+            "mj-v7": TaskRecord(task_id="t1", model_id="mj-v7", status="SUCCESS"),
+        }
+        call_count = 0
+
+        async def _mock_poll(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return pending if call_count == 1 else completed
+
+        # Pretend stdout is a TTY for the duration of the call.
+        import sys
+        monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
+
+        created: list = []
+        from tqdm import tqdm as _real_tqdm
+
+        class _SpyTqdm(_real_tqdm):
+            def __init__(self, *a, **kw):
+                created.append((a, kw))
+                super().__init__(*a, **kw)
+
+        monkeypatch.setattr("styleclaw.orchestrator.actions.tqdm", _SpyTqdm, raising=False)
+
+        with patch(
+            "styleclaw.scripts.poll.poll_model_select", side_effect=_mock_poll,
+        ):
+            result = await do_poll(_ctx(name), {})
+
+        assert result.ok is True
+        # Exactly one bar created across however many cycles ran.
+        assert len(created) == 1
+        # And it was given the right unit / total.
+        _, kw = created[0]
+        assert kw.get("unit") == "task"
+        assert kw.get("total") == 1
+
+    async def test_non_tty_keeps_waiting_log_line(self, monkeypatch, caplog) -> None:
+        # In CI / log capture there is no TTY; the log line must keep firing
+        # so the operator still gets per-cycle progress in the logs.
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        pending = {
+            "mj-v7": TaskRecord(task_id="t1", model_id="mj-v7", status="RUNNING"),
+        }
+        completed = {
+            "mj-v7": TaskRecord(task_id="t1", model_id="mj-v7", status="SUCCESS"),
+        }
+        call_count = 0
+
+        async def _mock_poll(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return pending if call_count == 1 else completed
+
+        import sys
+        monkeypatch.setattr(sys.stdout, "isatty", lambda: False, raising=False)
+
+        import logging
+        caplog.set_level(logging.INFO, logger="styleclaw.orchestrator.actions")
+
+        with patch(
+            "styleclaw.scripts.poll.poll_model_select", side_effect=_mock_poll,
+        ):
+            result = await do_poll(_ctx(name), {})
+
+        assert result.ok is True
+        assert any("Waiting..." in rec.message for rec in caplog.records)
+
 
 class TestDoEvaluate:
     async def test_model_select_no_images(self) -> None:

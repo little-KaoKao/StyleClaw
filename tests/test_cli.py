@@ -528,3 +528,45 @@ class TestStatusShowsPass:
         assert result.exit_code == 0
         assert "Pass:" in result.output
         assert "2" in result.output
+
+
+class TestStatusShowsTaskCounts:
+    """``status`` should answer "did the batch finish?" without making the
+    user open task.json by hand."""
+
+    def test_task_counts_for_batch_t2i(self, setup_project) -> None:
+        from styleclaw.core.models import TaskRecord
+
+        _set_state(Phase.BATCH_T2I, current_batch=1)
+        # 3 SUCCESS, 1 FAILED, 1 still QUEUED.
+        for cid, status in [
+            ("c-001", "SUCCESS"), ("c-002", "SUCCESS"), ("c-003", "SUCCESS"),
+            ("c-004", "FAILED"), ("c-005", "QUEUED"),
+        ]:
+            project_store.save_batch_task_record(
+                "test-proj", 1, cid,
+                TaskRecord(task_id=f"t-{cid}", model_id="mj-v7", status=status),
+            )
+
+        result = runner.invoke(app, ["status", "test-proj"])
+        assert result.exit_code == 0
+        assert "Tasks:" in result.output
+        assert "3 ok" in result.output
+        assert "1 failed" in result.output
+        assert "1 pending" in result.output
+        assert "5 total" in result.output
+
+    def test_task_counts_omitted_when_no_records(self, setup_project) -> None:
+        # MODEL_SELECT phase with no submitted tasks yet — the line should
+        # be suppressed entirely, not show "0 ok, 0 failed, 0 pending".
+        _set_state(Phase.MODEL_SELECT)
+        result = runner.invoke(app, ["status", "test-proj"])
+        assert result.exit_code == 0
+        assert "Tasks:" not in result.output
+
+    def test_task_counts_omitted_for_init_phase(self, setup_project) -> None:
+        # INIT has no task-level state by construction.
+        _set_state(Phase.INIT)
+        result = runner.invoke(app, ["status", "test-proj"])
+        assert result.exit_code == 0
+        assert "Tasks:" not in result.output

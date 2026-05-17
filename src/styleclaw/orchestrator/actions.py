@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Awaitable
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from tqdm import tqdm
 
 from styleclaw.core.config import MAX_AUTO_ROUNDS, MAX_POLL_CYCLES, ORCHESTRATOR_POLL_INTERVAL
 from styleclaw.core.models import Phase, TaskStatus
@@ -357,6 +358,7 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
 
 
 async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
+    import sys
     import time
 
     from styleclaw.scripts.poll import (
@@ -386,56 +388,96 @@ async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     state = project_store.load_state(ctx.project)
     poll_started = time.monotonic()
 
-    for cycle in range(max_cycles):
-        state = project_store.load_state(ctx.project)
+    # In a TTY use a tqdm bar that persists across cycles — it gives a clear
+    # visual of "X/Y tasks done" and an ETA. In non-TTY (CI, log capture)
+    # fall back to the old logger.info line so we don't blast partial-frame
+    # carriage returns into a logfile.
+    use_bar = sys.stdout.isatty()
+    bar: tqdm | None = None
+
+    def _scope_desc() -> str:
         if state.phase == Phase.MODEL_SELECT:
-            pass_num = state.current_model_select_pass or 1
-            records = await poll_model_select(ctx.project, ctx.client, pass_num=pass_num)
-        elif state.phase == Phase.STYLE_REFINE:
-            pass_num = state.current_model_select_pass or 1
-            records = await poll_style_refine(
-                ctx.project, ctx.client, state.current_round, pass_num=pass_num,
-            )
-        elif state.phase in (Phase.BATCH_T2I, Phase.BATCH_I2I):
-            phase_str = "i2i" if state.phase == Phase.BATCH_I2I else "t2i"
-            records = await poll_batch(ctx.project, ctx.client, state.current_batch, phase=phase_str)
+            return f"Polling model-select pass-{(state.current_model_select_pass or 1):03d}"
+        if state.phase == Phase.STYLE_REFINE:
+            return f"Polling style-refine round-{state.current_round:03d}"
+        if state.phase == Phase.BATCH_T2I:
+            return f"Polling batch-t2i {state.current_batch:03d}"
+        if state.phase == Phase.BATCH_I2I:
+            return f"Polling batch-i2i {state.current_batch:03d}"
+        return "Polling"
+
+    def _update_bar(records: dict, succeeded: int, failed: int, cycle: int) -> None:
+        nonlocal bar
+        if not use_bar:
+            return
+        if bar is None:
+            bar = tqdm(total=len(records), desc=_scope_desc(), unit="task")
         else:
-            return StepResult(ok=False, message=f"Nothing to poll in {state.phase}")
-
-        pending = [r for r in records.values() if r.status not in ("SUCCESS", "FAILED")]
-        succeeded = sum(1 for r in records.values() if r.status == TaskStatus.SUCCESS)
-        failed = sum(1 for r in records.values() if r.status == TaskStatus.FAILED)
-        if not pending:
-            # All tasks reached a terminal state. Auto-retry FAILED ones once
-            # (model-select and style-refine only — batch retries are too
-            # costly with 100 cases and should stay explicit). After retry,
-            # always continue downstream: partial failures are tolerated so
-            # evaluate/select-model don't get blocked by a few timeouts.
-            if failed:
-                if state.phase == Phase.MODEL_SELECT:
-                    pass_num = state.current_model_select_pass or 1
-                    records = await retry_failed_model_select(
-                        ctx.project, ctx.client, pass_num=pass_num,
-                    )
-                elif state.phase == Phase.STYLE_REFINE:
-                    pass_num = state.current_model_select_pass or 1
-                    records = await retry_failed_style_refine(
-                        ctx.project, ctx.client, state.current_round, pass_num=pass_num,
-                    )
-                succeeded = sum(1 for r in records.values() if r.status == TaskStatus.SUCCESS)
-                failed = sum(1 for r in records.values() if r.status == TaskStatus.FAILED)
-
-            msg = f"{succeeded}/{len(records)} succeeded"
-            if failed:
-                msg += f" ({failed} failed, skipping)"
-            return StepResult(ok=True, message=msg, data={"succeeded": succeeded, "failed": failed})
-
-        logger.info(
-            "Waiting... %d/%d completed (cycle %d/%d, %ds elapsed)",
-            succeeded + failed, len(records), cycle + 1, max_cycles,
-            int(time.monotonic() - poll_started),
+            bar.total = len(records)
+        bar.n = succeeded + failed
+        bar.set_postfix(
+            ok=succeeded, fail=failed,
+            cycle=f"{cycle + 1}/{max_cycles}",
         )
-        await asyncio.sleep(ctx.poll_interval)
+        bar.refresh()
+
+    try:
+        for cycle in range(max_cycles):
+            state = project_store.load_state(ctx.project)
+            if state.phase == Phase.MODEL_SELECT:
+                pass_num = state.current_model_select_pass or 1
+                records = await poll_model_select(ctx.project, ctx.client, pass_num=pass_num)
+            elif state.phase == Phase.STYLE_REFINE:
+                pass_num = state.current_model_select_pass or 1
+                records = await poll_style_refine(
+                    ctx.project, ctx.client, state.current_round, pass_num=pass_num,
+                )
+            elif state.phase in (Phase.BATCH_T2I, Phase.BATCH_I2I):
+                phase_str = "i2i" if state.phase == Phase.BATCH_I2I else "t2i"
+                records = await poll_batch(ctx.project, ctx.client, state.current_batch, phase=phase_str)
+            else:
+                return StepResult(ok=False, message=f"Nothing to poll in {state.phase}")
+
+            pending = [r for r in records.values() if r.status not in ("SUCCESS", "FAILED")]
+            succeeded = sum(1 for r in records.values() if r.status == TaskStatus.SUCCESS)
+            failed = sum(1 for r in records.values() if r.status == TaskStatus.FAILED)
+            _update_bar(records, succeeded, failed, cycle)
+            if not pending:
+                # All tasks reached a terminal state. Auto-retry FAILED ones once
+                # (model-select and style-refine only — batch retries are too
+                # costly with 100 cases and should stay explicit). After retry,
+                # always continue downstream: partial failures are tolerated so
+                # evaluate/select-model don't get blocked by a few timeouts.
+                if failed:
+                    if state.phase == Phase.MODEL_SELECT:
+                        pass_num = state.current_model_select_pass or 1
+                        records = await retry_failed_model_select(
+                            ctx.project, ctx.client, pass_num=pass_num,
+                        )
+                    elif state.phase == Phase.STYLE_REFINE:
+                        pass_num = state.current_model_select_pass or 1
+                        records = await retry_failed_style_refine(
+                            ctx.project, ctx.client, state.current_round, pass_num=pass_num,
+                        )
+                    succeeded = sum(1 for r in records.values() if r.status == TaskStatus.SUCCESS)
+                    failed = sum(1 for r in records.values() if r.status == TaskStatus.FAILED)
+                    _update_bar(records, succeeded, failed, cycle)
+
+                msg = f"{succeeded}/{len(records)} succeeded"
+                if failed:
+                    msg += f" ({failed} failed, skipping)"
+                return StepResult(ok=True, message=msg, data={"succeeded": succeeded, "failed": failed})
+
+            if not use_bar:
+                logger.info(
+                    "Waiting... %d/%d completed (cycle %d/%d, %ds elapsed)",
+                    succeeded + failed, len(records), cycle + 1, max_cycles,
+                    int(time.monotonic() - poll_started),
+                )
+            await asyncio.sleep(ctx.poll_interval)
+    finally:
+        if bar is not None:
+            bar.close()
 
     return StepResult(ok=False, message=f"Poll timed out after {max_cycles} cycles")
 
