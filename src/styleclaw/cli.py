@@ -107,25 +107,28 @@ async def _build_context(
     needs_llm: bool = False,
     show_thinking: bool = False,
     thinking_budget: int = 5000,
+    existing_llm: Any = None,
 ) -> AsyncIterator[ExecutionContext]:
     from styleclaw.providers.runninghub.client import RunningHubClient
 
     client = None
-    llm = None
+    llm = existing_llm
+    owns_llm = False
     try:
         if needs_client:
             client = RunningHubClient(api_key=_get_api_key())
-        if needs_llm:
+        if needs_llm and llm is None:
             llm = _build_llm_provider()
+            owns_llm = True
         yield ExecutionContext(
             project=project, client=client, llm=llm,
             show_thinking=show_thinking, thinking_budget=thinking_budget,
         )
     finally:
-        for label, resource in (("client", client), ("llm", llm)):
-            if resource is None:
-                continue
-            await _close_resource(resource, label)
+        if client is not None:
+            await _close_resource(client, "client")
+        if llm is not None and owns_llm:
+            await _close_resource(llm, "llm")
 
 
 def _run_action(
@@ -135,13 +138,29 @@ def _run_action(
     show_thinking: bool = False,
     thinking_budget: int = 5000,
 ) -> StepResult:
+    """Run a single action via the same executor used by ``styleclaw run``.
+
+    Constructs a one-step ``ActionPlan`` so confirmation/argument-validation/
+    hook-dispatch logic stays in a single place (``executor.execute``). The
+    CLI caller is responsible for any phase precondition checks; this helper
+    only handles transport and error mapping.
+    """
     import httpx
 
+    from styleclaw.core.models import Action, ActionPlan
     from styleclaw.orchestrator.actions import ACTION_REGISTRY
+    from styleclaw.orchestrator.executor import execute
 
     action_def = ACTION_REGISTRY.get(action_name)
     if action_def is None:
         raise ValueError(f"Unknown action: {action_name}")
+
+    plan = ActionPlan(
+        summary=action_name,
+        steps=[Action(name=action_name, description=action_name, args=args or {})],
+        loop=None,
+        stop_summary="",
+    )
 
     async def _exec() -> StepResult:
         async with _build_context(
@@ -151,19 +170,28 @@ def _run_action(
             show_thinking=show_thinking,
             thinking_budget=thinking_budget,
         ) as ctx:
-            return await action_def.fn(ctx, args or {})
+            results = await execute(plan, ctx)
+            return results[-1] if results else StepResult(
+                ok=False, message="executor returned no result",
+            )
 
     try:
         return asyncio.run(_exec())
     except (ValueError, RuntimeError, FileNotFoundError, FileExistsError) as exc:
-        typer.echo(f"Error: {exc}", err=True)
+        from styleclaw.core.redact import redact_exc
+        typer.echo(f"Error: {redact_exc(exc)}", err=True)
         raise typer.Exit(1) from exc
     except httpx.HTTPStatusError as exc:
-        typer.echo(f"API error ({exc.response.status_code}): {exc}", err=True)
-        raise typer.Exit(1) from exc
+        from styleclaw.core.redact import redact_exc
+        typer.echo(
+            f"API error ({exc.response.status_code}): {redact_exc(exc)}",
+            err=True,
+        )
+        raise typer.Exit(75) from exc
     except httpx.TransportError as exc:
-        typer.echo(f"Network error: {exc}", err=True)
-        raise typer.Exit(1) from exc
+        from styleclaw.core.redact import redact_exc
+        typer.echo(f"Network error: {redact_exc(exc)}", err=True)
+        raise typer.Exit(75) from exc
 
 
 @app.command()
@@ -237,6 +265,11 @@ def status(
     typer.echo(f"Updated: {state.last_updated}")
     if config.ip_info:
         typer.echo(f"IP Info: {config.ip_info[:100]}")
+
+    from styleclaw.orchestrator.actions import PHASE_ACTIONS
+    allowed = PHASE_ACTIONS.get(state.phase, [])
+    if allowed:
+        typer.echo(f"Allowed: {', '.join(allowed)}")
 
     from styleclaw.orchestrator.suggestions import suggest_next_steps
     suggestions = suggest_next_steps(name)
@@ -1235,60 +1268,61 @@ def run(
         llm = _build_llm_provider()
         try:
             action_plan = await plan(llm, project, intent)
+
+            display_plan(action_plan, project)
+
+            if dry_run:
+                typer.echo("(dry-run) 未执行；去掉 --dry-run 后再跑即可")
+                return
+
+            if audit is not None:
+                audit.record_plan(action_plan)
+
+            if not yes and not typer.confirm("Execute?"):
+                typer.echo("Cancelled.")
+                if audit is not None:
+                    audit.cancelled()
+                raise typer.Exit(0)
+
+            needs_client = any(
+                ACTION_REGISTRY.get(s.name) and ACTION_REGISTRY[s.name].needs_client
+                for s in action_plan.steps
+            )
+            needs_llm = any(
+                ACTION_REGISTRY.get(s.name) and ACTION_REGISTRY[s.name].needs_llm
+                for s in action_plan.steps
+            )
+
+            def _on_start(i: int, name: str, desc: str) -> None:
+                typer.echo(f"\n  [{i + 1}/{len(action_plan.steps)}] {name} — {desc}")
+                if audit is not None:
+                    audit.step_started(i)
+
+            def _on_done(i: int, name: str, result: StepResult) -> None:
+                if result.ok:
+                    typer.echo(f"  -> {result.message}")
+                else:
+                    typer.echo(f"  x  {result.message}", err=True)
+                if audit is not None:
+                    audit.step_finished(i, name, result.ok, result.message)
+
+            confirm_fn = None if yes else _confirm_dispatch
+
+            async with _build_context(
+                project, needs_client, needs_llm,
+                show_thinking=show_thinking, thinking_budget=thinking_budget,
+                existing_llm=llm if needs_llm else None,
+            ) as ctx:
+                results = await execute(
+                    action_plan, ctx,
+                    on_step_start=_on_start,
+                    on_step_done=_on_done,
+                    on_confirm=confirm_fn,
+                )
+                if results and not results[-1].ok:
+                    raise typer.Exit(1)
         finally:
             await _close_resource(llm, "llm")
-
-        display_plan(action_plan, project)
-
-        if dry_run:
-            typer.echo("(dry-run) 未执行；去掉 --dry-run 后再跑即可")
-            return
-
-        if audit is not None:
-            audit.record_plan(action_plan)
-
-        if not yes and not typer.confirm("Execute?"):
-            typer.echo("Cancelled.")
-            if audit is not None:
-                audit.cancelled()
-            raise typer.Exit(0)
-
-        needs_client = any(
-            ACTION_REGISTRY.get(s.name) and ACTION_REGISTRY[s.name].needs_client
-            for s in action_plan.steps
-        )
-        needs_llm = any(
-            ACTION_REGISTRY.get(s.name) and ACTION_REGISTRY[s.name].needs_llm
-            for s in action_plan.steps
-        )
-
-        def _on_start(i: int, name: str, desc: str) -> None:
-            typer.echo(f"\n  [{i + 1}/{len(action_plan.steps)}] {name} — {desc}")
-            if audit is not None:
-                audit.step_started(i)
-
-        def _on_done(i: int, name: str, result: StepResult) -> None:
-            if result.ok:
-                typer.echo(f"  -> {result.message}")
-            else:
-                typer.echo(f"  x  {result.message}", err=True)
-            if audit is not None:
-                audit.step_finished(i, name, result.ok, result.message)
-
-        confirm_fn = None if yes else _confirm_dispatch
-
-        async with _build_context(
-            project, needs_client, needs_llm,
-            show_thinking=show_thinking, thinking_budget=thinking_budget,
-        ) as ctx:
-            results = await execute(
-                action_plan, ctx,
-                on_step_start=_on_start,
-                on_step_done=_on_done,
-                on_confirm=confirm_fn,
-            )
-            if results and not results[-1].ok:
-                raise typer.Exit(1)
 
     asyncio.run(_plan_and_execute())
 

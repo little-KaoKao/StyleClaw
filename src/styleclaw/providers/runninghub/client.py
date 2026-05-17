@@ -11,6 +11,7 @@ from styleclaw.core.config import (
     RH_CLIENT_CONNECT_TIMEOUT,
     RH_CLIENT_TIMEOUT,
 )
+from styleclaw.core.redact import redact_exc
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class RunningHubClient:
                     wait = 2**attempt
                     logger.warning(
                         "Request to %s failed (attempt %d/%d): %s. Retrying in %ds.",
-                        path, attempt + 1, MAX_RETRIES, exc, wait,
+                        path, attempt + 1, MAX_RETRIES, redact_exc(exc), wait,
                     )
                     await asyncio.sleep(wait)
             except httpx.TransportError as exc:
@@ -69,7 +70,7 @@ class RunningHubClient:
                     wait = 2**attempt
                     logger.warning(
                         "Request to %s failed (attempt %d/%d): %s. Retrying in %ds.",
-                        path, attempt + 1, MAX_RETRIES, exc, wait,
+                        path, attempt + 1, MAX_RETRIES, redact_exc(exc), wait,
                     )
                     await asyncio.sleep(wait)
         raise RuntimeError(
@@ -98,7 +99,7 @@ class RunningHubClient:
                     wait = 2**attempt
                     logger.warning(
                         "Upload to %s failed (attempt %d/%d): %s. Retrying in %ds.",
-                        path, attempt + 1, MAX_RETRIES, exc, wait,
+                        path, attempt + 1, MAX_RETRIES, redact_exc(exc), wait,
                     )
                     await asyncio.sleep(wait)
             except httpx.TransportError as exc:
@@ -107,7 +108,7 @@ class RunningHubClient:
                     wait = 2**attempt
                     logger.warning(
                         "Upload to %s failed (attempt %d/%d): %s. Retrying in %ds.",
-                        path, attempt + 1, MAX_RETRIES, exc, wait,
+                        path, attempt + 1, MAX_RETRIES, redact_exc(exc), wait,
                     )
                     await asyncio.sleep(wait)
         raise RuntimeError(

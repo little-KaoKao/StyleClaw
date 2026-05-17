@@ -185,6 +185,10 @@ def _load_variant_records(results_dir: Path) -> dict[str, TaskRecord]:
     records: dict[str, TaskRecord] = {}
     if not results_dir.exists():
         return records
+    cached = _VARIANT_RECORD_CACHE.get(str(results_dir))
+    fingerprint = _results_dir_fingerprint(results_dir)
+    if cached is not None and cached[0] == fingerprint:
+        return dict(cached[1])
     for model_dir in results_dir.iterdir():
         if not model_dir.is_dir():
             continue
@@ -195,7 +199,43 @@ def _load_variant_records(results_dir: Path) -> dict[str, TaskRecord]:
             if task_file.exists():
                 key = f"{model_dir.name}/{variant_dir.name}"
                 records[key] = _load_model(TaskRecord, task_file)
+    _VARIANT_RECORD_CACHE[str(results_dir)] = (fingerprint, dict(records))
     return records
+
+
+# Module-level memo. Cache entry = (fingerprint, dict). The fingerprint is a
+# tuple of (results_dir_mtime_ns, max(task.json mtime_ns across all task files))
+# so any change — adding a model, finishing a poll, retrying a failed task —
+# invalidates the entry on the next call. Capped at 32 entries to keep memory
+# bounded in long-running sessions; the LRU here is dead simple (oldest wins).
+_VARIANT_RECORD_CACHE: dict[str, tuple[tuple[int, int], dict[str, TaskRecord]]] = {}
+_VARIANT_RECORD_CACHE_MAX = 32
+
+
+def _results_dir_fingerprint(results_dir: Path) -> tuple[int, int]:
+    try:
+        dir_mtime = results_dir.stat().st_mtime_ns
+    except OSError:
+        return (0, 0)
+    max_task_mtime = 0
+    for model_dir in results_dir.iterdir():
+        if not model_dir.is_dir():
+            continue
+        for variant_dir in model_dir.iterdir():
+            if not variant_dir.is_dir():
+                continue
+            task_file = variant_dir / "task.json"
+            try:
+                m = task_file.stat().st_mtime_ns
+            except OSError:
+                continue
+            if m > max_task_mtime:
+                max_task_mtime = m
+    # Evict the oldest entries if the cache grew unbounded.
+    if len(_VARIANT_RECORD_CACHE) > _VARIANT_RECORD_CACHE_MAX:
+        for old_key in list(_VARIANT_RECORD_CACHE)[:-_VARIANT_RECORD_CACHE_MAX]:
+            _VARIANT_RECORD_CACHE.pop(old_key, None)
+    return (dir_mtime, max_task_mtime)
 
 
 def load_all_task_records(name: str, pass_num: int = 1) -> dict[str, TaskRecord]:

@@ -15,6 +15,7 @@ from styleclaw.core.config import (
     LLM_READ_TIMEOUT,
     LLM_WRITE_TIMEOUT,
 )
+from styleclaw.core.redact import redact_exc
 from styleclaw.providers.llm.base import LLMResponse
 
 logger = logging.getLogger(__name__)
@@ -140,7 +141,7 @@ class BedrockProvider:
                     wait = 2**attempt
                     logger.warning(
                         "Bedrock request failed (attempt %d/%d): %s. Retrying in %ds.",
-                        attempt + 1, MAX_RETRIES, exc, wait,
+                        attempt + 1, MAX_RETRIES, redact_exc(exc), wait,
                     )
                     await asyncio.sleep(wait)
             except httpx.HTTPStatusError as exc:
@@ -153,7 +154,7 @@ class BedrockProvider:
                     wait = 2**attempt
                     logger.warning(
                         "Bedrock request failed (attempt %d/%d): %s. Retrying in %ds.",
-                        attempt + 1, MAX_RETRIES, exc, wait,
+                        attempt + 1, MAX_RETRIES, redact_exc(exc), wait,
                     )
                     await asyncio.sleep(wait)
         raise RuntimeError(

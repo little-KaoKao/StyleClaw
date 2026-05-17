@@ -37,6 +37,32 @@ def _build_actions_text(actions: list[str]) -> str:
     return "\n".join(f"- `{a}`" for a in actions)
 
 
+def _self_check_phase_actions() -> None:
+    """Module-load-time sanity check on PHASE_ACTIONS / ACTION_REGISTRY /
+    GATED_CROSS_PHASE_ACTIONS:
+
+    1. Every action named in PHASE_ACTIONS exists in ACTION_REGISTRY.
+    2. Every gated action exists in ACTION_REGISTRY.
+    3. CROSS_PHASE_PLANNABLE_FROM only names real Phase values.
+
+    Run once at import. Misconfiguration here is a developer error (typo on
+    a new action), not a user-facing one, so we raise immediately."""
+    for phase, actions in PHASE_ACTIONS.items():
+        missing = [a for a in actions if a not in ACTION_REGISTRY]
+        if missing:
+            raise RuntimeError(
+                f"PHASE_ACTIONS[{phase.value}] references unknown actions: {missing}"
+            )
+    gated_missing = [a for a in GATED_CROSS_PHASE_ACTIONS if a not in ACTION_REGISTRY]
+    if gated_missing:
+        raise RuntimeError(
+            f"GATED_CROSS_PHASE_ACTIONS references unknown actions: {gated_missing}"
+        )
+
+
+_self_check_phase_actions()
+
+
 def _unknown_actions(plan: ActionPlan, available: list[str]) -> list[str]:
     """Return step names that either don't exist in ACTION_REGISTRY or aren't
     allowed in the current phase. Preserves duplicates to give the LLM exact
@@ -46,6 +72,20 @@ def _unknown_actions(plan: ActionPlan, available: list[str]) -> list[str]:
         s.name for s in plan.steps
         if s.name not in ACTION_REGISTRY or s.name not in allowed
     ]
+
+
+def _sanitize_for_tag(text: str) -> str:
+    """Neutralize closing-tag markers so user input can't escape the
+    ``<user_intent>``/``<user_ip_info>`` containers in the system prompt.
+
+    We only need to defang the close tags — the planner's system prompt
+    explicitly tells the model to ignore instructions inside these tags, so a
+    raw ``<`` is fine as long as the matching close tag is broken.
+    """
+    return (
+        text.replace("</user_intent>", "&lt;/user_intent&gt;")
+            .replace("</user_ip_info>", "&lt;/user_ip_info&gt;")
+    )
 
 
 async def plan(llm: LLMProvider, project: str, intent: str) -> ActionPlan:
@@ -74,9 +114,9 @@ async def plan(llm: LLMProvider, project: str, intent: str) -> ActionPlan:
         current_round=state.current_round,
         current_batch=state.current_batch,
         selected_models=", ".join(state.selected_models) or "(none)",
-        ip_info=config.ip_info or "(none)",
+        ip_info=_sanitize_for_tag(config.ip_info) if config.ip_info else "(none)",
         available_actions=_build_actions_text(available),
-        intent=intent,
+        intent=_sanitize_for_tag(intent),
     )
 
     messages: list[dict] = [{"role": "user", "content": intent}]

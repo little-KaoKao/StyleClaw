@@ -223,14 +223,14 @@ class ProjectState(_FrozenModel):
         })
 
 
-class Action(BaseModel):
+class Action(_FrozenModel):
     name: str
     description: str
     args: dict[str, Any] = Field(default_factory=dict)
 
 
 class LoopConfig(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     start_step: int = Field(alias="from", validation_alias=AliasChoices("start_step", "from"))
     end_step: int = Field(alias="to", validation_alias=AliasChoices("end_step", "to"))
@@ -238,7 +238,7 @@ class LoopConfig(BaseModel):
     condition: str = ""
 
 
-class ActionPlan(BaseModel):
+class ActionPlan(_FrozenModel):
     summary: str
     steps: list[Action]
     loop: LoopConfig | None = None

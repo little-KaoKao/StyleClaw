@@ -16,6 +16,7 @@ from styleclaw.core.config import (
     LLM_WRITE_TIMEOUT,
     STREAM_DISPLAY,
 )
+from styleclaw.core.redact import redact_exc
 from styleclaw.providers.llm.base import LLMResponse
 
 logger = logging.getLogger(__name__)
@@ -205,11 +206,10 @@ class RunningHubLLMProvider:
                 if attempt < MAX_RETRIES - 1:
                     wait = 2**attempt
                     logger.warning(
-                        "RunningHub LLM request failed (attempt %d/%d): %s: %s. Retrying in %ds.",
+                        "RunningHub LLM request failed (attempt %d/%d): %s. Retrying in %ds.",
                         attempt + 1,
                         MAX_RETRIES,
-                        type(exc).__name__,
-                        exc,
+                        redact_exc(exc),
                         wait,
                     )
                     await asyncio.sleep(wait)
@@ -221,11 +221,10 @@ class RunningHubLLMProvider:
                 if attempt < MAX_RETRIES - 1:
                     wait = 2**attempt
                     logger.warning(
-                        "RunningHub LLM request failed (attempt %d/%d): %s: %s. Retrying in %ds.",
+                        "RunningHub LLM request failed (attempt %d/%d): %s. Retrying in %ds.",
                         attempt + 1,
                         MAX_RETRIES,
-                        type(exc).__name__,
-                        exc,
+                        redact_exc(exc),
                         wait,
                     )
                     await asyncio.sleep(wait)

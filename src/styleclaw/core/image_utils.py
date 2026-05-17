@@ -44,7 +44,7 @@ def _cache_key(path: Path) -> str:
     return h.hexdigest()
 
 
-def _cache_load(path: Path) -> tuple[bytes, str] | None:
+def _read_cache_payload(path: Path) -> dict | None:
     if not _cache_enabled():
         return None
     try:
@@ -54,10 +54,34 @@ def _cache_load(path: Path) -> tuple[bytes, str] | None:
     if not cache_file.exists():
         return None
     try:
-        payload = json.loads(cache_file.read_text(encoding="utf-8"))
-        return base64.b64decode(payload["data_b64"]), payload["media_type"]
-    except (OSError, json.JSONDecodeError, KeyError, ValueError) as exc:
+        return json.loads(cache_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
         logger.debug("LLM image cache miss (corrupt entry %s): %s", cache_file.name, exc)
+        return None
+
+
+def _cache_load(path: Path) -> tuple[bytes, str] | None:
+    payload = _read_cache_payload(path)
+    if payload is None:
+        return None
+    try:
+        return base64.b64decode(payload["data_b64"]), payload["media_type"]
+    except (KeyError, ValueError) as exc:
+        logger.debug("LLM image cache corrupt: %s", exc)
+        return None
+
+
+def _cache_load_b64(path: Path) -> tuple[str, str] | None:
+    """Return ``(base64_str, media_type)`` without decoding back to bytes —
+    used by ``encode_image_for_llm`` which would just re-encode to base64
+    immediately anyway."""
+    payload = _read_cache_payload(path)
+    if payload is None:
+        return None
+    try:
+        return payload["data_b64"], payload["media_type"]
+    except KeyError as exc:
+        logger.debug("LLM image cache corrupt: %s", exc)
         return None
 
 
@@ -185,6 +209,13 @@ def resize_for_llm(image_path: Path | str) -> tuple[bytes, str]:
 
 
 def encode_image_for_llm(image_path: Path | str) -> tuple[str, str]:
+    # Fast path: if a cache entry already exists, return its b64 string
+    # directly — no need to decode-then-re-encode through resize_for_llm.
+    path = Path(image_path)
+    if path.is_file():
+        cached_b64 = _cache_load_b64(path)
+        if cached_b64 is not None:
+            return cached_b64
     data, media_type = resize_for_llm(image_path)
     return base64.b64encode(data).decode("utf-8"), media_type
 

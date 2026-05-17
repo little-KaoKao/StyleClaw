@@ -16,6 +16,7 @@ from styleclaw.core.config import (
     LLM_WRITE_TIMEOUT,
     STREAM_DISPLAY,
 )
+from styleclaw.core.redact import redact_exc
 from styleclaw.providers.llm.base import LLMResponse
 
 logger = logging.getLogger(__name__)
@@ -137,8 +138,8 @@ class OpenAICompatProvider:
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:
                     wait = 2**attempt
-                    logger.warning("Request failed (attempt %d/%d): %s: %s. Retrying in %ds.",
-                                   attempt + 1, MAX_RETRIES, type(exc).__name__, exc, wait)
+                    logger.warning("Request failed (attempt %d/%d): %s. Retrying in %ds.",
+                                   attempt + 1, MAX_RETRIES, redact_exc(exc), wait)
                     await asyncio.sleep(wait)
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
@@ -147,7 +148,7 @@ class OpenAICompatProvider:
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:
                     wait = 2**attempt
-                    logger.warning("Request failed (attempt %d/%d): %s: %s. Retrying in %ds.",
-                                   attempt + 1, MAX_RETRIES, type(exc).__name__, exc, wait)
+                    logger.warning("Request failed (attempt %d/%d): %s. Retrying in %ds.",
+                                   attempt + 1, MAX_RETRIES, redact_exc(exc), wait)
                     await asyncio.sleep(wait)
         raise RuntimeError(f"LLM invoke failed after {MAX_RETRIES} retries") from last_exc
