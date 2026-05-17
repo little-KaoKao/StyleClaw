@@ -19,6 +19,7 @@ htmlcov/
 .vscode/
 .idea/
 .history/
+.claude/
 
 # Worktrees
 .worktrees/
