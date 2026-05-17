@@ -284,3 +284,38 @@ class TestUpdateState:
             sample_config.name, lambda s: s.with_round(42),
         )
         assert new_state.current_round == 42
+
+
+class TestLabelHelpers:
+    """The single source of truth for ``pass-NNN`` / ``round-NNN`` /
+    ``batch-NNN`` formatting. If the on-disk layout ever changes (UUIDs,
+    date-prefixed dirs, etc.), it changes here and nowhere else."""
+
+    def test_pass_label_zero_padded(self):
+        assert project_store.pass_label(1) == "pass-001"
+        assert project_store.pass_label(42) == "pass-042"
+        assert project_store.pass_label(999) == "pass-999"
+
+    def test_round_label_zero_padded(self):
+        assert project_store.round_label(1) == "round-001"
+        assert project_store.round_label(7) == "round-007"
+
+    def test_batch_label_zero_padded(self):
+        assert project_store.batch_label(1) == "batch-001"
+        assert project_store.batch_label(12) == "batch-012"
+
+    def test_round_glob_across_passes(self):
+        # Used by the rollback "does this round exist?" check.
+        assert project_store.round_glob_across_passes(3) == "pass-*/round-003"
+
+    def test_label_helpers_used_by_dir_helpers(self, sample_config):
+        # Verify the directory helpers route through the labels — change
+        # the label format and the directory should follow.
+        project_store.create_project(sample_config)
+        msd = project_store.model_select_dir(sample_config.name, 5)
+        assert msd.name == project_store.pass_label(5)
+        rd = project_store.round_dir(sample_config.name, 3, pass_num=2)
+        assert rd.name == project_store.round_label(3)
+        assert rd.parent.name == project_store.pass_label(2)
+        bd = project_store.batch_t2i_dir(sample_config.name, 7)
+        assert bd.name == project_store.batch_label(7)

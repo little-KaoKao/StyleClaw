@@ -10,6 +10,7 @@ from styleclaw.core.models import PanelResult, PromptConfig, RoundEvaluation
 from styleclaw.core.panel import run_panel
 from styleclaw.core.text_utils import clean_json, sanitize_braces
 from styleclaw.providers.llm.base import LLMProvider
+from styleclaw.storage.project_store import round_label
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ async def refine_with_panel(
         **winner.payload,
         "round": round_num,
         "derived_from": (
-            f"round-{round_num - 1:03d}" if round_num > 1 else "initial-analysis"
+            round_label(round_num - 1) if round_num > 1 else "initial-analysis"
         ),
     })
     logger.info(

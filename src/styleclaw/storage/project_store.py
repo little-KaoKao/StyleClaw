@@ -39,6 +39,36 @@ def _validate_project_name(name: str) -> None:
         )
 
 
+# --- Naming helpers ---
+#
+# These render the canonical zero-padded format we use for passes, rounds,
+# and batches: ``pass-007`` / ``round-003`` / ``batch-012``. Centralizing
+# them means a single edit changes the format everywhere — paths, log
+# lines, user-facing messages, glob patterns. Use them everywhere instead
+# of inlining ``f"pass-{n:03d}"``.
+
+
+def pass_label(pass_num: int) -> str:
+    """Canonical display label for a model-select pass, e.g. ``pass-007``."""
+    return f"pass-{pass_num:03d}"
+
+
+def round_label(round_num: int) -> str:
+    """Canonical display label for a style-refine round, e.g. ``round-003``."""
+    return f"round-{round_num:03d}"
+
+
+def batch_label(batch_num: int) -> str:
+    """Canonical display label for a batch, e.g. ``batch-012``."""
+    return f"batch-{batch_num:03d}"
+
+
+def round_glob_across_passes(round_num: int) -> str:
+    """Glob pattern matching this round under any pass — useful for the
+    rollback command's existence check that scans ``style-refine/pass-*/``."""
+    return f"pass-*/{round_label(round_num)}"
+
+
 def _load_model(model_cls: type[T], path: Path) -> T:
     return model_cls.model_validate(_read_json(path))
 
@@ -189,7 +219,7 @@ def save_uploads(name: str, records: list[UploadRecord]) -> None:
 def model_select_dir(name: str, pass_num: int) -> Path:
     if pass_num < 1:
         raise ValueError(f"pass_num must be >= 1, got {pass_num}")
-    d = project_dir(name) / "model-select" / f"pass-{pass_num:03d}"
+    d = project_dir(name) / "model-select" / pass_label(pass_num)
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -332,7 +362,7 @@ def round_dir(name: str, round_num: int, pass_num: int = 1) -> Path:
         raise ValueError(f"pass_num must be >= 1, got {pass_num}")
     d = (
         project_dir(name) / "style-refine"
-        / f"pass-{pass_num:03d}" / f"round-{round_num:03d}"
+        / pass_label(pass_num) / round_label(round_num)
     )
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -470,7 +500,7 @@ def load_model_select_panel_result(
 
 
 def batch_t2i_dir(name: str, batch_num: int) -> Path:
-    d = project_dir(name) / "batch-t2i" / f"batch-{batch_num:03d}"
+    d = project_dir(name) / "batch-t2i" / batch_label(batch_num)
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -511,7 +541,7 @@ def load_all_batch_task_records(
 
 
 def batch_i2i_dir(name: str, batch_num: int) -> Path:
-    d = project_dir(name) / "batch-i2i" / f"batch-{batch_num:03d}"
+    d = project_dir(name) / "batch-i2i" / batch_label(batch_num)
     d.mkdir(parents=True, exist_ok=True)
     return d
 

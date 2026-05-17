@@ -282,7 +282,7 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
                 return StepResult(
                     ok=False,
                     message=(
-                        f"`generate --force` would overwrite SUCCESS data in pass-{pass_num:03d}. "
+                        f"`generate --force` would overwrite SUCCESS data in {project_store.pass_label(pass_num)}. "
                         f"You usually don't need --force: a plain `generate` already retries "
                         f"FAILED tasks and skips SUCCESS ones. "
                         f"If you really want a fresh pass, run `retest-models` (same sref) "
@@ -340,7 +340,7 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
                 return StepResult(
                     ok=False,
                     message=(
-                        f"`generate --force` would overwrite SUCCESS data in round-{round_num:03d}. "
+                        f"`generate --force` would overwrite SUCCESS data in {project_store.round_label(round_num)}. "
                         f"You usually don't need --force: a plain `generate` already retries "
                         f"FAILED tasks and skips SUCCESS ones. "
                         f"To start a clean round, run `refine` first — it opens the next round."
@@ -397,13 +397,13 @@ async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
 
     def _scope_desc() -> str:
         if state.phase == Phase.MODEL_SELECT:
-            return f"Polling model-select pass-{(state.current_model_select_pass or 1):03d}"
+            return f"Polling model-select {project_store.pass_label(state.current_model_select_pass or 1)}"
         if state.phase == Phase.STYLE_REFINE:
-            return f"Polling style-refine round-{state.current_round:03d}"
+            return f"Polling style-refine {project_store.round_label(state.current_round)}"
         if state.phase == Phase.BATCH_T2I:
-            return f"Polling batch-t2i {state.current_batch:03d}"
+            return f"Polling batch-t2i {project_store.batch_label(state.current_batch)}"
         if state.phase == Phase.BATCH_I2I:
-            return f"Polling batch-i2i {state.current_batch:03d}"
+            return f"Polling batch-i2i {project_store.batch_label(state.current_batch)}"
         return "Polling"
 
     def _update_bar(records: dict, succeeded: int, failed: int, cycle: int) -> None:
@@ -1099,7 +1099,7 @@ async def do_set_sref(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
 
     msg = f"sref set to ref-{index + 1:03d}: {config.ref_images[index]}"
     if bumped_to is not None:
-        msg += f" (auto-bumped to pass-{bumped_to:03d}; previous pass preserved)"
+        msg += f" (auto-bumped to {project_store.pass_label(bumped_to)}; previous pass preserved)"
     return StepResult(ok=True, message=msg, data={"pass_num": bumped_to} if bumped_to else None)
 
 

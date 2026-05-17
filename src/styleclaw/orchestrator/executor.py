@@ -48,10 +48,7 @@ def _find_weakest_dimension(evaluation: RoundEvaluation) -> tuple[str, float] | 
 
 def _format_report_path(project: str, round_num: int, pass_num: int) -> str:
     report_path = (
-        project_store.project_dir(project)
-        / "style-refine"
-        / f"pass-{pass_num:03d}"
-        / f"round-{round_num:03d}"
+        project_store.round_dir(project, round_num, pass_num=pass_num)
         / "report.html"
     )
     # Use forward slashes regardless of platform — the path lands in user-

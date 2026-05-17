@@ -502,7 +502,10 @@ def migrate(
     if result.model_select_migrated:
         typer.echo(f"{name}: migrated model-select/ → model-select/pass-001/")
     if result.style_refine_rounds_migrated:
-        rounds = ", ".join(f"round-{r:03d}" for r in result.style_refine_rounds_migrated if r > 0)
+        rounds = ", ".join(
+            project_store.round_label(r)
+            for r in result.style_refine_rounds_migrated if r > 0
+        )
         typer.echo(f"{name}: migrated style-refine rounds → pass-001/ ({rounds})")
 
 
@@ -651,14 +654,13 @@ def evaluate(
     typer.echo(result.message)
 
     if show_thinking:
-        project_dir = project_store.project_dir(name)
         pass_num = state.current_model_select_pass or 1
         if state.phase == Phase.MODEL_SELECT:
-            md = project_dir / "model-select" / f"pass-{pass_num:03d}" / "evaluation.thinking.md"
+            md = project_store.model_select_dir(name, pass_num) / "evaluation.thinking.md"
         else:
             md = (
-                project_dir / "style-refine" / f"pass-{pass_num:03d}"
-                / f"round-{state.current_round:03d}" / "evaluation.thinking.md"
+                project_store.round_dir(name, state.current_round, pass_num=pass_num)
+                / "evaluation.thinking.md"
             )
         if md.exists():
             typer.echo("\n--- LLM thinking ---")
@@ -738,8 +740,8 @@ def refine(
         new_state = project_store.load_state(name)
         pass_num = new_state.current_model_select_pass or 1
         md = (
-            project_store.project_dir(name) / "style-refine" / f"pass-{pass_num:03d}"
-            / f"round-{new_state.current_round:03d}" / "prompt.thinking.md"
+            project_store.round_dir(name, new_state.current_round, pass_num=pass_num)
+            / "prompt.thinking.md"
         )
         if md.exists():
             typer.echo("\n--- LLM thinking ---")
@@ -847,7 +849,7 @@ def rollback(
 
     if round_num is not None and target == Phase.STYLE_REFINE and round_num > 0:
         style_refine_root = project_store.project_dir(name) / "style-refine"
-        pass_dirs = sorted(style_refine_root.glob(f"pass-*/round-{round_num:03d}"))
+        pass_dirs = sorted(style_refine_root.glob(project_store.round_glob_across_passes(round_num)))
         if not pass_dirs:
             typer.echo(f"Error: Round {round_num} does not exist on disk.", err=True)
             raise typer.Exit(1)

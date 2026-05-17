@@ -8,6 +8,7 @@ from styleclaw.core.image_utils import build_image_blocks_async
 from styleclaw.core.models import PromptConfig, RoundEvaluation
 from styleclaw.core.text_utils import clean_json, parse_llm_response, sanitize_braces
 from styleclaw.providers.llm.base import LLMProvider
+from styleclaw.storage.project_store import round_label
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ def _parse_prompt_config(raw_text: str, round_num: int) -> PromptConfig:
     data["round"] = round_num
     data.setdefault(
         "derived_from",
-        f"round-{round_num - 1:03d}" if round_num > 1 else "initial-analysis",
+        round_label(round_num - 1) if round_num > 1 else "initial-analysis",
     )
     return parse_llm_response(
         json.dumps(data), PromptConfig, "prompt refinement",

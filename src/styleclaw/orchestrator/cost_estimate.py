@@ -110,7 +110,10 @@ def _estimate_batch_submit(
     try:
         cfg = project_store.load_batch_config(project, batch_num)
     except FileNotFoundError:
-        return StepEstimate("batch-submit", note=f"(batch-{batch_num:03d} 还没有 cases.json)")
+        return StepEstimate(
+            "batch-submit",
+            note=f"({project_store.batch_label(batch_num)} 还没有 cases.json)",
+        )
 
     pending = sum(1 for c in cfg.cases if c.status == "pending")
     model_id = args.get("model") or (state.selected_models[0] if state.selected_models else None)
