@@ -150,3 +150,45 @@ class TestPollAndUpdate:
         result = await poll_and_update(mock_client, record)
         assert result.status == "FAILED"
         assert "timed out" in result.error_message
+
+
+class TestPollJitter:
+    """Verify the ±20% jitter we added to poll_task spreads the retry beats —
+    without this, 100 tasks fan out in lockstep and the backend gets a
+    thundering herd on every beat."""
+
+    async def test_poll_wait_uses_jittered_backoff(
+        self, mock_client: AsyncMock, monkeypatch,
+    ) -> None:
+        # Pin random.uniform so wait values are deterministic, then confirm
+        # the loop actually multiplies by the jitter on every sleep — both
+        # in the pre-exponential phase and after.
+        mock_client.post.side_effect = [
+            {"status": "RUNNING"},
+            {"status": "RUNNING"},
+            {"status": "RUNNING"},
+            {"status": "RUNNING"},
+            {"status": "SUCCESS", "results": []},
+        ]
+        sleeps: list[float] = []
+
+        async def _capture_sleep(d):
+            sleeps.append(d)
+
+        monkeypatch.setattr(
+            "styleclaw.providers.runninghub.tasks.asyncio.sleep", _capture_sleep,
+        )
+        from styleclaw.providers.runninghub import tasks as tasks_mod
+        # Force the multiplier to its lower bound; without jitter, sleeps[i]
+        # would equal `interval` (or post-3 base) exactly. With jitter * 0.8
+        # they should be strictly smaller.
+        monkeypatch.setattr(tasks_mod.random, "uniform", lambda a, b: 0.8)
+
+        await poll_task(mock_client, "t-jitter", interval=2.0, timeout=60.0)
+
+        # First 3 sleeps: base = 2.0, jittered = 1.6
+        assert sleeps[0] == pytest.approx(1.6)
+        assert sleeps[1] == pytest.approx(1.6)
+        assert sleeps[2] == pytest.approx(1.6)
+        # 4th sleep: base = 2.0 * 1.5^1 = 3.0, jittered = 2.4
+        assert sleeps[3] == pytest.approx(2.4)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from typing import Any
 
@@ -43,7 +44,11 @@ async def submit_task(
             endpoint, attempt + 1, SUBMIT_RETRIES, error_code, resp.get("errorMessage", ""),
         )
         if attempt < SUBMIT_RETRIES - 1:
-            await asyncio.sleep(SUBMIT_RETRY_DELAY * (attempt + 1))
+            # ±20% jitter on the linear backoff so 100 simultaneous batch
+            # submits retrying together don't all wake on the same beat.
+            await asyncio.sleep(
+                SUBMIT_RETRY_DELAY * (attempt + 1) * random.uniform(0.8, 1.2)
+            )
 
     task_id = resp.get("taskId", "")
     if not task_id:
@@ -105,7 +110,7 @@ async def poll_task(
                     f"Task {task_id} polling aborted: "
                     f"{max_consecutive_failures} consecutive network failures"
                 ) from exc
-            await asyncio.sleep(interval)
+            await asyncio.sleep(interval * random.uniform(0.8, 1.2))
             continue
         consecutive_failures = 0
         status = result.get("status", "")
@@ -116,11 +121,15 @@ async def poll_task(
                 f"Task {task_id} failed: {result.get('errorMessage', 'unknown error')}"
             )
         # Exponential backoff after the first 3 polls, capped at 60s.
+        # Multiplicative ±20% jitter desynchronizes large fan-outs — without
+        # it, 100 tasks that started together will all wake on the same beat
+        # and hammer the API in a thundering herd (and trip 429s).
         poll_count += 1
         if poll_count <= 3:
-            wait = interval
+            base = interval
         else:
-            wait = min(interval * (1.5 ** (poll_count - 3)), 60.0)
+            base = min(interval * (1.5 ** (poll_count - 3)), 60.0)
+        wait = base * random.uniform(0.8, 1.2)
         logger.debug("Task %s status=%s, waiting %.1fs...", task_id, status, wait)
         await asyncio.sleep(wait)
 

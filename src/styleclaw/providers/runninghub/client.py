@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from typing import Any, Self
 
 import httpx
@@ -58,18 +59,18 @@ class RunningHubClient:
                     raise
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:
-                    wait = 2**attempt
+                    wait = _backoff_with_jitter(attempt)
                     logger.warning(
-                        "Request to %s failed (attempt %d/%d): %s. Retrying in %ds.",
+                        "Request to %s failed (attempt %d/%d): %s. Retrying in %.1fs.",
                         path, attempt + 1, MAX_RETRIES, redact_exc(exc), wait,
                     )
                     await asyncio.sleep(wait)
             except httpx.TransportError as exc:
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:
-                    wait = 2**attempt
+                    wait = _backoff_with_jitter(attempt)
                     logger.warning(
-                        "Request to %s failed (attempt %d/%d): %s. Retrying in %ds.",
+                        "Request to %s failed (attempt %d/%d): %s. Retrying in %.1fs.",
                         path, attempt + 1, MAX_RETRIES, redact_exc(exc), wait,
                     )
                     await asyncio.sleep(wait)
@@ -96,18 +97,18 @@ class RunningHubClient:
                     raise
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:
-                    wait = 2**attempt
+                    wait = _backoff_with_jitter(attempt)
                     logger.warning(
-                        "Upload to %s failed (attempt %d/%d): %s. Retrying in %ds.",
+                        "Upload to %s failed (attempt %d/%d): %s. Retrying in %.1fs.",
                         path, attempt + 1, MAX_RETRIES, redact_exc(exc), wait,
                     )
                     await asyncio.sleep(wait)
             except httpx.TransportError as exc:
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:
-                    wait = 2**attempt
+                    wait = _backoff_with_jitter(attempt)
                     logger.warning(
-                        "Upload to %s failed (attempt %d/%d): %s. Retrying in %ds.",
+                        "Upload to %s failed (attempt %d/%d): %s. Retrying in %.1fs.",
                         path, attempt + 1, MAX_RETRIES, redact_exc(exc), wait,
                     )
                     await asyncio.sleep(wait)
@@ -117,3 +118,13 @@ class RunningHubClient:
 
     async def close(self) -> None:
         await self._client.aclose()
+
+
+def _backoff_with_jitter(attempt: int) -> float:
+    """Exponential backoff with full-spectrum ±20% jitter.
+
+    Used by both ``_post_with_retry`` and ``_upload_with_retry``. The jitter
+    is critical for 429 recovery — without it, all clients hitting the same
+    rate-limited endpoint retry on the same beat and starve each other.
+    """
+    return (2 ** attempt) * random.uniform(0.8, 1.2)

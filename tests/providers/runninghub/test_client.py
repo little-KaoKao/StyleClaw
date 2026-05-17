@@ -132,3 +132,27 @@ class TestSemaphoreIsInstanceAttribute:
     async def test_no_module_level_semaphore_map(self) -> None:
         import styleclaw.providers.runninghub.client as mod
         assert not hasattr(mod, "_semaphore_map")
+
+
+class TestBackoffJitter:
+    """The client retry backoff used to be a fixed ``2**attempt``. With many
+    clients racing 429s on the same endpoint, that lockstep retry creates a
+    second herd. ``_backoff_with_jitter`` adds ±20% so the herd disperses."""
+
+    def test_jitter_within_bounds(self) -> None:
+        from styleclaw.providers.runninghub.client import _backoff_with_jitter
+        # attempt=0 → base=1, range [0.8, 1.2]
+        # attempt=1 → base=2, range [1.6, 2.4]
+        # attempt=2 → base=4, range [3.2, 4.8]
+        for attempt, lo, hi in [(0, 0.8, 1.2), (1, 1.6, 2.4), (2, 3.2, 4.8)]:
+            for _ in range(50):
+                val = _backoff_with_jitter(attempt)
+                assert lo <= val <= hi, f"attempt={attempt}: {val} not in [{lo},{hi}]"
+
+    def test_jitter_actually_varies(self) -> None:
+        from styleclaw.providers.runninghub.client import _backoff_with_jitter
+        # Without jitter, all 100 calls would return the same value.
+        values = {_backoff_with_jitter(2) for _ in range(100)}
+        assert len(values) > 50, (
+            f"only {len(values)} unique values in 100 samples — jitter is broken"
+        )
