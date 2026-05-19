@@ -770,24 +770,16 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
 
     if _cfg.PANEL_REFINE_ENABLED:
         from styleclaw.agents.refine_panel import refine_with_panel
-        from styleclaw.providers.llm.panel_factory import (
-            build_panel_providers,
-            close_panel_providers,
-        )
+        from styleclaw.core.llm_routing import Role
 
-        pairs = build_panel_providers()
+        llms, labels = ctx.llm_router.get_panel(Role.VISION_ANALYST)
         try:
-            llms = [p for p, _ in pairs]
-            labels = [label for _, label in pairs]
-            try:
-                prompt_config, panel_result = await refine_with_panel(
-                    llms, labels, ref_paths, current_trigger, round_num,
-                    config.ip_info, evaluations, direction,
-                )
-            except RuntimeError as exc:
-                return StepResult(ok=False, message=f"refine panel failed: {exc}")
-        finally:
-            await close_panel_providers(pairs)
+            prompt_config, panel_result = await refine_with_panel(
+                llms, labels, ref_paths, current_trigger, round_num,
+                config.ip_info, evaluations, direction,
+            )
+        except RuntimeError as exc:
+            return StepResult(ok=False, message=f"refine panel failed: {exc}")
 
         # Persist panel.json regardless — forensic record. The main
         # prompt.json and state advance only happen on a healthy panel or
@@ -814,6 +806,9 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
                 },
             )
 
+        prompt_config = prompt_config.model_copy(
+            update={"model_id": panel_result.winner_model_id},
+        )
         project_store.save_prompt_config(
             ctx.project, round_num, prompt_config, pass_num=pass_num,
         )
@@ -825,19 +820,24 @@ async def do_refine(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
             msg += f" (degraded; accepted via STYLECLAW_ALLOW_DEGRADED_PANEL — {len(panel_result.error_log)} issue(s))"
         return StepResult(ok=True, message=msg, data={"panel": True, "degraded": panel_result.degraded})
 
-    # Single-model path (unchanged).
+    # Single-model path.
+    from styleclaw.core.llm_routing import Role
+    llm = ctx.llm_router.get(Role.VISION_ANALYST)
+    model_id = getattr(llm, "_model_id", "")
+
     thinking = ""
     if ctx.show_thinking:
         prompt_config, thinking = await refine_prompt_with_thinking(
-            ctx.llm, ref_paths, current_trigger, round_num,
+            llm, ref_paths, current_trigger, round_num,
             config.ip_info, evaluations, direction,
             thinking_budget=ctx.thinking_budget,
         )
     else:
         prompt_config = await refine_prompt(
-            ctx.llm, ref_paths, current_trigger, round_num,
+            llm, ref_paths, current_trigger, round_num,
             config.ip_info, evaluations, direction,
         )
+    prompt_config = prompt_config.model_copy(update={"model_id": model_id})
     project_store.save_prompt_config(
         ctx.project, round_num, prompt_config, pass_num=pass_num,
     )
