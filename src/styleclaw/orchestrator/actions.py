@@ -11,7 +11,6 @@ from tqdm import tqdm
 
 from styleclaw.core.config import MAX_AUTO_ROUNDS, MAX_POLL_CYCLES, ORCHESTRATOR_POLL_INTERVAL
 from styleclaw.core.models import Phase, TaskStatus
-from styleclaw.providers.llm.base import LLMProvider
 from styleclaw.providers.runninghub.client import RunningHubClient
 from styleclaw.storage import project_store
 
@@ -32,7 +31,6 @@ class StepResult:
 class ExecutionContext:
     project: str
     client: RunningHubClient | None = None
-    llm: LLMProvider | None = None  # legacy; will be removed in Part 3 Task 7
     llm_router: "RoleRouter | None" = None
     poll_interval: float = ORCHESTRATOR_POLL_INTERVAL
     show_thinking: bool = False

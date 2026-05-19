@@ -50,7 +50,7 @@ class TestDoAnalyzeThinking:
         )
         from tests.orchestrator._routing_helpers import MockRouter
         ctx = ExecutionContext(
-            project=project_with_ref, llm=fake_llm,
+            project=project_with_ref,
             llm_router=MockRouter(fake_llm),
             show_thinking=True, thinking_budget=3000,
         )
@@ -69,7 +69,7 @@ class TestDoAnalyzeThinking:
         fake_llm.invoke = AsyncMock(return_value='{"trigger_phrase": "bold"}')
         from tests.orchestrator._routing_helpers import MockRouter
         ctx = ExecutionContext(
-            project=project_with_ref, llm=fake_llm,
+            project=project_with_ref,
             llm_router=MockRouter(fake_llm), show_thinking=False,
         )
         result = await do_analyze(ctx, {})

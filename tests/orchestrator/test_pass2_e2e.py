@@ -104,7 +104,7 @@ async def test_pass2_flow_isolates_storage(seeded_project):
     )
     from tests.orchestrator._routing_helpers import MockRouter
     ctx = ExecutionContext(
-        project=seeded_project, llm=fake_llm, llm_router=MockRouter(fake_llm),
+        project=seeded_project, llm_router=MockRouter(fake_llm),
     )
     result = await do_evaluate(ctx, {})
     assert result.ok

@@ -118,14 +118,15 @@ class TestRunCommand:
         mock_build_context.assert_not_called()
 
     @patch("styleclaw.cli._build_context")
-    @patch("styleclaw.cli._build_llm_provider")
+    @patch("styleclaw.core.llm_routing.RoleRouter.from_env")
     @patch("styleclaw.orchestrator.planner.plan", new_callable=AsyncMock)
     def test_dry_run_overrides_yes(
-        self, mock_plan, mock_build_llm, mock_build_context, setup_project,
+        self, mock_plan, mock_from_env, mock_build_context, setup_project,
     ) -> None:
-        fake_llm = MagicMock()
-        fake_llm.close = AsyncMock()
-        mock_build_llm.return_value = fake_llm
+        fake_router = MagicMock()
+        fake_router.get.return_value = MagicMock()
+        fake_router.close = AsyncMock()
+        mock_from_env.return_value = fake_router
         mock_plan.return_value = _make_plan("Dry beats yes")
 
         result = runner.invoke(

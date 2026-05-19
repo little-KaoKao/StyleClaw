@@ -205,9 +205,9 @@ _PANEL_TOGGLE_FOR_ROLE: dict[Role, str] = {
 def _build_provider_for_role(cfg: RoleConfig):
     """Pick a provider class via the existing precedence rule and pass model_id.
 
-    OpenAI-compat > RunningHub LLM > Bedrock. Duplicates the logic in
-    cli._build_llm_provider on purpose — Part 3 will delete the cli copy and
-    route everything through here.
+    OpenAI-compat > RunningHub LLM > Bedrock. This helper is the single
+    entry point for constructing per-role providers — cli no longer has a
+    parallel _build_llm_provider.
     """
     from styleclaw.core.config import env_truthy
 

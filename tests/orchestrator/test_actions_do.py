@@ -87,7 +87,6 @@ def _ctx(
     return ExecutionContext(
         project=name,
         client=client,
-        llm=llm,
         llm_router=router,
         poll_interval=0.0,
     )

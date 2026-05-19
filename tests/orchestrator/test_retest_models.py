@@ -42,7 +42,7 @@ class TestDoAnalyzeSetsPass1:
 
         from tests.orchestrator._routing_helpers import MockRouter
         ctx = ExecutionContext(
-            project=project_with_ref, llm=fake_llm, llm_router=MockRouter(fake_llm),
+            project=project_with_ref, llm_router=MockRouter(fake_llm),
         )
         result = await do_analyze(ctx, {})
         assert result.ok

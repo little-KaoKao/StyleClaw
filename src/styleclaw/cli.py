@@ -71,35 +71,6 @@ def _get_api_key() -> str:
     return key
 
 
-def _model_for_action(action_name: str | None) -> str | None:
-    """Return the per-action model override for ``action_name``, if any.
-
-    Convention: ``STYLECLAW_LLM_MODEL_<ACTION>`` (action name uppercased, dashes
-    → underscores). Falls back to ``None`` so the provider uses its default
-    (``LLM_MODEL`` env var). Lets users pin a different model for cost or
-    safety-filter reasons on specific actions — e.g.
-
-        STYLECLAW_LLM_MODEL_DESIGN_CASES=anthropic.claude-sonnet-4-20250514
-
-    keeps Gemini for analyze/evaluate/refine but switches design-cases to Claude.
-    """
-    if not action_name:
-        return None
-    key = "STYLECLAW_LLM_MODEL_" + action_name.upper().replace("-", "_")
-    return os.getenv(key) or None
-
-
-def _build_llm_provider(action_name: str | None = None) -> Any:
-    if os.getenv("OPENAI_COMPAT_API_KEY"):
-        from styleclaw.providers.llm.openai_compat import OpenAICompatProvider
-        return OpenAICompatProvider(model_id=_model_for_action(action_name))
-    if env_truthy("RUNNINGHUB_LLM"):
-        from styleclaw.providers.llm.runninghub_llm import RunningHubLLMProvider
-        return RunningHubLLMProvider()
-    from styleclaw.providers.llm.bedrock import BedrockProvider
-    return BedrockProvider()
-
-
 async def _close_resource(resource: Any, label: str) -> None:
     close = getattr(resource, "close", None)
     if close is None:
