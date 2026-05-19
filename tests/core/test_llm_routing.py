@@ -270,3 +270,52 @@ class TestGetPanel:
         finally:
             import asyncio
             asyncio.run(router.close())
+
+
+class TestClose:
+    @pytest.fixture(autouse=True)
+    def _setup(self, monkeypatch):
+        for role in Role:
+            monkeypatch.delenv(f"STYLECLAW_MODEL_{role.value.upper()}", raising=False)
+            monkeypatch.delenv(f"STYLECLAW_PANEL_MODELS_{role.value.upper()}", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_MODELS", raising=False)
+        monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://test.local/v1")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "test-key")
+        monkeypatch.delenv("RUNNINGHUB_LLM", raising=False)
+        monkeypatch.setenv("STYLECLAW_MODEL_VISION_CRITIC", "c")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS_VISION_ANALYST", "a1,a2,a3")
+        import importlib, styleclaw.core.config as cfg
+        importlib.reload(cfg)
+        yield
+
+    def test_close_is_idempotent(self):
+        import asyncio
+        from styleclaw.core.llm_routing import RoleRouter
+
+        router = RoleRouter.from_env()
+        router.get(Role.VISION_CRITIC)  # Force a build.
+        router.get_panel(Role.VISION_ANALYST)  # Force panel builds too.
+
+        asyncio.run(router.close())
+        asyncio.run(router.close())  # Must not raise.
+
+    def test_close_with_no_builds_is_noop(self):
+        import asyncio
+        from styleclaw.core.llm_routing import RoleRouter
+
+        router = RoleRouter.from_env()
+        asyncio.run(router.close())  # No providers ever built; must not raise.
+
+    def test_close_clears_caches(self):
+        import asyncio
+        from styleclaw.core.llm_routing import RoleRouter
+
+        router = RoleRouter.from_env()
+        router.get(Role.VISION_CRITIC)
+        router.get_panel(Role.VISION_ANALYST)
+        assert router._cached_single
+        assert router._cached_panel
+
+        asyncio.run(router.close())
+        assert not router._cached_single
+        assert not router._cached_panel

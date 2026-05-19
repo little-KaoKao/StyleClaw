@@ -118,8 +118,32 @@ class RoleRouter:
         return list(providers), list(labels)
 
     async def close(self) -> None:
-        """Placeholder; Task 6 replaces this with idempotent teardown."""
-        return None
+        """Best-effort close every provider built so far. Idempotent.
+
+        Exceptions from individual closes are swallowed (logged would be nicer
+        but the module deliberately avoids a logger dependency at the top
+        level — callers see them via _close_resource in cli.py if they care).
+        """
+        for provider in self._cached_single.values():
+            await self._safe_close(provider)
+        for providers, _ in self._cached_panel.values():
+            for provider in providers:
+                await self._safe_close(provider)
+        self._cached_single.clear()
+        self._cached_panel.clear()
+
+    @staticmethod
+    async def _safe_close(provider) -> None:
+        close = getattr(provider, "close", None)
+        if close is None:
+            return
+        try:
+            result = close()
+            if hasattr(result, "__await__"):
+                await result
+        except Exception:
+            # Swallow — close failures shouldn't propagate during teardown.
+            pass
 
 
 def _build_provider_for_role(cfg: RoleConfig):
