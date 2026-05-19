@@ -18,7 +18,10 @@
   .score-badge { background: #e8f4e8; padding: 4px 10px; border-radius: 12px; font-size: 0.9em; }
   .score-badge.low { background: #fde8e8; }
   .score-badge.mid { background: #fef3cd; }
-  .images img { width: 200px; height: auto; border-radius: 4px; margin: 4px; }
+  .image-blocks { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; }
+  .image-block-label { font-size: 0.8em; color: #888; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .images { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; width: 320px; }
+  .images img { width: 100%; height: auto; border-radius: 4px; display: block; background: #f5f5f5; }
   .recommendation { font-size: 1.1em; font-weight: bold; padding: 8px 16px; border-radius: 8px; display: inline-block; background: #d4edda; color: #155724; }
   .variant-rec { font-size: 0.95em; padding: 6px 12px; border-radius: 8px; display: inline-block; background: #cce5ff; color: #004085; margin-left: 8px; }
   .sref-info { background: #fff3cd; padding: 8px 12px; border-radius: 4px; margin: 12px 0; font-size: 0.9em; }
@@ -124,9 +127,16 @@
   {% if m.suggestions %}
   <p><em>{{ m.suggestions }}</em></p>
   {% endif %}
-  <div class="images">
-    {% for img in m.images %}
-    <img src="{{ img }}" alt="{{ m.model }}">
+  <div class="image-blocks">
+    {% for block in m.image_blocks %}
+    <div class="image-block">
+      {% if block.label %}<div class="image-block-label">{{ block.label }}</div>{% endif %}
+      <div class="images">
+        {% for img in block.images %}
+        <img src="{{ img }}" alt="{{ m.model }}" loading="lazy">
+        {% endfor %}
+      </div>
+    </div>
     {% endfor %}
   </div>
 </div>

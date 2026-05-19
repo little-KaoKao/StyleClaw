@@ -244,3 +244,67 @@ class TestGenerateBatchI2iReport:
         assert "data:image" not in html
         assert 'src="source-images/source.png"' in html
         assert 'src="results/i2i-001/output-001.png"' in html
+
+
+class TestMultiImageGrid:
+    """Models like MJ return 4 images per task; templates lay multi-image
+    cells out as 2-col grids. Narrow cells (batch_t2i / batch_i2i) use a
+    .imgs container with .single fallback for 1-image cases. Wide cards
+    (model_select / style_refine) constrain the grid to ~320px so each
+    thumbnail stays around 150px instead of stretching to card width."""
+
+    def test_batch_t2i_multi_image_uses_grid(self, setup_project) -> None:
+        cases = [BatchCase(id="am-001", category="adult_male", description="d", status="SUCCESS")]
+        project_store.save_batch_config("test-proj", 1, BatchConfig(batch=1, trigger_phrase="t", cases=cases))
+        project_store.save_batch_task_record(
+            "test-proj", 1, "am-001",
+            TaskRecord(task_id="t1", model_id="mj-v7", status="SUCCESS"),
+        )
+        case_dir = project_store.batch_t2i_case_dir("test-proj", 1, "am-001")
+        for i in range(1, 5):
+            Image.new("RGB", (50, 50)).save(case_dir / f"output-{i:03d}.png")
+
+        html = generate_batch_t2i_report("test-proj", 1).read_text(encoding="utf-8")
+        import re
+        block = re.search(r'<div class="imgs[^"]*">.*?</div>', html, re.DOTALL)
+        assert block is not None
+        assert "single" not in re.search(r'class="(imgs[^"]*)"', block.group(0)).group(1)
+        assert block.group(0).count("<img") == 4
+
+    def test_model_select_splits_images_by_gender(self, tmp_path) -> None:
+        """Variant evaluations carry male+female sub-dirs; the report must
+        render them as two labeled sub-blocks (Male / Female) so each forms
+        a tight 2x2 grid instead of a single wide strip."""
+        config = ProjectConfig(name="gp", ip_info="x", ref_images=["refs/ref-001.png"])
+        root = project_store.create_project(config)
+        Image.new("RGB", (50, 50)).save(root / "refs" / "ref-001.png")
+        project_store.save_state(
+            "gp", ProjectState(phase=Phase.MODEL_SELECT, current_round=1, current_batch=1),
+        )
+        project_store.save_analysis("gp", StyleAnalysis(trigger_phrase="t"))
+        scores = DimensionScores(color_palette=8, line_style=8, lighting=8, texture=8, overall_mood=8)
+        project_store.save_evaluation(
+            "gp",
+            ModelEvaluation(
+                evaluations=[
+                    ModelScore(
+                        model="mj-v7", variant="prompt-sref",
+                        scores=scores, total=8, analysis="a", suggestions="",
+                    ),
+                ],
+                recommendation="mj-v7",
+            ),
+        )
+        for gender in ("male", "female"):
+            d = project_store.model_results_dir("gp", "mj-v7", variant=f"prompt-sref-{gender}")
+            for i in range(1, 5):
+                Image.new("RGB", (50, 50)).save(d / f"output-{i:03d}.png")
+
+        html = generate_model_select_report("gp").read_text(encoding="utf-8")
+
+        # Both Male and Female labels appear, each followed by its own .images
+        # grid. We don't pin exact counts because list_output_images may pick
+        # up sibling files; we only assert the structure that drives layout.
+        assert html.count('class="image-block-label"') == 2
+        assert ">Male<" in html and ">Female<" in html
+        assert html.count('class="images"') == 2

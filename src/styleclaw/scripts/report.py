@@ -55,26 +55,36 @@ def generate_model_select_report(name: str, pass_num: int = 1) -> Path:
 
     model_data: list[dict] = []
     for ev in evaluation.evaluations:
-        # Collect images from both gender variants (prompt-only-male, prompt-only-female).
-        # The bare `{variant}` directory (no gender suffix) is a legacy layout that no
-        # longer holds data; iterating over it would side-effect a mkdir via
-        # model_results_dir and leave empty folders behind.
-        all_images: list[Path] = []
+        # Group images into labeled sub-blocks so the template can render
+        # gender-separated 2x2 grids instead of one wide strip. Each block is
+        # {"label": "...", "images": [...]}. Legacy no-variant evals fall back
+        # to a single unlabeled block so the layout stays sensible.
+        image_blocks: list[dict] = []
         if ev.variant:
-            for gender_suffix in ("-male", "-female"):
+            for gender_label, gender_suffix in (("Male", "-male"), ("Female", "-female")):
                 results_dir = project_store.model_results_dir(
                     name, ev.model,
                     variant=f"{ev.variant}{gender_suffix}",
                     pass_num=pass_num,
                 )
                 if results_dir.exists():
-                    all_images.extend(list_output_images(results_dir))
+                    imgs = list_output_images(results_dir)
+                    if imgs:
+                        image_blocks.append({
+                            "label": gender_label,
+                            "images": [_relative_img_src(p, dest_dir) for p in imgs],
+                        })
         else:
             results_dir = project_store.model_results_dir(
                 name, ev.model, pass_num=pass_num,
             )
             if results_dir.exists():
-                all_images.extend(list_output_images(results_dir))
+                imgs = list_output_images(results_dir)
+                if imgs:
+                    image_blocks.append({
+                        "label": "",
+                        "images": [_relative_img_src(p, dest_dir) for p in imgs],
+                    })
 
         model_data.append({
             "model": ev.model,
@@ -83,7 +93,7 @@ def generate_model_select_report(name: str, pass_num: int = 1) -> Path:
             "total": ev.total,
             "analysis": ev.analysis,
             "suggestions": ev.suggestions,
-            "images": [_relative_img_src(p, dest_dir) for p in all_images],
+            "image_blocks": image_blocks,
         })
 
     _panel = project_store.load_model_select_panel_result(name, pass_num=pass_num)

@@ -16,7 +16,8 @@
   .score-badge { background: #e8f4e8; padding: 4px 10px; border-radius: 12px; font-size: 0.9em; }
   .score-badge.low { background: #fde8e8; }
   .score-badge.mid { background: #fef3cd; }
-  .images img { width: 200px; height: auto; border-radius: 4px; margin: 4px; }
+  .images { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; width: 320px; margin-top: 8px; }
+  .images img { width: 100%; height: auto; border-radius: 4px; display: block; background: #f5f5f5; }
   .recommendation { font-size: 1.2em; font-weight: bold; padding: 8px 16px; border-radius: 8px; display: inline-block; margin-top: 12px; }
   .recommendation.approve { background: #d4edda; color: #155724; }
   .recommendation.continue_refine { background: #fff3cd; color: #856404; }
@@ -115,7 +116,7 @@
   <p>{{ m.analysis }}</p>
   <div class="images">
     {% for img in m.images %}
-    <img src="{{ img }}" alt="{{ m.model }}">
+    <img src="{{ img }}" alt="{{ m.model }}" loading="lazy">
     {% endfor %}
   </div>
 </div>

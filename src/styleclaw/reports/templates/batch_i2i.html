@@ -11,7 +11,9 @@
   .pair { display: flex; gap: 16px; background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 12px; align-items: flex-start; }
   .pair .source, .pair .generated { flex: 1; }
   .pair h4 { margin: 0 0 8px; font-size: 0.9em; color: #666; }
-  .pair img { width: 100%; height: auto; border-radius: 4px; }
+  .pair img { width: 100%; height: auto; border-radius: 4px; display: block; }
+  .pair .generated .imgs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+  .pair .generated .imgs.single { grid-template-columns: 1fr; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; }
   .badge.success { background: #d4edda; color: #155724; }
   .badge.pending { background: #e2e3e5; color: #383d41; }
@@ -39,10 +41,13 @@
   </div>
   <div class="generated">
     <h4>Generated</h4>
+    {% if p.generated %}
+    <div class="imgs {% if p.generated|length <= 1 %}single{% endif %}">
     {% for img in p.generated %}
-    <img src="{{ img }}" alt="generated">
+    <img src="{{ img }}" alt="generated" loading="lazy">
     {% endfor %}
-    {% if not p.generated %}
+    </div>
+    {% else %}
     <p>(no output yet)</p>
     {% endif %}
   </div>
