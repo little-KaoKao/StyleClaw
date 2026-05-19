@@ -29,7 +29,6 @@ def _known_secrets() -> Iterable[str]:
     for var in (
         "RUNNINGHUB_API_KEY",
         "OPENAI_COMPAT_API_KEY",
-        "AWS_BEARER_TOKEN_BEDROCK",
     ):
         val = os.getenv(var)
         if val and len(val) >= 8:
@@ -45,8 +44,7 @@ def redact(text: str) -> str:
 
     Three passes, in order:
     1. Exact replacement of any value set via the env vars we know carry
-       credentials (``RUNNINGHUB_API_KEY`` / ``OPENAI_COMPAT_API_KEY`` /
-       ``AWS_BEARER_TOKEN_BEDROCK``).
+       credentials (``RUNNINGHUB_API_KEY`` / ``OPENAI_COMPAT_API_KEY``).
     2. Header/keyword scrub: ``Bearer ...`` / ``Token: ...`` / ``sk-...`` /
        ``Authorization: ...`` / ``api_key=...`` / ``x-api-key: ...`` etc.
        The matched prefix + separator are preserved so the redacted form

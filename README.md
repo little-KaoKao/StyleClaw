@@ -27,10 +27,7 @@ INIT → MODEL_SELECT → STYLE_REFINE → BATCH_T2I → BATCH_I2I → COMPLETED
 - **Python 3.11+**
 - **[uv](https://docs.astral.sh/uv/)** package manager
 - **RunningHub** API key (for image generation)
-- **LLM provider** — pick one (precedence below):
-  - An **OpenAI-compatible** provider like [gptproto.com](https://gptproto.com) (recommended), or
-  - **RunningHub LLM** at `https://llm.runninghub.cn/v1` (same `RUNNINGHUB_API_KEY` as image generation), or
-  - **AWS Bedrock** access with a bearer token (legacy)
+- **OpenAI-compatible LLM** provider (e.g. [gptproto.com](https://gptproto.com))
 
 ## Installation
 
@@ -45,41 +42,22 @@ uv sync
 cp .env.example .env
 ```
 
-Edit `.env` with your credentials. Choose **one** LLM provider path (do not mix credentials; precedence below):
+Edit `.env` with your credentials:
 
 ```env
 RUNNINGHUB_API_KEY=<your-runninghub-api-key>
 
-# Option A: OpenAI-compatible (recommended; wins over RunningHub LLM and Bedrock if set)
 OPENAI_COMPAT_API_KEY=<your-api-key>
 OPENAI_COMPAT_BASE_URL=https://api.gptproto.com/v1
 LLM_MODEL=gemini-2.5-pro-preview-05-06
-
-# Option B: AWS Bedrock (legacy)
-# AWS_REGION=us-east-1
-# AWS_BEARER_TOKEN_BEDROCK=<your-bedrock-token>
-# LLM_MODEL=anthropic.claude-sonnet-4-20250514
-
-# Option C: RunningHub LLM (same key as images; do not enable alongside Option A)
-# RUNNINGHUB_LLM=1
-# RUNNINGHUB_LLM_BASE_URL=https://llm.runninghub.cn/v1
-# LLM_MODEL=rh-llm-a/rh-c-o-47
-# RUNNINGHUB_LLM_REASONING_EFFORT=high
 ```
 
 | Variable | Required | Description |
 |----------|:--------:|-------------|
 | `RUNNINGHUB_API_KEY` | Yes | RunningHub API key for image generation |
-| `OPENAI_COMPAT_API_KEY` | A | API key for OpenAI-compatible provider (e.g. gptproto) |
-| `OPENAI_COMPAT_BASE_URL` | A | Provider base URL (e.g. `https://api.gptproto.com/v1`) |
+| `OPENAI_COMPAT_API_KEY` | Yes | API key for OpenAI-compatible provider (e.g. gptproto) |
+| `OPENAI_COMPAT_BASE_URL` | Yes | Provider base URL (e.g. `https://api.gptproto.com/v1`) |
 | `LLM_MODEL` | Yes | Model ID for the chosen provider |
-| `RUNNINGHUB_LLM` | C | Set to `1` / `true` / `yes` / `on` to use RunningHub LLM |
-| `RUNNINGHUB_LLM_BASE_URL` | No | LLM base URL; default `https://llm.runninghub.cn/v1` |
-| `RUNNINGHUB_LLM_REASONING_EFFORT` | No | Passed on `invoke_with_thinking`; default `high`; use `off` to omit |
-| `AWS_REGION` | B | AWS region (only if using Bedrock) |
-| `AWS_BEARER_TOKEN_BEDROCK` | B | Bearer token for Bedrock proxy/gateway (only if using Bedrock) |
-
-**Precedence:** If `OPENAI_COMPAT_API_KEY` is set, the OpenAI-compatible provider is used. Otherwise, if `RUNNINGHUB_LLM` is truthy, RunningHub LLM is used. Otherwise Bedrock.
 
 #### Optional runtime tunables
 
@@ -373,7 +351,7 @@ uv run python -m pytest tests/ -m "not integration"
 | Language | Python 3.11+ |
 | Package Manager | uv |
 | HTTP Client | httpx (async) |
-| LLM | OpenAI-compatible API, RunningHub LLM, or AWS Bedrock (legacy) |
+| LLM | OpenAI-compatible API (e.g. gptproto.com) |
 | Data Models | Pydantic v2 |
 | CLI | Typer |
 | Reports | Jinja2 HTML templates |

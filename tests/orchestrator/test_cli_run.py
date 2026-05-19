@@ -49,7 +49,7 @@ class TestRunCommand:
         assert result.exit_code == 1
         assert "Multiple projects" in result.output
 
-    @patch("styleclaw.providers.llm.bedrock.BedrockProvider")
+    @patch("styleclaw.providers.llm.openai_compat.OpenAICompatProvider")
     @patch("styleclaw.orchestrator.planner.plan", new_callable=AsyncMock)
     def test_auto_selects_single_project(self, mock_plan, mock_llm_cls, setup_project) -> None:
         mock_plan.return_value = _make_plan("Test plan")
@@ -57,14 +57,14 @@ class TestRunCommand:
         assert result.exit_code == 0
         assert "Test plan" in result.output
 
-    @patch("styleclaw.providers.llm.bedrock.BedrockProvider")
+    @patch("styleclaw.providers.llm.openai_compat.OpenAICompatProvider")
     @patch("styleclaw.orchestrator.planner.plan", new_callable=AsyncMock)
     def test_cancel(self, mock_plan, mock_llm_cls, setup_project) -> None:
         mock_plan.return_value = _make_plan("Plan")
         result = runner.invoke(app, ["run", "analyze", "-p", "test-proj"], input="n\n")
         assert "Cancelled" in result.output
 
-    @patch("styleclaw.providers.llm.bedrock.BedrockProvider")
+    @patch("styleclaw.providers.llm.openai_compat.OpenAICompatProvider")
     @patch("styleclaw.orchestrator.planner.plan", new_callable=AsyncMock)
     def test_explicit_project(self, mock_plan, mock_llm_cls, setup_project) -> None:
         mock_plan.return_value = _make_plan("Analyze")

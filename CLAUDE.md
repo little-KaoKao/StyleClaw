@@ -19,26 +19,14 @@ uv run python -m pytest tests/ -v
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and fill in. Choose ONE LLM provider path (precedence below):
+Copy `.env.example` to `.env` and fill in.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `RUNNINGHUB_API_KEY` | Yes | RunningHub API key for image generation |
-| **Option A: OpenAI-compatible (recommended, e.g. gptproto.com)** | | |
-| `OPENAI_COMPAT_API_KEY` | A | API key for the OpenAI-compatible provider |
-| `OPENAI_COMPAT_BASE_URL` | A | Provider base URL (e.g. `https://api.gptproto.com/v1`) |
-| `LLM_MODEL` | A | Model ID (e.g. `gemini-2.5-pro-preview-05-06`) |
-| **Option B: AWS Bedrock (legacy)** | | |
-| `AWS_REGION` | B | AWS region (e.g. `us-east-1`) |
-| `AWS_BEARER_TOKEN_BEDROCK` | B | Bearer token sent as `Authorization: Bearer ...` to a pre-configured proxy/gateway that forwards to Bedrock after SigV4 signing. **Not a standard AWS credential.** Treat as a secret. |
-| `LLM_MODEL` | B | Bedrock model ID (e.g. `anthropic.claude-sonnet-4-20250514`) |
-| **Option C: RunningHub LLM** | | |
-| `RUNNINGHUB_LLM` | C | Set to `1` / `true` / `yes` / `on` to use RunningHub's OpenAI-compatible LLM API (same key as image gen). |
-| `RUNNINGHUB_LLM_BASE_URL` | C | Default `https://llm.runninghub.cn/v1`. |
-| `LLM_MODEL` | C | e.g. `rh-llm-a/rh-c-o-47` (defaults in code if unset). |
-| `RUNNINGHUB_LLM_REASONING_EFFORT` | C | Optional; default `high` for `invoke_with_thinking`; use `off` to omit `reasoning_effort` in the request body. |
-
-**Precedence:** `OPENAI_COMPAT_API_KEY` → OpenAI-compat provider; else if `RUNNINGHUB_LLM` is truthy → RunningHub LLM; else → Bedrock.
+| `OPENAI_COMPAT_API_KEY` | Yes | API key for the OpenAI-compatible LLM provider |
+| `OPENAI_COMPAT_BASE_URL` | Yes | Provider base URL (e.g. `https://api.gptproto.com/v1`) |
+| `LLM_MODEL` | Yes | Model ID (e.g. `gemini-2.5-pro-preview-05-06`) |
 
 ### Runtime Tunables (optional)
 
@@ -78,7 +66,7 @@ All defined in `core/config.py` via `_int_env` / `_float_env`. Invalid values ra
 
 - **Language**: Python 3.11+ with uv package manager
 - **HTTP**: httpx (async) — RunningHub client and LLM provider
-- **LLM**: OpenAI-compatible API, RunningHub LLM (`llm.runninghub.cn`), or AWS Bedrock (legacy), all via httpx
+- **LLM**: OpenAI-compatible API (e.g. gptproto.com) via httpx
 - **Models**: Pydantic v2 (immutable state via `model_copy(update=...)`)
 - **CLI**: Typer
 - **Reports**: Jinja2 HTML templates
@@ -120,9 +108,7 @@ src/styleclaw/
 ├── providers/
 │   ├── llm/
 │   │   ├── base.py         # LLMProvider Protocol — invoke() + invoke_with_thinking()
-│   │   ├── openai_compat.py # OpenAICompatProvider — gptproto & similar (priority if key set)
-│   │   ├── runninghub_llm.py # RunningHubLLMProvider — llm.runninghub.cn, RUNNINGHUB_LLM=1
-│   │   ├── bedrock.py      # BedrockProvider — legacy AWS Bedrock fallback
+│   │   ├── openai_compat.py # OpenAICompatProvider — gptproto & similar
 │   │   └── prompts/        # Markdown prompt templates: analyze.md / select_model.md / evaluate.md / refine.md / design_cases.md / plan.md
 │   └── runninghub/
 │       ├── client.py       # RunningHubClient — async httpx for image gen API

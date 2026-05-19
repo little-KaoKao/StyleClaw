@@ -27,7 +27,6 @@ def _clean_env(monkeypatch):
     # Force OpenAI-compat path; no real request will be made.
     monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://localhost:9/v1")
     monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "smoke-test-key")
-    monkeypatch.delenv("RUNNINGHUB_LLM", raising=False)
     yield
 
 

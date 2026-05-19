@@ -89,8 +89,7 @@ class RoleRouter:
     def get(self, role: Role):
         """Return a cached single-model provider for the role.
 
-        Constructs on first call using the existing provider-class precedence
-        (OpenAI-compat > RunningHub LLM > Bedrock).
+        Constructs on first call using the OpenAI-compatible provider.
         """
         if role not in self._cached_single:
             self._cached_single[role] = _build_provider_for_role(
@@ -203,23 +202,14 @@ _PANEL_TOGGLE_FOR_ROLE: dict[Role, str] = {
 
 
 def _build_provider_for_role(cfg: RoleConfig):
-    """Pick a provider class via the existing precedence rule and pass model_id.
+    """Construct an OpenAI-compatible provider for the given role.
 
-    OpenAI-compat > RunningHub LLM > Bedrock. This helper is the single
-    entry point for constructing per-role providers — cli no longer has a
-    parallel _build_llm_provider.
+    This helper is the single entry point for constructing per-role providers —
+    cli no longer has a parallel _build_llm_provider.
     """
-    from styleclaw.core.config import env_truthy
+    model_id = cfg.model_id or None  # provider class accepts None as "use env default"
 
-    model_id = cfg.model_id or None  # provider classes accept None as "use env default"
-
-    if os.getenv("OPENAI_COMPAT_API_KEY"):
-        from styleclaw.providers.llm.openai_compat import OpenAICompatProvider
-        return OpenAICompatProvider(model_id=model_id)
-    if env_truthy("RUNNINGHUB_LLM"):
-        from styleclaw.providers.llm.runninghub_llm import RunningHubLLMProvider
-        return RunningHubLLMProvider(model_id=model_id)
-    from styleclaw.providers.llm.bedrock import BedrockProvider
-    return BedrockProvider(model_id=model_id)
+    from styleclaw.providers.llm.openai_compat import OpenAICompatProvider
+    return OpenAICompatProvider(model_id=model_id)
 
 

@@ -169,8 +169,6 @@ class TestGetSingle:
             monkeypatch.delenv(f"STYLECLAW_MODEL_{role.value.upper()}", raising=False)
         monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://test.local/v1")
         monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "test-key")
-        monkeypatch.delenv("RUNNINGHUB_LLM", raising=False)
-        monkeypatch.delenv("AWS_BEARER_TOKEN_BEDROCK", raising=False)
         monkeypatch.setenv("STYLECLAW_MODEL_VISION_CRITIC", "critic-model")
         monkeypatch.setenv("STYLECLAW_MODEL_WRITER", "writer-model")
         yield
@@ -224,7 +222,6 @@ class TestGetPanel:
         monkeypatch.delenv("STYLECLAW_PANEL_MODELS", raising=False)
         monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://test.local/v1")
         monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "test-key")
-        monkeypatch.delenv("RUNNINGHUB_LLM", raising=False)
         import importlib, styleclaw.core.config as cfg
         importlib.reload(cfg)
         yield
@@ -281,7 +278,6 @@ class TestClose:
         monkeypatch.delenv("STYLECLAW_PANEL_MODELS", raising=False)
         monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://test.local/v1")
         monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "test-key")
-        monkeypatch.delenv("RUNNINGHUB_LLM", raising=False)
         monkeypatch.setenv("STYLECLAW_MODEL_VISION_CRITIC", "c")
         monkeypatch.setenv("STYLECLAW_PANEL_MODELS_VISION_ANALYST", "a1,a2,a3")
         import importlib, styleclaw.core.config as cfg

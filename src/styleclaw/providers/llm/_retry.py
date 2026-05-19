@@ -1,12 +1,10 @@
 """Shared retry helper for LLM providers.
 
-The three LLM providers (OpenAI-compat, RunningHub-LLM, Bedrock) each had a
-near-identical retry loop around their ``_post`` body — same 3 attempts,
-same fixed ``2**attempt`` backoff, same predicate (5xx and 429 retry, other
-4xx fail fast), same redact-then-log warning. This module collapses that
-into one place and adds ±20% jitter on the backoff so concurrent LLM calls
-that all 429 on the same beat don't retry on the same beat too (consistent
-with the jitter we added to RunningHub client retries in b5f4e72).
+Wraps the OpenAI-compatible provider's ``_post`` body in a single retry loop:
+3 attempts, ``2**attempt`` backoff with ±20% jitter, retry on 5xx / 429 /
+transport errors, fail fast on other 4xx. Jitter prevents concurrent LLM
+calls that all 429 on the same beat from retrying on the same beat too
+(consistent with the jitter we added to RunningHub client retries in b5f4e72).
 """
 from __future__ import annotations
 

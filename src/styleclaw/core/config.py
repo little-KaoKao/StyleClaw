@@ -132,13 +132,9 @@ def validate_env() -> list[str]:
     errors: list[str] = []
     if not os.getenv("RUNNINGHUB_API_KEY"):
         errors.append("RUNNINGHUB_API_KEY is not set (required for image generation).")
-    has_bedrock = bool(os.getenv("AWS_BEARER_TOKEN_BEDROCK"))
-    has_openai = bool(os.getenv("OPENAI_COMPAT_API_KEY"))
-    has_runninghub_llm = env_truthy("RUNNINGHUB_LLM")
-    if not (has_bedrock or has_openai or has_runninghub_llm):
+    if not os.getenv("OPENAI_COMPAT_API_KEY"):
         errors.append(
-            "No LLM credentials found. Set AWS_BEARER_TOKEN_BEDROCK, "
-            "OPENAI_COMPAT_API_KEY, or RUNNINGHUB_LLM=1 (uses RUNNINGHUB_API_KEY)."
+            "OPENAI_COMPAT_API_KEY is not set (required for LLM access)."
         )
     errors.extend(validate_panel_config())
 

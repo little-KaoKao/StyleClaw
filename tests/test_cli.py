@@ -478,7 +478,7 @@ class TestShowThinkingFlag:
                 requires_confirmation=False,
             )},
         ):
-            with patch("styleclaw.providers.llm.bedrock.BedrockProvider") as FakeLLM:
+            with patch("styleclaw.providers.llm.openai_compat.OpenAICompatProvider") as FakeLLM:
                 FakeLLM.return_value = MagicMock()
                 FakeLLM.return_value.close = AsyncMock()
                 result = runner.invoke(

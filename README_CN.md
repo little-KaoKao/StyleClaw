@@ -29,10 +29,7 @@ INIT → MODEL_SELECT → STYLE_REFINE → BATCH_T2I → BATCH_I2I → COMPLETED
 - **Python 3.11+**
 - **[uv](https://docs.astral.sh/uv/)** 包管理器
 - **RunningHub** API 密钥（用于图像生成）
-- **LLM 提供方** — 三选一（同时配置时优先级见下）：
-  - **OpenAI 兼容** 服务，如 [gptproto.com](https://gptproto.com)（推荐），或
-  - **RunningHub LLM**（`https://llm.runninghub.cn/v1`，与图像 API 共用 `RUNNINGHUB_API_KEY`），或
-  - **AWS Bedrock** 访问权限 + Bearer Token（旧方案）
+- **OpenAI 兼容** 的 LLM 服务，如 [gptproto.com](https://gptproto.com)
 
 ---
 
@@ -49,41 +46,22 @@ uv sync
 cp .env.example .env
 ```
 
-编辑 `.env` 填入你的密钥，**LLM 三选一**（不要混用多套 LLM 凭据）：
+编辑 `.env` 填入你的密钥：
 
 ```env
 RUNNINGHUB_API_KEY=<你的 RunningHub API 密钥>
 
-# 方案 A：OpenAI 兼容（推荐；若设置则优先于 RunningHub LLM 与 Bedrock）
 OPENAI_COMPAT_API_KEY=<你的 API 密钥>
 OPENAI_COMPAT_BASE_URL=https://api.gptproto.com/v1
 LLM_MODEL=gemini-2.5-pro-preview-05-06
-
-# 方案 B：AWS Bedrock（旧方案）
-# AWS_REGION=us-east-1
-# AWS_BEARER_TOKEN_BEDROCK=<你的 Bedrock Token>
-# LLM_MODEL=anthropic.claude-sonnet-4-20250514
-
-# 方案 C：RunningHub LLM（与图像共用 RUNNINGHUB_API_KEY；勿与方案 A 同时启用）
-# RUNNINGHUB_LLM=1
-# RUNNINGHUB_LLM_BASE_URL=https://llm.runninghub.cn/v1
-# LLM_MODEL=rh-llm-g/rh-g-pro-preview-31
-# RUNNINGHUB_LLM_REASONING_EFFORT=high
 ```
 
 | 变量 | 必填 | 说明 |
 |------|:----:|------|
 | `RUNNINGHUB_API_KEY` | 是 | RunningHub 图像生成 API 密钥 |
-| `OPENAI_COMPAT_API_KEY` | 方案 A | OpenAI 兼容服务的 API 密钥 |
-| `OPENAI_COMPAT_BASE_URL` | 方案 A | 服务端点 URL（如 `https://api.gptproto.com/v1`） |
+| `OPENAI_COMPAT_API_KEY` | 是 | OpenAI 兼容服务的 API 密钥 |
+| `OPENAI_COMPAT_BASE_URL` | 是 | 服务端点 URL（如 `https://api.gptproto.com/v1`） |
 | `LLM_MODEL` | 是 | 所选提供方的模型 ID |
-| `RUNNINGHUB_LLM` | 方案 C | 设为 `1` / `true` / `yes` / `on` 时启用 RunningHub LLM |
-| `RUNNINGHUB_LLM_BASE_URL` | 否 | LLM 网关，默认 `https://llm.runninghub.cn/v1` |
-| `RUNNINGHUB_LLM_REASONING_EFFORT` | 否 | 推理强度，默认 `high`；`off` 则省略该字段 |
-| `AWS_REGION` | 方案 B | AWS 区域 |
-| `AWS_BEARER_TOKEN_BEDROCK` | 方案 B | Bedrock 代理网关的 Bearer Token |
-
-**优先级**：设置了 `OPENAI_COMPAT_API_KEY` → 走 OpenAI 兼容；否则 `RUNNINGHUB_LLM` 为真 → 走 RunningHub LLM；否则走 Bedrock。
 
 #### 可选的运行时调优变量
 
@@ -598,7 +576,7 @@ uv run python -m pytest tests/ -m "not integration"
 | 语言 | Python 3.11+ |
 | 包管理 | uv |
 | HTTP 客户端 | httpx（异步） |
-| LLM | OpenAI 兼容 API、RunningHub LLM 或 AWS Bedrock（旧方案） |
+| LLM | OpenAI 兼容 API（如 gptproto.com） |
 | 数据模型 | Pydantic v2 |
 | 命令行 | Typer |
 | 报告 | Jinja2 HTML 模板 |
