@@ -876,6 +876,7 @@ async def do_approve(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
 
 async def do_design_cases(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     from styleclaw.agents.design_cases import design_cases
+    from styleclaw.core.llm_routing import Role
 
     state = project_store.load_state(ctx.project)
 
@@ -900,10 +901,14 @@ async def do_design_cases(ctx: ExecutionContext, args: dict[str, Any]) -> StepRe
         ctx.project, state.current_round, pass_num=pass_num,
     )
     feedback = str(args.get("feedback", "") or "").strip()
+
+    llm = ctx.llm_router.get(Role.WRITER)
+    model_id = getattr(llm, "_model_id", "")
     batch_config = await design_cases(
-        ctx.llm, config.ip_info, prompt_config.trigger_phrase, batch_num,
+        llm, config.ip_info, prompt_config.trigger_phrase, batch_num,
         feedback=feedback,
     )
+    batch_config = batch_config.model_copy(update={"model_id": model_id})
     project_store.save_batch_config(ctx.project, batch_num, batch_config)
 
     project_store.update_state(ctx.project, lambda s: s.with_batch(batch_num))
