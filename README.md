@@ -176,7 +176,7 @@ uv run styleclaw poll spider-verse
 uv run styleclaw evaluate spider-verse
 
 # 6. Approve and run 100-case batch test
-uv run styleclaw approve spider-verse
+uv run styleclaw approve spider-verse --yes        # --yes skips the interactive "Proceed?" prompt
 uv run styleclaw design-cases spider-verse
 uv run styleclaw batch-submit spider-verse
 uv run styleclaw poll spider-verse
@@ -249,7 +249,11 @@ uv run styleclaw init <name> \
 # Repeat --ref for multiple images; use --ref-dir or --ref as needed; --force overwrites.
 
 uv run styleclaw generate <name> \
-  --force \
+  --force \                # Only allowed when the current pass has no SUCCESS tasks
+                           # (e.g. all FAILED/QUEUED). Refuses if any task in the pass
+                           # already succeeded — prevents silent overwrite. To redo a
+                           # pass that already has successes, use `retest-models`
+                           # (new pass, same sref) or `set-sref` (new pass, new ref).
   --models mj-v7,niji7 \   # MODEL_SELECT only — limit submission to a subset
   --dry-run                # Show planned operations and exit
 
@@ -258,7 +262,8 @@ uv run styleclaw refine <name> \
 
 uv run styleclaw select-model <name> \
   --models <model-ids> \   # Comma-separated, e.g. "mj-v7"
-  --variant prompt-sref    # or prompt-only — locks the variant used in STYLE_REFINE
+  --variant prompt-sref    # or prompt-only — locks the variant used in STYLE_REFINE.
+                           # Omit to use evaluation.json's recommended_variant.
 
 uv run styleclaw design-cases <name> \
   --feedback "<text>"      # Feedback on previous batch; design-cases always creates a NEW batch
@@ -288,6 +293,15 @@ uv run styleclaw report <name> \
 
 All models support style reference; the only difference is how the reference is passed (`param` vs `prompt` + `imageUrls`).
 
+### Variants
+
+During MODEL_SELECT, each model is tested under two variants:
+
+- **prompt-only** — only the trigger phrase, no style reference image
+- **prompt-sref** — trigger phrase + style reference image (MJ via `--sref` param, others via prompt prefix `参考图1的风格：` + `imageUrls`)
+
+If prompt-only is already sufficient (total ≥ 7.0), prefer it — it generalizes better without being anchored to one specific reference frame, and is faster on prompt-mode models. The `evaluate` step writes its `recommended_variant` to `evaluation.json`, and `select-model` uses it by default when `--variant` is omitted.
+
 ## Style Refinement Scoring
 
 During STYLE_REFINE, the LLM evaluates generated images on 5 dimensions:
@@ -301,6 +315,18 @@ During STYLE_REFINE, the LLM evaluates generated images on 5 dimensions:
 | Overall Mood | Emotional tone and atmospheric consistency |
 
 **Pass criteria**: all dimensions ≥ 7.0 and total score ≥ 7.5 (out of 10).
+
+### Iteration loop handling
+
+After each `evaluate`, the LLM writes one of three `recommendation` values into `evaluation.json`:
+
+| Recommendation | When | What to do |
+|---|---|---|
+| `continue_refine` | Scores climbing but not yet at the bar | `refine` (auto-reads `next_direction`) |
+| `needs_human` | Any dimension dropped below 5, or scores regressed | `refine --direction "<concrete correction>"` — or `rollback --to STYLE_REFINE --round <better-round>` then re-refine |
+| `approve` | All 5 ≥ 7 and total ≥ 7.5 | `approve --yes` |
+
+The auto loop is capped at `STYLECLAW_MAX_ROUNDS` (default 5). `rollback` is non-destructive — earlier rounds stay on disk; the next `refine` skips occupied round numbers and creates a new one.
 
 ## Batch Test Categories
 

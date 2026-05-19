@@ -181,7 +181,7 @@ uv run styleclaw poll spider-verse
 uv run styleclaw evaluate spider-verse
 
 # 6. 确认进入批量测试
-uv run styleclaw approve spider-verse
+uv run styleclaw approve spider-verse --yes        # --yes 跳过交互式 "Proceed?" 确认
 uv run styleclaw design-cases spider-verse
 uv run styleclaw batch-submit spider-verse
 uv run styleclaw poll spider-verse
@@ -432,7 +432,10 @@ uv run styleclaw init <name> \
   --force                   # 覆盖已有项目
 
 uv run styleclaw generate <name> \
-  --force \                 # 强制重新提交所有任务（包括已成功的）
+  --force \                 # 仅当当前 pass 没有任何 SUCCESS 任务时（例如全是 FAILED/QUEUED）才允许；
+                            # 若当前 pass 已有成功任务会被拒绝，防止静默覆盖。
+                            # 想重做一个已有成功结果的 pass：用 `retest-models`（开新 pass、相同 sref）
+                            # 或 `set-sref`（开新 pass、换 sref），不要用 --force。
   --models mj-v7,niji7 \    # MODEL_SELECT 阶段限定只跑这几个模型
   --dry-run                 # 只打印将要提交的任务，不实际提交
 
@@ -441,7 +444,8 @@ uv run styleclaw refine <name> \
 
 uv run styleclaw select-model <name> \
   --models <模型ID> \       # 逗号分隔，如 "mj-v7"
-  --variant prompt-sref     # 或 prompt-only —— 锁定 STYLE_REFINE 阶段的出图方案
+  --variant prompt-sref     # 或 prompt-only —— 锁定 STYLE_REFINE 阶段的出图方案。
+                            # 省略时自动采用 evaluation.json 里的 recommended_variant。
 
 uv run styleclaw design-cases <name> \
   --feedback "<文本>"       # 对上一批的反馈；本命令始终新建一个 batch，不覆盖已有
@@ -477,7 +481,7 @@ MODEL_SELECT 阶段每个模型会测试两种变体：
 - **prompt-only**：仅触发短语，不附加风格参考图
 - **prompt-sref**：触发短语 + 风格参考图
 
-若 prompt-only 效果已足够（总分 ≥ 7.0），优先选用，灵活性更高。
+若 prompt-only 效果已足够（总分 ≥ 7.0），优先选用，灵活性更高。`evaluate` 阶段会把推荐 variant 写入 `evaluation.json` 的 `recommended_variant` 字段；`select-model` 在省略 `--variant` 时会自动采用它。
 
 ---
 
@@ -494,6 +498,18 @@ MODEL_SELECT 阶段每个模型会测试两种变体：
 | 整体氛围（Overall Mood） | 情感基调和氛围一致性 |
 
 **通过标准**：所有维度 ≥ 7.0 且总分 ≥ 7.5。
+
+### 迭代循环的处理
+
+每次 `evaluate` 后，LLM 会在 `evaluation.json` 给出三种 `recommendation` 之一：
+
+| 推荐值 | 触发条件 | 应对 |
+|------|------|------|
+| `continue_refine` | 分数稳步上升但未达标 | `refine`（自动读取 `next_direction`） |
+| `needs_human` | 某维度跌破 5，或整体倒退 | `refine --direction "<具体修正方向>"`；或 `rollback --to STYLE_REFINE --round <较好的那轮>` 后重新精炼 |
+| `approve` | 5 维都 ≥ 7 且总分 ≥ 7.5 | `approve --yes` |
+
+自动循环上限为 `STYLECLAW_MAX_ROUNDS`（默认 5 轮）。`rollback` 是软回退——旧轮次数据全部保留，下一次 `refine` 会跳过已被占用的 round 编号、新开一轮。
 
 ---
 
