@@ -40,7 +40,10 @@ class TestDoAnalyzeSetsPass1:
         fake_llm = AsyncMock()
         fake_llm.invoke = AsyncMock(return_value='{"trigger_phrase": "t"}')
 
-        ctx = ExecutionContext(project=project_with_ref, llm=fake_llm)
+        from tests.orchestrator._routing_helpers import MockRouter
+        ctx = ExecutionContext(
+            project=project_with_ref, llm=fake_llm, llm_router=MockRouter(fake_llm),
+        )
         result = await do_analyze(ctx, {})
         assert result.ok
 

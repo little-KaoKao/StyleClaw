@@ -48,8 +48,10 @@ class TestDoAnalyzeThinking:
                 thinking="Reasoning text here.",
             )
         )
+        from tests.orchestrator._routing_helpers import MockRouter
         ctx = ExecutionContext(
             project=project_with_ref, llm=fake_llm,
+            llm_router=MockRouter(fake_llm),
             show_thinking=True, thinking_budget=3000,
         )
         result = await do_analyze(ctx, {})
@@ -65,7 +67,11 @@ class TestDoAnalyzeThinking:
     async def test_no_thinking_file_when_disabled(self, project_with_ref):
         fake_llm = AsyncMock()
         fake_llm.invoke = AsyncMock(return_value='{"trigger_phrase": "bold"}')
-        ctx = ExecutionContext(project=project_with_ref, llm=fake_llm, show_thinking=False)
+        from tests.orchestrator._routing_helpers import MockRouter
+        ctx = ExecutionContext(
+            project=project_with_ref, llm=fake_llm,
+            llm_router=MockRouter(fake_llm), show_thinking=False,
+        )
         result = await do_analyze(ctx, {})
         assert result.ok
 

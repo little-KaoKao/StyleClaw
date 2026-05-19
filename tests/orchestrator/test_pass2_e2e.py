@@ -102,7 +102,10 @@ async def test_pass2_flow_isolates_storage(seeded_project):
     fake_llm.invoke = AsyncMock(
         return_value='{"evaluations": [{"model": "mj-v7", "variant": "prompt-only", "total": 8.2}], "recommendation": "mj-v7"}'
     )
-    ctx = ExecutionContext(project=seeded_project, llm=fake_llm)
+    from tests.orchestrator._routing_helpers import MockRouter
+    ctx = ExecutionContext(
+        project=seeded_project, llm=fake_llm, llm_router=MockRouter(fake_llm),
+    )
     result = await do_evaluate(ctx, {})
     assert result.ok
     assert "mj-v7" in result.message

@@ -530,23 +530,15 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
 
         if _cfg.PANEL_MODEL_SELECT_ENABLED:
             from styleclaw.agents.select_model_panel import select_models_with_panel
-            from styleclaw.providers.llm.panel_factory import (
-                build_panel_providers,
-                close_panel_providers,
-            )
+            from styleclaw.core.llm_routing import Role
 
-            pairs = build_panel_providers()
+            llms, labels = ctx.llm_router.get_panel(Role.VISION_CRITIC)
             try:
-                llms = [p for p, _ in pairs]
-                labels = [label for _, label in pairs]
-                try:
-                    evaluation, panel_result = await select_models_with_panel(
-                        llms, labels, ref_paths, model_images,
-                    )
-                except RuntimeError as exc:
-                    return StepResult(ok=False, message=f"model-select panel failed: {exc}")
-            finally:
-                await close_panel_providers(pairs)
+                evaluation, panel_result = await select_models_with_panel(
+                    llms, labels, ref_paths, model_images,
+                )
+            except RuntimeError as exc:
+                return StepResult(ok=False, message=f"model-select panel failed: {exc}")
 
             # Persist panel.json regardless — it's the forensic record. The
             # main evaluation.json and report only land when the panel is
@@ -573,6 +565,9 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
                     },
                 )
 
+            evaluation = evaluation.model_copy(
+                update={"model_id": panel_result.winner_model_id},
+            )
             project_store.save_evaluation(ctx.project, evaluation, pass_num=pass_num)
             generate_model_select_report(ctx.project, pass_num=pass_num)
 
@@ -592,14 +587,19 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
                 },
             )
 
-        # Single-model path (unchanged).
+        # Single-model path.
+        from styleclaw.core.llm_routing import Role
+        llm = ctx.llm_router.get(Role.VISION_CRITIC)
+        model_id = getattr(llm, "_model_id", "")
+
         thinking = ""
         if ctx.show_thinking:
             evaluation, thinking = await evaluate_models_with_thinking(
-                ctx.llm, ref_paths, model_images, thinking_budget=ctx.thinking_budget,
+                llm, ref_paths, model_images, thinking_budget=ctx.thinking_budget,
             )
         else:
-            evaluation = await evaluate_models(ctx.llm, ref_paths, model_images)
+            evaluation = await evaluate_models(llm, ref_paths, model_images)
+        evaluation = evaluation.model_copy(update={"model_id": model_id})
         project_store.save_evaluation(ctx.project, evaluation, pass_num=pass_num)
         if thinking:
             project_store.save_thinking(
@@ -621,6 +621,7 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
             evaluate_round,
             evaluate_round_with_thinking,
         )
+        from styleclaw.core.llm_routing import Role
         from styleclaw.scripts.report import generate_style_refine_report
         from styleclaw.storage.image_store import list_output_images
 
@@ -641,14 +642,18 @@ async def do_evaluate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         if not model_images:
             return StepResult(ok=False, message="No generated images for this round")
 
+        llm = ctx.llm_router.get(Role.VISION_CRITIC)
+        model_id = getattr(llm, "_model_id", "")
+
         thinking = ""
         if ctx.show_thinking:
             evaluation, thinking = await evaluate_round_with_thinking(
-                ctx.llm, ref_paths, model_images, round_num,
+                llm, ref_paths, model_images, round_num,
                 thinking_budget=ctx.thinking_budget,
             )
         else:
-            evaluation = await evaluate_round(ctx.llm, ref_paths, model_images, round_num)
+            evaluation = await evaluate_round(llm, ref_paths, model_images, round_num)
+        evaluation = evaluation.model_copy(update={"model_id": model_id})
         project_store.save_round_evaluation(
             ctx.project, round_num, evaluation, pass_num=pass_num,
         )
