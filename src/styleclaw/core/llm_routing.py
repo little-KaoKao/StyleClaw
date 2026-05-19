@@ -166,8 +166,9 @@ def validate_routing_env() -> list[str]:
 
     # 2. Per-role panel pool length when the matching toggle is on.
     # Duplicates resolution logic from _resolve_panel_pool on purpose — the
-    # validator runs without instantiating the router.
-    from styleclaw.core.config import env_truthy, PANEL_MODELS as GLOBAL_PANEL_MODELS
+    # validator runs without instantiating the router. Read all envs through
+    # os.getenv directly so callers don't need to reload core.config first.
+    from styleclaw.core.config import env_truthy
     for role, toggle_env in _PANEL_TOGGLE_FOR_ROLE.items():
         if not env_truthy(toggle_env):
             continue
@@ -177,7 +178,8 @@ def validate_routing_env() -> list[str]:
             pool = [m.strip() for m in role_raw.split(",") if m.strip()]
             source = role_env
         else:
-            pool = list(GLOBAL_PANEL_MODELS)
+            global_raw = os.getenv("STYLECLAW_PANEL_MODELS", "").strip()
+            pool = [m.strip() for m in global_raw.split(",") if m.strip()]
             source = "STYLECLAW_PANEL_MODELS"
         if not pool:
             errors.append(

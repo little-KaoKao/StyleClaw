@@ -78,6 +78,7 @@ class StyleAnalysis(_FrozenModel):
     # 输出
     trigger_phrase: str = ""
     trigger_variants: list[str] = Field(default_factory=list)
+    model_id: str = ""
 
 
 class DimensionScores(_FrozenModel):
@@ -116,6 +117,7 @@ class ModelEvaluation(_FrozenModel):
     recommendation: str = ""
     recommended_variant: str = ""
     next_direction: str = ""
+    model_id: str = ""
 
 
 class PromptConfig(_FrozenModel):
@@ -124,6 +126,7 @@ class PromptConfig(_FrozenModel):
     model_params: dict[str, dict[str, Any]] = Field(default_factory=dict)
     derived_from: str = ""
     adjustment_note: str = ""
+    model_id: str = ""
 
 
 class RoundScore(_FrozenModel):
@@ -140,6 +143,7 @@ class RoundEvaluation(_FrozenModel):
     evaluations: list[RoundScore] = Field(default_factory=list)
     recommendation: str = ""
     next_direction: str = ""
+    model_id: str = ""
 
     def should_approve(self) -> bool:
         if not self.evaluations:
@@ -168,6 +172,7 @@ class BatchConfig(_FrozenModel):
     batch: int = 0
     trigger_phrase: str = ""
     cases: list[BatchCase] = Field(default_factory=list)
+    model_id: str = ""
 
 
 class ProjectState(_FrozenModel):

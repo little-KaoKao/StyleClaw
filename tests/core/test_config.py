@@ -28,10 +28,11 @@ class TestValidateEnv:
         monkeypatch.setenv("RUNNINGHUB_API_KEY", "k")
         monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
         monkeypatch.delenv("LLM_MODEL", raising=False)
-        from styleclaw.core.models import Phase  # noqa: F401 (forces import order)
-        import importlib, styleclaw.core.config as cfg_mod
-        importlib.reload(cfg_mod)
-        errs = cfg_mod.validate_env()
+        for role_name in ("VISION_CRITIC", "VISION_ANALYST", "WRITER", "PLANNER"):
+            monkeypatch.delenv(f"STYLECLAW_MODEL_{role_name}", raising=False)
+        # validate_routing_env reads os.getenv directly — no config reload required.
+        from styleclaw.core.config import validate_env
+        errs = validate_env()
         assert any("vision_critic" in e for e in errs)
 
 

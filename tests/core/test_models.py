@@ -110,3 +110,58 @@ class TestPanelModels:
         )
         assert r.winner_model_id == "a"
         assert len(r.scores) == 6
+
+
+from styleclaw.core.models import (
+    BatchConfig,
+    ModelEvaluation,
+    PromptConfig,
+    RoundEvaluation,
+    StyleAnalysis,
+)
+
+
+class TestModelIdField:
+    """All 5 LLM-derived artifact models carry an optional model_id field.
+
+    Default "" lets old on-disk JSON (without the field) round-trip cleanly,
+    and lets action code fill it post-parse via model_copy(update=...).
+    """
+
+    def test_style_analysis_defaults_empty(self):
+        assert StyleAnalysis().model_id == ""
+
+    def test_model_evaluation_defaults_empty(self):
+        assert ModelEvaluation().model_id == ""
+
+    def test_round_evaluation_defaults_empty(self):
+        assert RoundEvaluation().model_id == ""
+
+    def test_prompt_config_defaults_empty(self):
+        assert PromptConfig().model_id == ""
+
+    def test_batch_config_defaults_empty(self):
+        assert BatchConfig().model_id == ""
+
+    def test_old_json_without_field_loads(self):
+        # Simulate a legacy file written before the field was added.
+        legacy_json = '{"trigger_phrase": "x"}'
+        analysis = StyleAnalysis.model_validate_json(legacy_json)
+        assert analysis.trigger_phrase == "x"
+        assert analysis.model_id == ""
+
+    def test_model_copy_update_sets_field(self):
+        analysis = StyleAnalysis(trigger_phrase="t")
+        updated = analysis.model_copy(update={"model_id": "claude-sonnet-4-6"})
+        assert updated.model_id == "claude-sonnet-4-6"
+        # Original frozen instance unchanged.
+        assert analysis.model_id == ""
+
+    def test_round_evaluation_with_round_still_works(self):
+        # RoundEvaluation has helper methods — make sure model_id doesn't
+        # interfere with them.
+        ev = RoundEvaluation(round=1, model_id="m").model_copy(
+            update={"evaluations": []}
+        )
+        assert ev.model_id == "m"
+        assert ev.should_approve() is False
