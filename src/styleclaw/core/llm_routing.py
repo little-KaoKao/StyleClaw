@@ -50,6 +50,8 @@ class RoleRouter:
     ) -> None:
         self._role_configs = role_configs
         self._panel_pools = panel_pools
+        self._cached_single: dict[Role, "LLMProvider"] = {}
+        self._cached_panel: dict[Role, tuple[list, list[str]]] = {}
 
     @classmethod
     def from_env(cls) -> "RoleRouter":
@@ -83,5 +85,42 @@ class RoleRouter:
 
     def panel_pool_for(self, role: Role) -> list[str]:
         return list(self._panel_pools[role])
+
+    def get(self, role: Role):
+        """Return a cached single-model provider for the role.
+
+        Constructs on first call using the existing provider-class precedence
+        (OpenAI-compat > RunningHub LLM > Bedrock).
+        """
+        if role not in self._cached_single:
+            self._cached_single[role] = _build_provider_for_role(
+                self._role_configs[role]
+            )
+        return self._cached_single[role]
+
+    async def close(self) -> None:
+        """Placeholder; Task 6 replaces this with idempotent teardown."""
+        return None
+
+
+def _build_provider_for_role(cfg: RoleConfig):
+    """Pick a provider class via the existing precedence rule and pass model_id.
+
+    OpenAI-compat > RunningHub LLM > Bedrock. Duplicates the logic in
+    cli._build_llm_provider on purpose — Part 3 will delete the cli copy and
+    route everything through here.
+    """
+    from styleclaw.core.config import env_truthy
+
+    model_id = cfg.model_id or None  # provider classes accept None as "use env default"
+
+    if os.getenv("OPENAI_COMPAT_API_KEY"):
+        from styleclaw.providers.llm.openai_compat import OpenAICompatProvider
+        return OpenAICompatProvider(model_id=model_id)
+    if env_truthy("RUNNINGHUB_LLM"):
+        from styleclaw.providers.llm.runninghub_llm import RunningHubLLMProvider
+        return RunningHubLLMProvider(model_id=model_id)
+    from styleclaw.providers.llm.bedrock import BedrockProvider
+    return BedrockProvider(model_id=model_id)
 
 

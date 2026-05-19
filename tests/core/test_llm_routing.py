@@ -154,3 +154,62 @@ class TestFromEnvPanel:
 
         for role in Role:
             assert router.panel_pool_for(role) == [], role
+
+
+class TestGetSingle:
+    """Test lazy construction + caching of single-model providers.
+
+    Uses OPENAI_COMPAT_* envs so the router picks OpenAICompatProvider — the
+    same path real users hit when they configure gptproto.com.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _setup_openai_compat(self, monkeypatch):
+        for role in Role:
+            monkeypatch.delenv(f"STYLECLAW_MODEL_{role.value.upper()}", raising=False)
+        monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://test.local/v1")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "test-key")
+        monkeypatch.delenv("RUNNINGHUB_LLM", raising=False)
+        monkeypatch.delenv("AWS_BEARER_TOKEN_BEDROCK", raising=False)
+        monkeypatch.setenv("STYLECLAW_MODEL_VISION_CRITIC", "critic-model")
+        monkeypatch.setenv("STYLECLAW_MODEL_WRITER", "writer-model")
+        yield
+
+    def test_get_returns_openai_compat_provider(self, monkeypatch):
+        from styleclaw.core.llm_routing import RoleRouter
+        from styleclaw.providers.llm.openai_compat import OpenAICompatProvider
+
+        router = RoleRouter.from_env()
+        try:
+            provider = router.get(Role.VISION_CRITIC)
+            assert isinstance(provider, OpenAICompatProvider)
+            assert provider._model_id == "critic-model"
+        finally:
+            import asyncio
+            asyncio.run(router.close())
+
+    def test_get_caches_provider_instance(self):
+        from styleclaw.core.llm_routing import RoleRouter
+
+        router = RoleRouter.from_env()
+        try:
+            a = router.get(Role.VISION_CRITIC)
+            b = router.get(Role.VISION_CRITIC)
+            assert a is b  # Same instance reused.
+        finally:
+            import asyncio
+            asyncio.run(router.close())
+
+    def test_get_different_roles_get_different_instances(self):
+        from styleclaw.core.llm_routing import RoleRouter
+
+        router = RoleRouter.from_env()
+        try:
+            critic = router.get(Role.VISION_CRITIC)
+            writer = router.get(Role.WRITER)
+            assert critic is not writer
+            assert critic._model_id == "critic-model"
+            assert writer._model_id == "writer-model"
+        finally:
+            import asyncio
+            asyncio.run(router.close())
