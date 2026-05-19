@@ -319,3 +319,51 @@ class TestClose:
         asyncio.run(router.close())
         assert not router._cached_single
         assert not router._cached_panel
+
+
+class TestValidateRoutingEnvSingle:
+    """Per-role missing-model check.
+
+    If both STYLECLAW_MODEL_<ROLE> and LLM_MODEL are unset, the role is not
+    resolvable and validation must emit one error per such role.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clear_envs(self, monkeypatch):
+        for role in Role:
+            monkeypatch.delenv(f"STYLECLAW_MODEL_{role.value.upper()}", raising=False)
+            monkeypatch.delenv(f"STYLECLAW_PANEL_MODELS_{role.value.upper()}", raising=False)
+        monkeypatch.delenv("LLM_MODEL", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_MODELS", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_REFINE", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_MODEL_SELECT", raising=False)
+        import importlib, styleclaw.core.config as cfg
+        importlib.reload(cfg)
+        yield
+
+    def test_all_unset_emits_one_error_per_role(self):
+        from styleclaw.core.llm_routing import Role, validate_routing_env
+
+        errors = validate_routing_env()
+        # One error per role — 4 total.
+        for role in Role:
+            assert any(role.value in e for e in errors), f"missing error for {role}"
+        assert len(errors) >= 4
+
+    def test_llm_model_set_satisfies_all_roles(self, monkeypatch):
+        monkeypatch.setenv("LLM_MODEL", "fallback-model")
+
+        from styleclaw.core.llm_routing import validate_routing_env
+        assert validate_routing_env() == []
+
+    def test_role_env_satisfies_just_that_role(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_MODEL_VISION_CRITIC", "critic-only")
+
+        from styleclaw.core.llm_routing import Role, validate_routing_env
+        errors = validate_routing_env()
+
+        # vision_critic resolved; other 3 still missing.
+        assert not any("vision_critic" in e for e in errors)
+        assert any("vision_analyst" in e for e in errors)
+        assert any("writer" in e for e in errors)
+        assert any("planner" in e for e in errors)

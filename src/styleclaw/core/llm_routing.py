@@ -146,6 +146,24 @@ class RoleRouter:
             pass
 
 
+def validate_routing_env() -> list[str]:
+    """Return human-readable error strings for misconfigured routing envs.
+
+    Empty list when everything is fine. Called by ``config.validate_env()`` at
+    CLI startup. Never raises — aggregates errors so the user sees them all
+    in one pass.
+    """
+    errors: list[str] = []
+    for role in Role:
+        env_name = f"STYLECLAW_MODEL_{role.value.upper()}"
+        if not os.getenv(env_name) and not os.getenv("LLM_MODEL"):
+            errors.append(
+                f"no model resolvable for role '{role.value}': "
+                f"set {env_name} or LLM_MODEL"
+            )
+    return errors
+
+
 def _build_provider_for_role(cfg: RoleConfig):
     """Pick a provider class via the existing precedence rule and pass model_id.
 

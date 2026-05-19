@@ -9,6 +9,7 @@ class TestValidateEnv:
     def test_runninghub_llm_satisfies_llm_requirement(self, monkeypatch) -> None:
         monkeypatch.setenv("RUNNINGHUB_API_KEY", "k")
         monkeypatch.setenv("RUNNINGHUB_LLM", "1")
+        monkeypatch.setenv("LLM_MODEL", "dummy-model")  # satisfy per-role routing check
         monkeypatch.delenv("OPENAI_COMPAT_API_KEY", raising=False)
         monkeypatch.delenv("AWS_BEARER_TOKEN_BEDROCK", raising=False)
         assert validate_env() == []
@@ -20,6 +21,18 @@ class TestValidateEnv:
         monkeypatch.delenv("RUNNINGHUB_LLM", raising=False)
         errs = validate_env()
         assert any("No LLM credentials" in e for e in errs)
+
+    def test_validate_env_reports_missing_role_models(self, monkeypatch):
+        # All provider creds set so the existing checks pass, but no LLM_MODEL
+        # and no role envs — validate_env should surface the routing errors.
+        monkeypatch.setenv("RUNNINGHUB_API_KEY", "k")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
+        monkeypatch.delenv("LLM_MODEL", raising=False)
+        from styleclaw.core.models import Phase  # noqa: F401 (forces import order)
+        import importlib, styleclaw.core.config as cfg_mod
+        importlib.reload(cfg_mod)
+        errs = cfg_mod.validate_env()
+        assert any("vision_critic" in e for e in errs)
 
 
 class TestConfigDefaults:

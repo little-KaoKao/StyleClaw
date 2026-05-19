@@ -133,5 +133,11 @@ def validate_env() -> list[str]:
             "OPENAI_COMPAT_API_KEY, or RUNNINGHUB_LLM=1 (uses RUNNINGHUB_API_KEY)."
         )
     errors.extend(validate_panel_config())
+
+    # Per-role routing checks (vision_critic / vision_analyst / writer / planner).
+    # Late import to avoid circular: llm_routing imports from config.
+    from styleclaw.core.llm_routing import validate_routing_env
+    errors.extend(validate_routing_env())
+
     return errors
 
