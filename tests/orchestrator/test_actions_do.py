@@ -1064,12 +1064,6 @@ class TestDoRefinePanel:
         panel_prompt = PromptConfig(round=1, trigger_phrase="panel-win", derived_from="initial-analysis")
 
         with patch(
-            "styleclaw.providers.llm.panel_factory.build_panel_providers",
-            return_value=[(AsyncMock(_model_id=f"m{i}"), f"L{i}") for i in (1, 2, 3)],
-        ), patch(
-            "styleclaw.providers.llm.panel_factory.close_panel_providers",
-            new=AsyncMock(),
-        ), patch(
             "styleclaw.agents.refine_panel.refine_with_panel",
             new=AsyncMock(return_value=(panel_prompt, panel_result)),
         ) as panel_call, patch(
@@ -1104,12 +1098,6 @@ class TestDoRefinePanel:
         project_store.save_analysis(name, StyleAnalysis(trigger_phrase="seed"))
 
         with patch(
-            "styleclaw.providers.llm.panel_factory.build_panel_providers",
-            return_value=[(AsyncMock(_model_id=f"m{i}"), f"L{i}") for i in (1, 2, 3)],
-        ), patch(
-            "styleclaw.providers.llm.panel_factory.close_panel_providers",
-            new=AsyncMock(),
-        ), patch(
             "styleclaw.agents.refine_panel.refine_with_panel",
             new=AsyncMock(side_effect=RuntimeError("Refine panel produced no winner")),
         ):
@@ -1146,12 +1134,6 @@ class TestDoRefinePanel:
         panel_prompt = PromptConfig(round=1, trigger_phrase="shaky", derived_from="initial-analysis")
 
         with patch(
-            "styleclaw.providers.llm.panel_factory.build_panel_providers",
-            return_value=[(AsyncMock(_model_id=f"m{i}"), f"L{i}") for i in (1, 2, 3)],
-        ), patch(
-            "styleclaw.providers.llm.panel_factory.close_panel_providers",
-            new=AsyncMock(),
-        ), patch(
             "styleclaw.agents.refine_panel.refine_with_panel",
             new=AsyncMock(return_value=(panel_prompt, degraded)),
         ):
@@ -1193,12 +1175,6 @@ class TestDoRefinePanel:
         panel_prompt = PromptConfig(round=1, trigger_phrase="shaky", derived_from="initial-analysis")
 
         with patch(
-            "styleclaw.providers.llm.panel_factory.build_panel_providers",
-            return_value=[(AsyncMock(_model_id=f"m{i}"), f"L{i}") for i in (1, 2, 3)],
-        ), patch(
-            "styleclaw.providers.llm.panel_factory.close_panel_providers",
-            new=AsyncMock(),
-        ), patch(
             "styleclaw.agents.refine_panel.refine_with_panel",
             new=AsyncMock(return_value=(panel_prompt, degraded)),
         ):
@@ -1338,12 +1314,6 @@ class TestDoEvaluatePanel:
         )
 
         with patch(
-            "styleclaw.providers.llm.panel_factory.build_panel_providers",
-            return_value=[(AsyncMock(_model_id=f"m{i}"), f"L{i}") for i in (1, 2, 3)],
-        ), patch(
-            "styleclaw.providers.llm.panel_factory.close_panel_providers",
-            new=AsyncMock(),
-        ), patch(
             "styleclaw.agents.select_model_panel.select_models_with_panel",
             new=AsyncMock(return_value=(panel_eval, panel_result)),
         ), patch(
@@ -1395,12 +1365,6 @@ class TestDoEvaluatePanel:
         )
 
         with patch(
-            "styleclaw.providers.llm.panel_factory.build_panel_providers",
-            return_value=[(AsyncMock(_model_id=f"m{i}"), f"L{i}") for i in (1, 2, 3)],
-        ), patch(
-            "styleclaw.providers.llm.panel_factory.close_panel_providers",
-            new=AsyncMock(),
-        ), patch(
             "styleclaw.agents.select_model_panel.select_models_with_panel",
             new=AsyncMock(return_value=(panel_eval, degraded)),
         ), patch(
