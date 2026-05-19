@@ -81,3 +81,76 @@ class TestFromEnvSingle:
         assert router.config_for(Role.VISION_ANALYST).model_id == ""
         assert router.config_for(Role.WRITER).model_id == "writer-model"
         assert router.config_for(Role.PLANNER).model_id == ""
+
+
+class TestFromEnvPanel:
+    """Panel pool resolution: per-role env > global STYLECLAW_PANEL_MODELS > empty.
+
+    Only VISION_CRITIC and VISION_ANALYST get panel pools — WRITER and PLANNER
+    are never paneled.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clear_envs(self, monkeypatch):
+        for role in Role:
+            monkeypatch.delenv(f"STYLECLAW_MODEL_{role.value.upper()}", raising=False)
+            monkeypatch.delenv(f"STYLECLAW_PANEL_MODELS_{role.value.upper()}", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_MODELS", raising=False)
+        monkeypatch.delenv("LLM_MODEL", raising=False)
+        # Reload config_mod so PANEL_MODELS reflects the cleared state.
+        import importlib, styleclaw.core.config as cfg
+        importlib.reload(cfg)
+        yield
+
+    def _reload_config(self):
+        import importlib, styleclaw.core.config as cfg
+        importlib.reload(cfg)
+
+    def test_role_specific_pool(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS_VISION_CRITIC", "a,b,c")
+        self._reload_config()
+
+        from styleclaw.core.llm_routing import RoleRouter
+        router = RoleRouter.from_env()
+
+        assert router.panel_pool_for(Role.VISION_CRITIC) == ["a", "b", "c"]
+        assert router.panel_pool_for(Role.VISION_ANALYST) == []
+
+    def test_fallback_to_global(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "x,y,z")
+        self._reload_config()
+
+        from styleclaw.core.llm_routing import RoleRouter
+        router = RoleRouter.from_env()
+
+        assert router.panel_pool_for(Role.VISION_CRITIC) == ["x", "y", "z"]
+        assert router.panel_pool_for(Role.VISION_ANALYST) == ["x", "y", "z"]
+
+    def test_role_overrides_global(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "g1,g2,g3")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS_VISION_CRITIC", "c1,c2,c3")
+        self._reload_config()
+
+        from styleclaw.core.llm_routing import RoleRouter
+        router = RoleRouter.from_env()
+
+        assert router.panel_pool_for(Role.VISION_CRITIC) == ["c1", "c2", "c3"]
+        assert router.panel_pool_for(Role.VISION_ANALYST) == ["g1", "g2", "g3"]
+
+    def test_only_panel_roles_have_pools(self, monkeypatch):
+        # WRITER and PLANNER never panel — pool is always empty for them.
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "g1,g2,g3")
+        self._reload_config()
+
+        from styleclaw.core.llm_routing import RoleRouter
+        router = RoleRouter.from_env()
+
+        assert router.panel_pool_for(Role.WRITER) == []
+        assert router.panel_pool_for(Role.PLANNER) == []
+
+    def test_empty_when_no_envs(self):
+        from styleclaw.core.llm_routing import RoleRouter
+        router = RoleRouter.from_env()
+
+        for role in Role:
+            assert router.panel_pool_for(role) == [], role

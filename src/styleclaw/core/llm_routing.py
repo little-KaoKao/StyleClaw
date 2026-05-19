@@ -31,6 +31,10 @@ class RoleConfig:
     api_key: str | None = None
 
 
+# Roles that participate in panel mode.
+_PANEL_ROLES: frozenset[Role] = frozenset({Role.VISION_CRITIC, Role.VISION_ANALYST})
+
+
 class RoleRouter:
     """Lazy-build LLMProvider instances, scoped by Role.
 
@@ -51,8 +55,7 @@ class RoleRouter:
     def from_env(cls) -> "RoleRouter":
         """Read env vars; do NOT construct any provider yet."""
         role_configs = {role: cls._resolve_role(role) for role in Role}
-        # Panel pools added in Task 3; default to empty for now.
-        panel_pools: dict[Role, list[str]] = {}
+        panel_pools = {role: cls._resolve_panel_pool(role) for role in Role}
         return cls(role_configs, panel_pools)
 
     @staticmethod
@@ -61,6 +64,24 @@ class RoleRouter:
         model_id = os.getenv(env_name) or os.getenv("LLM_MODEL", "")
         return RoleConfig(model_id=model_id)
 
+    @staticmethod
+    def _resolve_panel_pool(role: Role) -> list[str]:
+        if role not in _PANEL_ROLES:
+            return []
+        # Role-specific env wins over the global pool.
+        role_env = f"STYLECLAW_PANEL_MODELS_{role.value.upper()}"
+        raw = os.getenv(role_env, "").strip()
+        if raw:
+            return [m.strip() for m in raw.split(",") if m.strip()]
+        # Read the live config module so test monkeypatching + reload propagates.
+        import importlib
+        cfg = importlib.import_module("styleclaw.core.config")
+        return list(cfg.PANEL_MODELS)
+
     def config_for(self, role: Role) -> RoleConfig:
         return self._role_configs[role]
+
+    def panel_pool_for(self, role: Role) -> list[str]:
+        return list(self._panel_pools[role])
+
 
