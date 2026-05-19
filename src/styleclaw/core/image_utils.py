@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import os
+import weakref
 from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
@@ -14,6 +15,14 @@ from PIL import Image, UnidentifiedImageError
 from styleclaw.core.config import IMAGE_ENCODE_CONCURRENCY
 
 logger = logging.getLogger(__name__)
+
+# Pillow ships a decompression-bomb guard that raises at roughly 2× this value
+# and warns at 1×, but a third-party library elsewhere in the process can set
+# ``Image.MAX_IMAGE_PIXELS = None`` to silence its own warnings — which removes
+# our protection too. Pin the safe default ourselves so the cap applies
+# regardless of dependency behavior. A 50 MB compressed PNG can still decode to
+# multi-GB pixel arrays without this guard.
+Image.MAX_IMAGE_PIXELS = 178_956_970
 
 MAX_REF_IMAGE_BYTES = 50 * 1024 * 1024
 
@@ -107,17 +116,23 @@ def _cache_save(path: Path, data: bytes, media_type: str) -> None:
 
 # Bound the number of Pillow-decoding worker threads so building image
 # blocks for an evaluate call (often 20+ images) doesn't spawn one thread
-# per image.
-_ENCODE_SEMAPHORE: asyncio.Semaphore | None = None
+# per image. Stored per event-loop because ``asyncio.Semaphore`` is bound
+# to the loop on which it was created; a single module-level singleton would
+# deadlock the second-and-subsequent ``asyncio.run()`` invocations (notably
+# under pytest-asyncio, which builds a fresh loop per test). WeakKeyDictionary
+# entries are GC'd when their loop is collected.
+_ENCODE_SEMAPHORES: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore]" = (
+    weakref.WeakKeyDictionary()
+)
 
 
 def _encode_semaphore() -> asyncio.Semaphore:
-    # Lazy init because event-loop-aware primitives can't be constructed at
-    # import time (no running loop yet).
-    global _ENCODE_SEMAPHORE
-    if _ENCODE_SEMAPHORE is None:
-        _ENCODE_SEMAPHORE = asyncio.Semaphore(IMAGE_ENCODE_CONCURRENCY)
-    return _ENCODE_SEMAPHORE
+    loop = asyncio.get_running_loop()
+    sem = _ENCODE_SEMAPHORES.get(loop)
+    if sem is None:
+        sem = asyncio.Semaphore(IMAGE_ENCODE_CONCURRENCY)
+        _ENCODE_SEMAPHORES[loop] = sem
+    return sem
 
 
 def verify_ref_image(path: Path | str, max_bytes: int = MAX_REF_IMAGE_BYTES) -> None:

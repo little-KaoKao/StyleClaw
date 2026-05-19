@@ -504,7 +504,10 @@ class TestRetestModelsCommand:
         _set_state(Phase.INIT)
         result = runner.invoke(app, ["retest-models", "test-proj"])
         assert result.exit_code == 1
-        assert "STYLE_REFINE or BATCH_T2I" in result.output
+        # CLI guard now mirrors the orchestrator: allow MODEL_SELECT in addition
+        # to STYLE_REFINE and BATCH_T2I.
+        assert "STYLE_REFINE" in result.output
+        assert "BATCH_T2I" in result.output
 
 
 class TestBackToT2iCommand:

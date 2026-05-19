@@ -28,6 +28,13 @@ _PANEL_ENV_KEYS = (
     "STYLECLAW_PANEL_MODEL_SELECT",
     "STYLECLAW_PANEL_MODELS",
     "STYLECLAW_PANEL_LABELS",
+    # Role-specific pools — populated from .env by load_dotenv() the moment
+    # styleclaw.cli is imported (e.g. via tests/core/test_max_rounds.py). If
+    # left in place, they make config.validate_panel_config() skip the global
+    # "exactly 3" check, which silently fails unrelated TestPanelConfig tests
+    # depending on test ordering.
+    "STYLECLAW_PANEL_MODELS_VISION_CRITIC",
+    "STYLECLAW_PANEL_MODELS_VISION_ANALYST",
 )
 
 
@@ -49,15 +56,15 @@ def _reset_panel_config_state():
 def _reset_encode_semaphore():
     """Drop the per-loop _ENCODE_SEMAPHORE so the next test rebinds on its own loop.
 
-    The semaphore in ``styleclaw.core.image_utils`` is lazy-initialised on first
-    use and never replaced. pytest-asyncio creates a fresh event loop per test,
-    so a semaphore from test A would be bound to a defunct loop when test B
-    tries to acquire it. Resetting to None forces re-creation each time.
+    The semaphore in ``styleclaw.core.image_utils`` is keyed by event loop in a
+    WeakKeyDictionary, so once the loop is collected the entry disappears on
+    its own. We still clear the map at teardown to make test isolation explicit
+    and to avoid relying on GC timing.
     """
     yield
     try:
         import styleclaw.core.image_utils as image_utils
-        image_utils._ENCODE_SEMAPHORE = None
-    except ImportError:
+        image_utils._ENCODE_SEMAPHORES.clear()
+    except (ImportError, AttributeError):
         pass
 

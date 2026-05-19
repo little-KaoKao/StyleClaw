@@ -68,6 +68,11 @@ async def refine_with_panel(
     score_template = SCORE_PROMPT_PATH.read_text(encoding="utf-8")
     history_text = _build_history_text(evaluations)
 
+    # Build the image blocks once: every (evaluator, proposal) pair sees the
+    # same refs, so encoding in the closure would re-do the work N times in
+    # parallel inside the panel TaskGroup.
+    blocks = await build_image_blocks_async(list(ref_image_paths))
+
     async def score(evaluator: LLMProvider, payload: dict) -> tuple[float, str]:
         rendered = (
             score_template
@@ -77,7 +82,6 @@ async def refine_with_panel(
             .replace("{candidate_trigger}", sanitize_braces(payload.get("trigger_phrase", "")))
             .replace("{candidate_note}", sanitize_braces(payload.get("adjustment_note", "")))
         )
-        blocks = await build_image_blocks_async(list(ref_image_paths))
         messages = [{
             "role": "user",
             "content": [

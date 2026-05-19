@@ -33,16 +33,19 @@ async def select_models_with_panel(
 
     score_template = SCORE_PROMPT_PATH.read_text(encoding="utf-8")
 
+    # Build the image blocks once: the same set of refs + per-model generations
+    # is shown to every (evaluator, proposal) pair, so encoding inside the score
+    # closure would re-do the work 6 times concurrently (3 evaluators × 2 peers).
+    all_paths: list[Path] = list(ref_image_paths)
+    for imgs in model_images.values():
+        all_paths.extend(imgs)
+    blocks = await build_image_blocks_async(all_paths)
+
     async def score(evaluator: LLMProvider, payload: dict) -> tuple[float, str]:
         rendered = score_template.replace(
             "{candidate_evaluation}",
             sanitize_braces(json.dumps(payload, ensure_ascii=False, indent=2)),
         )
-        # Show the same images the proposer saw so the scorer can verify.
-        all_paths: list[Path] = list(ref_image_paths)
-        for imgs in model_images.values():
-            all_paths.extend(imgs)
-        blocks = await build_image_blocks_async(all_paths)
         messages = [{
             "role": "user",
             "content": [

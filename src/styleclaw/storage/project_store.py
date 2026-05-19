@@ -26,6 +26,12 @@ from styleclaw.core.models import (
 DATA_ROOT = Path(os.getenv("STYLECLAW_DATA_ROOT", "data/projects"))
 
 _PROJECT_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
+# Subdirectory components (model_id, variant, case_id) come from MODEL_REGISTRY,
+# LLM-generated artifacts (cases.json), or remembered task records. Restrict
+# them to a printable shell-safe charset so a hostile LLM (or a hand-edited
+# cases.json) cannot escape the project's results tree via ``../`` or absolute
+# paths. Dots are allowed for filename-like ids but not at the boundaries.
+_PATH_COMPONENT_RE = re.compile(r"^[a-zA-Z0-9_][a-zA-Z0-9._-]*$")
 _PROJECT_LOCK_TIMEOUT = 30  # seconds; a stuck process beyond this surfaces, not waits forever
 
 T = TypeVar("T", bound=BaseModel)
@@ -36,6 +42,20 @@ def _validate_project_name(name: str) -> None:
         raise ValueError(
             f"Invalid project name '{name}'. "
             "Use only letters, digits, hyphens, and underscores."
+        )
+
+
+def _validate_path_component(value: str, field: str) -> None:
+    """Reject any subpath fragment that could escape via ``..`` or path separators.
+
+    Applied to LLM- or user-supplied identifiers (model_id, variant, case_id)
+    before they are joined into filesystem paths under DATA_ROOT.
+    """
+    if not isinstance(value, str) or not _PATH_COMPONENT_RE.match(value) or ".." in value:
+        raise ValueError(
+            f"Invalid {field} '{value}'. "
+            "Use only letters, digits, dots, hyphens, and underscores; "
+            "must start with a letter, digit, or underscore."
         )
 
 
@@ -105,10 +125,13 @@ def create_project(config: ProjectConfig, force: bool = False) -> Path:
         if not force:
             raise FileExistsError(f"Project '{config.name}' already exists at {root}")
         # Back up the existing project before recreating, so manual recovery
-        # remains possible if the new run fails.
-        from datetime import datetime
+        # remains possible if the new run fails. Use UTC via utcnow_iso to
+        # match every other timestamp in the codebase; ':' is not filename-
+        # safe on Windows so sanitize it.
         from shutil import move
-        backup = root.with_name(f"{root.name}.bak-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+        from styleclaw.core.time_utils import utcnow_iso
+        stamp = utcnow_iso().replace(":", "-").replace("+", "_")
+        backup = root.with_name(f"{root.name}.bak-{stamp}")
         move(str(root), str(backup))
 
     root.mkdir(parents=True)
@@ -243,6 +266,9 @@ def load_analysis(name: str, pass_num: int = 1) -> StyleAnalysis:
 def model_results_dir(
     name: str, model_id: str, variant: str = "", pass_num: int = 1,
 ) -> Path:
+    _validate_path_component(model_id, "model_id")
+    if variant:
+        _validate_path_component(variant, "variant")
     base = model_select_dir(name, pass_num) / "results" / model_id
     d = base / variant if variant else base
     d.mkdir(parents=True, exist_ok=True)
@@ -371,6 +397,7 @@ def round_dir(name: str, round_num: int, pass_num: int = 1) -> Path:
 def round_results_dir(
     name: str, round_num: int, model_id: str, pass_num: int = 1,
 ) -> Path:
+    _validate_path_component(model_id, "model_id")
     d = round_dir(name, round_num, pass_num) / "results" / model_id
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -506,6 +533,7 @@ def batch_t2i_dir(name: str, batch_num: int) -> Path:
 
 
 def batch_t2i_case_dir(name: str, batch_num: int, case_id: str) -> Path:
+    _validate_path_component(case_id, "case_id")
     d = batch_t2i_dir(name, batch_num) / "results" / case_id
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -547,6 +575,7 @@ def batch_i2i_dir(name: str, batch_num: int) -> Path:
 
 
 def batch_i2i_case_dir(name: str, batch_num: int, case_id: str) -> Path:
+    _validate_path_component(case_id, "case_id")
     d = batch_i2i_dir(name, batch_num) / "results" / case_id
     d.mkdir(parents=True, exist_ok=True)
     return d

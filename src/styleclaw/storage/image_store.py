@@ -71,6 +71,25 @@ def _is_disallowed_host(hostname: str) -> tuple[bool, str]:
     return False, ""
 
 
+# Process-wide cache of SSRF host-check results. A typical batch poll hits the
+# same RunningHub CDN hostname for every download, so re-resolving via
+# ``socket.getaddrinfo`` per URL wastes a thread-pool slot (which the PIL
+# encoder also shares) for up to the OS DNS timeout. The cache is unbounded by
+# design — host counts in practice are small (CDN domains), and entries are
+# tiny. DNS rebinding after the first check is an inherent SSRF-guard
+# limitation, not a regression from caching.
+_HOST_CHECK_CACHE: dict[str, tuple[bool, str]] = {}
+
+
+async def _is_disallowed_host_cached(hostname: str) -> tuple[bool, str]:
+    cached = _HOST_CHECK_CACHE.get(hostname)
+    if cached is not None:
+        return cached
+    result = await asyncio.to_thread(_is_disallowed_host, hostname)
+    _HOST_CHECK_CACHE[hostname] = result
+    return result
+
+
 def list_output_images(dir_path: Path, prefix: str = "output-") -> list[Path]:
     """List generated output images in a directory, supporting all extensions
     produced by `download_image` (png/jpg/jpeg/webp/gif).
@@ -110,7 +129,7 @@ async def download_image(
         raise RuntimeError(f"Refusing to download non-HTTP URL: {url[:80]}")
 
     parsed = urlsplit(url)
-    blocked, reason = await asyncio.to_thread(_is_disallowed_host, parsed.hostname or "")
+    blocked, reason = await _is_disallowed_host_cached(parsed.hostname or "")
     if blocked:
         raise RuntimeError(f"Refusing to download from {url[:80]}: {reason}")
 

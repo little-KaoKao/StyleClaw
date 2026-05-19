@@ -255,6 +255,44 @@ class TestExecute:
 
         assert call_count == 4
 
+    async def test_loop_respects_max_iterations_when_continuation_stays_true(
+        self, setup_project, ctx,
+    ) -> None:
+        """Body must run exactly `max_iterations` times when continuation never
+        flips. With the prior off-by-one the body ran `max_iterations + 1` times.
+        """
+        project_store.save_state("test-proj", ProjectState(phase=Phase.STYLE_REFINE, current_round=1))
+
+        call_count = 0
+
+        async def mock_fn(c, args):
+            nonlocal call_count
+            call_count += 1
+            return StepResult(ok=True, message=f"step {call_count}")
+
+        mock_action = ActionDef(fn=mock_fn)
+
+        plan = ActionPlan(
+            summary="Capped loop",
+            steps=[
+                Action(name="refine", description="精炼"),
+                Action(name="evaluate", description="评估"),
+            ],
+            loop=LoopConfig(start_step=0, end_step=1, max_iterations=3),
+        )
+
+        with patch.dict(
+            "styleclaw.orchestrator.executor.ACTION_REGISTRY",
+            {"refine": mock_action, "evaluate": mock_action},
+        ), patch(
+            "styleclaw.orchestrator.executor._should_continue_loop",
+            return_value=True,
+        ):
+            await execute(plan, ctx)
+
+        # 3 iterations × 2 steps each. Pre-fix: 8 (would loop 4 times).
+        assert call_count == 6
+
 
 class TestArgsValidation:
     async def test_unknown_arg_key_rejected(self, setup_project, ctx):

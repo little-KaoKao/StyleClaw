@@ -332,8 +332,16 @@ def status(
             typer.echo(f"  {p}: {state.phase}")
         return
 
-    config = project_store.load_config(name)
-    state = project_store.load_state(name)
+    try:
+        config = project_store.load_config(name)
+        state = project_store.load_state(name)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(
+            f"Error: project '{name}' not found ({exc.__class__.__name__}). "
+            "Run `styleclaw status` without a name to list available projects.",
+            err=True,
+        )
+        raise typer.Exit(1) from None
     typer.echo(f"Project: {config.name}")
     typer.echo(f"Phase:   {state.phase}")
     typer.echo(f"Models:  {', '.join(state.selected_models) or '(none)'}")
@@ -896,9 +904,9 @@ def retest_models_cmd(
 ) -> None:
     """Re-enter MODEL_SELECT to re-test all models with the current trigger."""
     state = project_store.load_state(name)
-    if state.phase not in (Phase.STYLE_REFINE, Phase.BATCH_T2I):
+    if state.phase not in (Phase.MODEL_SELECT, Phase.STYLE_REFINE, Phase.BATCH_T2I):
         typer.echo(
-            f"Error: retest-models requires STYLE_REFINE or BATCH_T2I "
+            f"Error: retest-models requires MODEL_SELECT, STYLE_REFINE, or BATCH_T2I "
             f"(current: {state.phase})",
             err=True,
         )
@@ -1181,6 +1189,8 @@ def _confirm_select_model(
 
     available = list(MODEL_REGISTRY.keys())
     typer.echo(f"  可选模型: {', '.join(available)}")
+    if not default_models:
+        typer.echo("  输入 q 取消。")
 
     while True:
         user_input = typer.prompt(
@@ -1188,9 +1198,16 @@ def _confirm_select_model(
             default=default_models,
         )
 
-        if not user_input or not user_input.strip():
+        if user_input and user_input.strip().lower() in ("q", "quit", "cancel"):
             typer.echo("  已取消。")
             return None
+
+        if not user_input or not user_input.strip():
+            # No default was offered and the user pressed Enter. Don't silently
+            # cancel — they likely intended to accept a default that wasn't
+            # there. Reprompt instead, telling them how to actually cancel.
+            typer.echo("  ✗ 没有推荐可用，请直接输入模型 ID（或输入 q 取消）。")
+            continue
 
         selected = [m.strip() for m in user_input.strip().split(",")]
         invalid = [m for m in selected if m not in MODEL_REGISTRY]
@@ -1417,6 +1434,23 @@ def run(
                     on_confirm=confirm_fn,
                 )
                 if results and not results[-1].ok:
+                    # Surface phase + a concrete resume command so the user
+                    # knows where they ended up after a partial run. Without
+                    # this they only see the step's own error message.
+                    try:
+                        post_state = project_store.load_state(project)
+                        typer.echo(
+                            f"\n  ! 计划在第 {len(results)}/{len(action_plan.steps)} 步停止 "
+                            f"(当前 phase: {post_state.phase})",
+                            err=True,
+                        )
+                        typer.echo(
+                            "  续跑提示：先 `styleclaw status " + project +
+                            "` 查看当前进度，再选择对应单步命令（例如 generate / poll / refine）。",
+                            err=True,
+                        )
+                    except (FileNotFoundError, ValueError):
+                        pass
                     raise typer.Exit(1)
         finally:
             await _close_resource(router, "llm_router")

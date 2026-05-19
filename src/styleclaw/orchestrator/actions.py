@@ -477,11 +477,17 @@ async def do_poll(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
                 return StepResult(ok=True, message=msg, data={"succeeded": succeeded, "failed": failed})
 
             if not use_bar:
-                logger.info(
-                    "Waiting... %d/%d completed (cycle %d/%d, %ds elapsed)",
-                    succeeded + failed, len(records), cycle + 1, max_cycles,
-                    int(time.monotonic() - poll_started),
+                # Print to stderr (not just logger.info) so progress remains
+                # visible even when STYLECLAW_LOG_LEVEL=WARNING (common in CI):
+                # a multi-minute poll loop with no output is indistinguishable
+                # from a hang.
+                msg = (
+                    f"Waiting... {succeeded + failed}/{len(records)} completed "
+                    f"(cycle {cycle + 1}/{max_cycles}, "
+                    f"{int(time.monotonic() - poll_started)}s elapsed)"
                 )
+                logger.info(msg)
+                print(msg, file=sys.stderr, flush=True)
             await asyncio.sleep(ctx.poll_interval)
     finally:
         if bar is not None:
@@ -1131,6 +1137,24 @@ async def do_set_pass(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
         return StepResult(ok=False, message=f"set-pass args.pass_num must be an integer (got {args['pass_num']!r})")
     if pass_num < 1:
         return StepResult(ok=False, message=f"pass_num must be >= 1 (got {pass_num})")
+
+    # Verify the target pass exists on disk; bypassing this lets typos silently
+    # corrupt the active-pass pointer and downstream commands write into a
+    # never-initialized directory. (Mirrors the existence check that rollback
+    # performs for STYLE_REFINE rounds.)
+    pass_dir = (
+        project_store.project_dir(ctx.project)
+        / "model-select"
+        / project_store.pass_label(pass_num)
+    )
+    if not pass_dir.exists():
+        return StepResult(
+            ok=False,
+            message=(
+                f"Pass {project_store.pass_label(pass_num)} does not exist on disk. "
+                "Use retest-models to open a new pass, or styleclaw status to list existing passes."
+            ),
+        )
 
     project_store.update_state(ctx.project, lambda s: s.with_model_select_pass(pass_num))
     return StepResult(ok=True, message=f"Active pass set to {pass_num}")

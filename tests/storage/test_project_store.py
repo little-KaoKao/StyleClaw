@@ -319,3 +319,69 @@ class TestLabelHelpers:
         assert rd.parent.name == project_store.pass_label(2)
         bd = project_store.batch_t2i_dir(sample_config.name, 7)
         assert bd.name == project_store.batch_label(7)
+
+
+class TestPathTraversalGuard:
+    """LLM-produced or hand-edited identifiers feeding subpath construction
+    must not be able to escape the project directory via ``..`` or path
+    separators."""
+
+    @pytest.mark.parametrize("evil", [
+        "../../etc/passwd",
+        "..",
+        "foo/bar",
+        "foo\\bar",
+        "/absolute",
+        "",
+        "-leading-dash",
+    ])
+    def test_model_id_rejected(self, sample_config, evil):
+        project_store.create_project(sample_config)
+        with pytest.raises(ValueError, match="model_id"):
+            project_store.model_results_dir(sample_config.name, evil)
+
+    @pytest.mark.parametrize("evil", [
+        "../../etc/passwd",
+        "foo/bar",
+        "..",
+        "/abs",
+    ])
+    def test_variant_rejected(self, sample_config, evil):
+        project_store.create_project(sample_config)
+        with pytest.raises(ValueError, match="variant"):
+            project_store.model_results_dir(sample_config.name, "mj-v7", evil)
+
+    @pytest.mark.parametrize("evil", [
+        "../../config",
+        "..",
+        "case/sub",
+    ])
+    def test_case_id_rejected_t2i(self, sample_config, evil):
+        project_store.create_project(sample_config)
+        with pytest.raises(ValueError, match="case_id"):
+            project_store.batch_t2i_case_dir(sample_config.name, 1, evil)
+
+    @pytest.mark.parametrize("evil", [
+        "../../config",
+        "..",
+        "case/sub",
+    ])
+    def test_case_id_rejected_i2i(self, sample_config, evil):
+        project_store.create_project(sample_config)
+        with pytest.raises(ValueError, match="case_id"):
+            project_store.batch_i2i_case_dir(sample_config.name, 1, evil)
+
+    @pytest.mark.parametrize("good", [
+        "mj-v7",
+        "niji7",
+        "gpt-image-2",
+        "model_v1",
+        "case-001",
+        "case.id.dotted",
+    ])
+    def test_well_formed_ids_accepted(self, sample_config, good):
+        project_store.create_project(sample_config)
+        # These should not raise.
+        project_store.model_results_dir(sample_config.name, good)
+        project_store.batch_t2i_case_dir(sample_config.name, 1, good)
+        project_store.batch_i2i_case_dir(sample_config.name, 1, good)

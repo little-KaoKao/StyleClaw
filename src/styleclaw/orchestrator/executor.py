@@ -152,7 +152,10 @@ async def execute(
     results: list[StepResult] = []
     steps = plan.steps
     i = 0
-    loop_count = 0
+    # Counts body executions, not additional iterations: the initial pass through
+    # the loop body is the first iteration. Without this max_iterations=N would
+    # actually run the body N+1 times when the continuation check stays true.
+    loop_count = 1
 
     while i < len(steps):
         step = steps[i]

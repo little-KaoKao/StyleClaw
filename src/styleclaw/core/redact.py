@@ -19,8 +19,15 @@ _BEARER_RE = re.compile(
     r"(?P<sep>\s*[:=]?\s*)"
     r"(?P<value>[A-Za-z0-9_\-\.]+)"
 )
+# Tokens that START with one of these labels and a separator (``-`` or ``_``)
+# are treated as identifiers, not secrets — they're useful in error messages
+# (e.g. ``task_abc123def456...``). The pattern intentionally checks a *prefix*,
+# not the whole token; ``re.IGNORECASE`` + ``^`` with no ``$`` so anything
+# longer than the label still matches. Removed ``file``/``s3``/``gs`` because
+# they can never reach ``_TOKEN_RE`` (which requires ≥20 chars and would not
+# cross ``://`` anyway).
 _SAFE_PREFIX_RE = re.compile(
-    r"^(https?|file|s3|gs|attempt|model|task|case|round|pass|batch|i2i|t2i)$",
+    r"^(attempt|model|task|case|round|pass|batch|i2i|t2i)[-_]",
     re.IGNORECASE,
 )
 

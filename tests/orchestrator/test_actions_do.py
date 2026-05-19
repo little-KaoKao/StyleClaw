@@ -849,6 +849,8 @@ class TestDoSetSref:
 class TestDoSetPass:
     async def test_updates_pass_number(self) -> None:
         name = _create_project(phase=Phase.MODEL_SELECT)
+        # set-pass now requires the target pass dir to exist on disk; seed it.
+        project_store.model_select_dir(name, 3)
         result = await do_set_pass(_ctx(name), {"pass_num": 3})
         assert result.ok is True
         assert "3" in result.message
@@ -865,6 +867,18 @@ class TestDoSetPass:
         result = await do_set_pass(_ctx(name), {})
         assert result.ok is False
         assert "args.pass_num" in result.message
+
+    async def test_nonexistent_pass_rejected(self) -> None:
+        """Typing `set-pass 99` on a project with only pass-001 must fail loudly,
+        not silently corrupt the active-pass pointer."""
+        name = _create_project(phase=Phase.MODEL_SELECT)
+        # Only pass-001 exists (implicit via create_project layout); pass-099 doesn't.
+        original_pass = project_store.load_state(name).current_model_select_pass
+        result = await do_set_pass(_ctx(name), {"pass_num": 99})
+        assert result.ok is False
+        assert "does not exist" in result.message
+        # State must be unchanged.
+        assert project_store.load_state(name).current_model_select_pass == original_pass
 
 
 class TestDoAddRefs:
