@@ -125,29 +125,33 @@ async def _build_context(
     needs_llm: bool = False,
     show_thinking: bool = False,
     thinking_budget: int = 5000,
-    existing_llm: Any = None,
+    existing_router: "Any" = None,
     action_name: str | None = None,
 ) -> AsyncIterator[ExecutionContext]:
+    from styleclaw.core.llm_routing import RoleRouter
     from styleclaw.providers.runninghub.client import RunningHubClient
 
     client = None
-    llm = existing_llm
-    owns_llm = False
+    router = existing_router
+    owns_router = False
     try:
         if needs_client:
             client = RunningHubClient(api_key=_get_api_key())
-        if needs_llm and llm is None:
-            llm = _build_llm_provider(action_name=action_name)
-            owns_llm = True
+        if needs_llm and router is None:
+            router = RoleRouter.from_env()
+            owns_router = True
         yield ExecutionContext(
-            project=project, client=client, llm=llm,
-            show_thinking=show_thinking, thinking_budget=thinking_budget,
+            project=project,
+            client=client,
+            llm_router=router,
+            show_thinking=show_thinking,
+            thinking_budget=thinking_budget,
         )
     finally:
         if client is not None:
             await _close_resource(client, "client")
-        if llm is not None and owns_llm:
-            await _close_resource(llm, "llm")
+        if router is not None and owns_router:
+            await _close_resource(router, "llm_router")
 
 
 def _print_interrupt_hint(action_name: str, project: str | None) -> None:
@@ -224,7 +228,6 @@ def _run_action(
             needs_llm=action_def.needs_llm,
             show_thinking=show_thinking,
             thinking_budget=thinking_budget,
-            action_name=action_name,
         ) as ctx:
             step_results = await execute(plan, ctx)
             return step_results[-1] if step_results else StepResult(
@@ -1386,9 +1389,11 @@ def run(
     audit = AuditLogger.create(project, intent) if project_exists else None
 
     async def _plan_and_execute() -> None:
-        llm = _build_llm_provider()
+        from styleclaw.core.llm_routing import Role, RoleRouter
+
+        router = RoleRouter.from_env()
         try:
-            action_plan = await plan(llm, project, intent)
+            action_plan = await plan(router.get(Role.PLANNER), project, intent)
 
             display_plan(action_plan, project)
 
@@ -1432,7 +1437,7 @@ def run(
             async with _build_context(
                 project, needs_client, needs_llm,
                 show_thinking=show_thinking, thinking_budget=thinking_budget,
-                existing_llm=llm if needs_llm else None,
+                existing_router=router if needs_llm else None,
             ) as ctx:
                 results = await execute(
                     action_plan, ctx,
@@ -1443,7 +1448,7 @@ def run(
                 if results and not results[-1].ok:
                     raise typer.Exit(1)
         finally:
-            await _close_resource(llm, "llm")
+            await _close_resource(router, "llm_router")
 
     try:
         asyncio.run(_plan_and_execute())

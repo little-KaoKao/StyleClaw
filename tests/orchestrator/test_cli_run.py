@@ -71,30 +71,34 @@ class TestRunCommand:
         result = runner.invoke(app, ["run", "analyze", "-p", "test-proj"], input="n\n")
         assert "Analyze" in result.output
 
-    @patch("styleclaw.cli._build_llm_provider")
+    @patch("styleclaw.core.llm_routing.RoleRouter.from_env")
     @patch("styleclaw.orchestrator.planner.plan", new_callable=AsyncMock)
-    def test_uses_configured_llm_provider(self, mock_plan, mock_build_llm, setup_project) -> None:
+    def test_uses_configured_llm_provider(self, mock_plan, mock_from_env, setup_project) -> None:
         fake_llm = MagicMock()
-        fake_llm.close = AsyncMock()
-        mock_build_llm.return_value = fake_llm
+        fake_router = MagicMock()
+        fake_router.get.return_value = fake_llm
+        fake_router.close = AsyncMock()
+        mock_from_env.return_value = fake_router
         mock_plan.return_value = _make_plan("Configured provider")
 
         result = runner.invoke(app, ["run", "analyze", "-p", "test-proj"], input="n\n")
 
         assert result.exit_code == 0
-        mock_build_llm.assert_called_once()
+        mock_from_env.assert_called_once()
+        # planner gets the planner-role provider.
         assert mock_plan.call_args.args[0] is fake_llm
-        fake_llm.close.assert_awaited_once()
+        fake_router.close.assert_awaited_once()
 
     @patch("styleclaw.cli._build_context")
-    @patch("styleclaw.cli._build_llm_provider")
+    @patch("styleclaw.core.llm_routing.RoleRouter.from_env")
     @patch("styleclaw.orchestrator.planner.plan", new_callable=AsyncMock)
     def test_dry_run_skips_execution(
-        self, mock_plan, mock_build_llm, mock_build_context, setup_project,
+        self, mock_plan, mock_from_env, mock_build_context, setup_project,
     ) -> None:
-        fake_llm = MagicMock()
-        fake_llm.close = AsyncMock()
-        mock_build_llm.return_value = fake_llm
+        fake_router = MagicMock()
+        fake_router.get.return_value = MagicMock()
+        fake_router.close = AsyncMock()
+        mock_from_env.return_value = fake_router
         mock_plan.return_value = _make_plan("Dry-run plan")
 
         result = runner.invoke(
@@ -106,10 +110,10 @@ class TestRunCommand:
         assert "(dry-run) 未执行" in result.output
         # Trailing "Done." (from successful execution) must not appear.
         assert "Done." not in result.output
-        # LLM was built+closed exactly once for planning.
-        mock_build_llm.assert_called_once()
+        # Router was built+closed exactly once for planning.
+        mock_from_env.assert_called_once()
         mock_plan.assert_awaited_once()
-        fake_llm.close.assert_awaited_once()
+        fake_router.close.assert_awaited_once()
         # Execution context must never be constructed in dry-run.
         mock_build_context.assert_not_called()
 
