@@ -5,8 +5,8 @@ from styleclaw.core.models import BatchCase
 CATEGORIES: list[dict[str, str]] = [
     {"id": "adult_male", "label": "Adult Male", "aspect": "9:16"},
     {"id": "adult_female", "label": "Adult Female", "aspect": "9:16"},
-    {"id": "shota", "label": "Shota (Young Boy)", "aspect": "9:16"},
-    {"id": "loli", "label": "Loli (Young Girl)", "aspect": "9:16"},
+    {"id": "little_male_child", "label": "Little Male Child", "aspect": "9:16"},
+    {"id": "little_female_child", "label": "Little Female Child", "aspect": "9:16"},
     {"id": "elderly_male", "label": "Elderly Male", "aspect": "9:16"},
     {"id": "elderly_female", "label": "Elderly Female", "aspect": "9:16"},
     {"id": "creature", "label": "Creature / Mascot", "aspect": "9:16"},

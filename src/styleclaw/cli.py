@@ -71,10 +71,28 @@ def _get_api_key() -> str:
     return key
 
 
-def _build_llm_provider() -> Any:
+def _model_for_action(action_name: str | None) -> str | None:
+    """Return the per-action model override for ``action_name``, if any.
+
+    Convention: ``STYLECLAW_LLM_MODEL_<ACTION>`` (action name uppercased, dashes
+    → underscores). Falls back to ``None`` so the provider uses its default
+    (``LLM_MODEL`` env var). Lets users pin a different model for cost or
+    safety-filter reasons on specific actions — e.g.
+
+        STYLECLAW_LLM_MODEL_DESIGN_CASES=anthropic.claude-sonnet-4-20250514
+
+    keeps Gemini for analyze/evaluate/refine but switches design-cases to Claude.
+    """
+    if not action_name:
+        return None
+    key = "STYLECLAW_LLM_MODEL_" + action_name.upper().replace("-", "_")
+    return os.getenv(key) or None
+
+
+def _build_llm_provider(action_name: str | None = None) -> Any:
     if os.getenv("OPENAI_COMPAT_API_KEY"):
         from styleclaw.providers.llm.openai_compat import OpenAICompatProvider
-        return OpenAICompatProvider()
+        return OpenAICompatProvider(model_id=_model_for_action(action_name))
     if env_truthy("RUNNINGHUB_LLM"):
         from styleclaw.providers.llm.runninghub_llm import RunningHubLLMProvider
         return RunningHubLLMProvider()
@@ -108,6 +126,7 @@ async def _build_context(
     show_thinking: bool = False,
     thinking_budget: int = 5000,
     existing_llm: Any = None,
+    action_name: str | None = None,
 ) -> AsyncIterator[ExecutionContext]:
     from styleclaw.providers.runninghub.client import RunningHubClient
 
@@ -118,7 +137,7 @@ async def _build_context(
         if needs_client:
             client = RunningHubClient(api_key=_get_api_key())
         if needs_llm and llm is None:
-            llm = _build_llm_provider()
+            llm = _build_llm_provider(action_name=action_name)
             owns_llm = True
         yield ExecutionContext(
             project=project, client=client, llm=llm,
@@ -205,9 +224,10 @@ def _run_action(
             needs_llm=action_def.needs_llm,
             show_thinking=show_thinking,
             thinking_budget=thinking_budget,
+            action_name=action_name,
         ) as ctx:
-            results = await execute(plan, ctx)
-            return results[-1] if results else StepResult(
+            step_results = await execute(plan, ctx)
+            return step_results[-1] if step_results else StepResult(
                 ok=False, message="executor returned no result",
             )
 
