@@ -98,6 +98,25 @@ class RoleRouter:
             )
         return self._cached_single[role]
 
+    def get_panel(self, role: Role) -> tuple[list, list[str]]:
+        """Return (providers, labels) for the role's panel pool.
+
+        Constructs all providers on first call (one per model_id in the pool).
+        Labels default to model_id — per-role labels are deliberately not
+        supported in this iteration (see spec § Environment Variables).
+        """
+        if role not in self._cached_panel:
+            pool = self._panel_pools.get(role, [])
+            providers = [
+                _build_provider_for_role(RoleConfig(model_id=mid)) for mid in pool
+            ]
+            labels = list(pool)
+            self._cached_panel[role] = (providers, labels)
+        providers, labels = self._cached_panel[role]
+        # Return copies of the lists so callers can't mutate the cache, but the
+        # provider instances themselves are shared (that's the whole point).
+        return list(providers), list(labels)
+
     async def close(self) -> None:
         """Placeholder; Task 6 replaces this with idempotent teardown."""
         return None

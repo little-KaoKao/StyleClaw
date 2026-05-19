@@ -213,3 +213,60 @@ class TestGetSingle:
         finally:
             import asyncio
             asyncio.run(router.close())
+
+
+class TestGetPanel:
+    @pytest.fixture(autouse=True)
+    def _setup(self, monkeypatch):
+        for role in Role:
+            monkeypatch.delenv(f"STYLECLAW_MODEL_{role.value.upper()}", raising=False)
+            monkeypatch.delenv(f"STYLECLAW_PANEL_MODELS_{role.value.upper()}", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_MODELS", raising=False)
+        monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "http://test.local/v1")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "test-key")
+        monkeypatch.delenv("RUNNINGHUB_LLM", raising=False)
+        import importlib, styleclaw.core.config as cfg
+        importlib.reload(cfg)
+        yield
+
+    def test_get_panel_returns_three_providers_and_labels(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS_VISION_CRITIC", "m1,m2,m3")
+        import importlib, styleclaw.core.config as cfg
+        importlib.reload(cfg)
+
+        from styleclaw.core.llm_routing import RoleRouter
+        router = RoleRouter.from_env()
+        try:
+            providers, labels = router.get_panel(Role.VISION_CRITIC)
+            assert [p._model_id for p in providers] == ["m1", "m2", "m3"]
+            assert labels == ["m1", "m2", "m3"]
+        finally:
+            import asyncio
+            asyncio.run(router.close())
+
+    def test_get_panel_caches(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS_VISION_ANALYST", "a,b,c")
+        import importlib, styleclaw.core.config as cfg
+        importlib.reload(cfg)
+
+        from styleclaw.core.llm_routing import RoleRouter
+        router = RoleRouter.from_env()
+        try:
+            first_providers, _ = router.get_panel(Role.VISION_ANALYST)
+            second_providers, _ = router.get_panel(Role.VISION_ANALYST)
+            # Same instances both times.
+            assert all(a is b for a, b in zip(first_providers, second_providers))
+        finally:
+            import asyncio
+            asyncio.run(router.close())
+
+    def test_get_panel_empty_pool_returns_empty_lists(self):
+        from styleclaw.core.llm_routing import RoleRouter
+        router = RoleRouter.from_env()
+        try:
+            providers, labels = router.get_panel(Role.VISION_CRITIC)
+            assert providers == []
+            assert labels == []
+        finally:
+            import asyncio
+            asyncio.run(router.close())
