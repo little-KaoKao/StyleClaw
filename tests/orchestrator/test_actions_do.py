@@ -80,11 +80,15 @@ def _ctx(
     name: str = "test-proj",
     client: object | None = None,
     llm: object | None = None,
+    model_id: str = "test-model",
 ) -> ExecutionContext:
+    from tests.orchestrator._routing_helpers import MockRouter
+    router = MockRouter(llm, model_id) if llm is not None else None
     return ExecutionContext(
         project=name,
         client=client,
         llm=llm,
+        llm_router=router,
         poll_interval=0.0,
     )
 
@@ -100,12 +104,14 @@ class TestDoAnalyze:
             new_callable=AsyncMock,
             return_value=analysis,
         ):
-            result = await do_analyze(_ctx(name, llm=mock_llm), {})
+            result = await do_analyze(_ctx(name, llm=mock_llm, model_id="gemini-2.5-pro"), {})
 
         assert result.ok is True
         assert "bold anime lineart" in result.message
         saved = project_store.load_analysis(name)
         assert saved.trigger_phrase == "bold anime lineart"
+        # Router records which model produced this artifact.
+        assert saved.model_id == "gemini-2.5-pro"
         state = project_store.load_state(name)
         assert state.phase == Phase.MODEL_SELECT
 

@@ -226,19 +226,25 @@ def _reject_sensitive_path(p: Path, label: str) -> StepResult | None:
 
 async def do_analyze(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     from styleclaw.agents.analyze_style import analyze_style, analyze_style_with_thinking
+    from styleclaw.core.llm_routing import Role
     from styleclaw.core.state_machine import advance
 
     config = project_store.load_config(ctx.project)
     root = project_store.project_dir(ctx.project)
     ref_paths = [root / r for r in config.ref_images]
 
+    llm = ctx.llm_router.get(Role.VISION_ANALYST)
+    model_id = getattr(llm, "_model_id", "")
+
     thinking = ""
     if ctx.show_thinking:
         analysis, thinking = await analyze_style_with_thinking(
-            ctx.llm, ref_paths, config.ip_info, thinking_budget=ctx.thinking_budget,
+            llm, ref_paths, config.ip_info, thinking_budget=ctx.thinking_budget,
         )
     else:
-        analysis = await analyze_style(ctx.llm, ref_paths, config.ip_info)
+        analysis = await analyze_style(llm, ref_paths, config.ip_info)
+
+    analysis = analysis.model_copy(update={"model_id": model_id})
 
     pass_num = 1
     project_store.save_analysis(ctx.project, analysis, pass_num=pass_num)
