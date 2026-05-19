@@ -67,6 +67,12 @@ All defined in `core/config.py` via `_int_env` / `_float_env`. Invalid values ra
 | `STYLECLAW_PANEL_MODEL_SELECT` | unset | When truthy, `do_evaluate` in MODEL_SELECT runs the same three-model panel |
 | `STYLECLAW_PANEL_MODELS` | unset | Required when either panel toggle is on — exactly 3 comma-separated OpenAI-compat model ids |
 | `STYLECLAW_PANEL_LABELS` | unset | Optional human-readable labels (same length as `STYLECLAW_PANEL_MODELS`); falls back to model ids in reports/logs |
+| `STYLECLAW_MODEL_VISION_CRITIC` | unset | Model ID for the **vision_critic** role (`select_model` + `evaluate_result`). Falls back to `LLM_MODEL` when unset. |
+| `STYLECLAW_MODEL_VISION_ANALYST` | unset | Model ID for the **vision_analyst** role (`analyze_style` + `refine_prompt`). Falls back to `LLM_MODEL` when unset. |
+| `STYLECLAW_MODEL_WRITER` | unset | Model ID for the **writer** role (`design_cases`). Falls back to `LLM_MODEL` when unset. |
+| `STYLECLAW_MODEL_PLANNER` | unset | Model ID for the **planner** role (orchestrator `plan()` calls). Falls back to `LLM_MODEL` when unset. |
+| `STYLECLAW_PANEL_MODELS_VISION_CRITIC` | unset | 3 comma-separated model IDs for the vision_critic panel pool when `STYLECLAW_PANEL_MODEL_SELECT=1`. Falls back to `STYLECLAW_PANEL_MODELS`. |
+| `STYLECLAW_PANEL_MODELS_VISION_ANALYST` | unset | 3 comma-separated model IDs for the vision_analyst panel pool when `STYLECLAW_PANEL_REFINE=1`. Falls back to `STYLECLAW_PANEL_MODELS`. |
 
 ## Tech Stack
 
