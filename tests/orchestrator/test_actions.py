@@ -105,3 +105,18 @@ class TestExecutionContextThinking:
         ctx = ExecutionContext(project="p", show_thinking=True, thinking_budget=8000)
         assert ctx.show_thinking is True
         assert ctx.thinking_budget == 8000
+
+    def test_llm_router_field_defaults_none(self):
+        from styleclaw.orchestrator.actions import ExecutionContext
+        ctx = ExecutionContext(project="p")
+        assert ctx.llm_router is None
+
+    def test_llm_router_can_be_set(self, monkeypatch):
+        for role_name in ("VISION_CRITIC", "VISION_ANALYST", "WRITER", "PLANNER"):
+            monkeypatch.delenv(f"STYLECLAW_MODEL_{role_name}", raising=False)
+        from styleclaw.core.llm_routing import RoleRouter
+        from styleclaw.orchestrator.actions import ExecutionContext
+
+        router = RoleRouter.from_env()
+        ctx = ExecutionContext(project="p", llm_router=router)
+        assert ctx.llm_router is router

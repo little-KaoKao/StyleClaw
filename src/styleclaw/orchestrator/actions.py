@@ -4,7 +4,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Awaitable
+from typing import TYPE_CHECKING, Any, Callable, Awaitable
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from tqdm import tqdm
@@ -14,6 +14,9 @@ from styleclaw.core.models import Phase, TaskStatus
 from styleclaw.providers.llm.base import LLMProvider
 from styleclaw.providers.runninghub.client import RunningHubClient
 from styleclaw.storage import project_store
+
+if TYPE_CHECKING:
+    from styleclaw.core.llm_routing import RoleRouter
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +32,8 @@ class StepResult:
 class ExecutionContext:
     project: str
     client: RunningHubClient | None = None
-    llm: LLMProvider | None = None
+    llm: LLMProvider | None = None  # legacy; will be removed in Part 3 Task 7
+    llm_router: "RoleRouter | None" = None
     poll_interval: float = ORCHESTRATOR_POLL_INTERVAL
     show_thinking: bool = False
     thinking_budget: int = 5000

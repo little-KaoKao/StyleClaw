@@ -181,8 +181,14 @@ async def execute(
                 on_step_done(i, step.name, result)
             return results
 
-        if action_def.needs_llm and ctx.llm is None:
-            result = StepResult(ok=False, message=f"Action '{step.name}' requires an LLM provider but none was provided")
+        if action_def.needs_llm and ctx.llm is None and ctx.llm_router is None:
+            result = StepResult(
+                ok=False,
+                message=(
+                    f"Action '{step.name}' requires an LLM provider but "
+                    f"neither ctx.llm nor ctx.llm_router was supplied"
+                ),
+            )
             results.append(result)
             if on_step_done:
                 on_step_done(i, step.name, result)
