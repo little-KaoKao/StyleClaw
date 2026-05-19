@@ -367,3 +367,69 @@ class TestValidateRoutingEnvSingle:
         assert any("vision_analyst" in e for e in errors)
         assert any("writer" in e for e in errors)
         assert any("planner" in e for e in errors)
+
+
+class TestValidateRoutingEnvPanel:
+    """Per-role panel pool length check.
+
+    When a panel toggle is on, the effective pool for that role (role-specific
+    env > global STYLECLAW_PANEL_MODELS) must have exactly 3 entries.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, monkeypatch):
+        for role in Role:
+            monkeypatch.delenv(f"STYLECLAW_MODEL_{role.value.upper()}", raising=False)
+            monkeypatch.delenv(f"STYLECLAW_PANEL_MODELS_{role.value.upper()}", raising=False)
+        monkeypatch.delenv("LLM_MODEL", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_MODELS", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_REFINE", raising=False)
+        monkeypatch.delenv("STYLECLAW_PANEL_MODEL_SELECT", raising=False)
+        monkeypatch.setenv("LLM_MODEL", "dummy")  # silence role-missing errors
+        import importlib, styleclaw.core.config as cfg
+        importlib.reload(cfg)
+        yield
+
+    def _reload(self):
+        import importlib, styleclaw.core.config as cfg
+        importlib.reload(cfg)
+
+    def test_refine_on_no_pool_emits_error(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_REFINE", "1")
+        self._reload()
+        from styleclaw.core.llm_routing import validate_routing_env
+        errors = validate_routing_env()
+        assert any("vision_analyst" in e and "no pool" in e for e in errors)
+
+    def test_select_on_wrong_size_role_pool_emits_error(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_MODEL_SELECT", "1")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS_VISION_CRITIC", "a,b")  # only 2
+        self._reload()
+        from styleclaw.core.llm_routing import validate_routing_env
+        errors = validate_routing_env()
+        assert any("vision_critic" in e and "exactly 3" in e for e in errors)
+
+    def test_refine_on_global_fallback_size_3_ok(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_PANEL_REFINE", "1")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "x,y,z")
+        self._reload()
+        from styleclaw.core.llm_routing import validate_routing_env
+        assert validate_routing_env() == []
+
+    def test_refine_off_no_pool_check(self, monkeypatch):
+        # Panel toggle OFF — pool length is irrelevant.
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "only-one")
+        self._reload()
+        from styleclaw.core.llm_routing import validate_routing_env
+        assert validate_routing_env() == []
+
+    def test_role_pool_overrides_global_validation(self, monkeypatch):
+        # Global pool wrong size, but role pool correct — must pass.
+        monkeypatch.setenv("STYLECLAW_PANEL_REFINE", "1")
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS", "bad")  # wrong size at global
+        monkeypatch.setenv("STYLECLAW_PANEL_MODELS_VISION_ANALYST", "a1,a2,a3")
+        self._reload()
+        from styleclaw.core.llm_routing import validate_routing_env
+        # The role override is what counts; global isn't checked when role is set.
+        errors = validate_routing_env()
+        assert not any("vision_analyst" in e for e in errors)

@@ -92,17 +92,25 @@ ALLOW_DEGRADED_PANEL: bool = _bool_env("STYLECLAW_ALLOW_DEGRADED_PANEL", False)
 def validate_panel_config() -> list[str]:
     """Return error strings if panel envs are inconsistent.
 
-    No-op when both toggles are off.
+    Only checks the global STYLECLAW_PANEL_MODELS when per-role pools are
+    NOT set. Per-role pool validation lives in
+    llm_routing.validate_routing_env (called separately from validate_env).
     """
     errors: list[str] = []
     if not (PANEL_REFINE_ENABLED or PANEL_MODEL_SELECT_ENABLED):
         return errors
-    if len(PANEL_MODELS) != 3:
-        errors.append(
-            "STYLECLAW_PANEL_MODELS must list exactly 3 comma-separated model "
-            f"ids when STYLECLAW_PANEL_REFINE or STYLECLAW_PANEL_MODEL_SELECT "
-            f"is set (got {len(PANEL_MODELS)}: {PANEL_MODELS!r})."
-        )
+    # If both panel toggles have role-specific pools, skip the global check.
+    refine_overridden = bool(os.getenv("STYLECLAW_PANEL_MODELS_VISION_ANALYST"))
+    select_overridden = bool(os.getenv("STYLECLAW_PANEL_MODELS_VISION_CRITIC"))
+    refine_needs_global = PANEL_REFINE_ENABLED and not refine_overridden
+    select_needs_global = PANEL_MODEL_SELECT_ENABLED and not select_overridden
+    if refine_needs_global or select_needs_global:
+        if len(PANEL_MODELS) != 3:
+            errors.append(
+                "STYLECLAW_PANEL_MODELS must list exactly 3 comma-separated model "
+                f"ids when STYLECLAW_PANEL_REFINE or STYLECLAW_PANEL_MODEL_SELECT "
+                f"is set (got {len(PANEL_MODELS)}: {PANEL_MODELS!r})."
+            )
     if _PANEL_LABELS_RAW and len(_PANEL_LABELS_RAW) != len(PANEL_MODELS):
         errors.append(
             "STYLECLAW_PANEL_LABELS length must match STYLECLAW_PANEL_MODELS "

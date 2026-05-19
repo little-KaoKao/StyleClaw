@@ -154,6 +154,8 @@ def validate_routing_env() -> list[str]:
     in one pass.
     """
     errors: list[str] = []
+
+    # 1. Per-role single-model resolvability.
     for role in Role:
         env_name = f"STYLECLAW_MODEL_{role.value.upper()}"
         if not os.getenv(env_name) and not os.getenv("LLM_MODEL"):
@@ -161,7 +163,41 @@ def validate_routing_env() -> list[str]:
                 f"no model resolvable for role '{role.value}': "
                 f"set {env_name} or LLM_MODEL"
             )
+
+    # 2. Per-role panel pool length when the matching toggle is on.
+    # Duplicates resolution logic from _resolve_panel_pool on purpose — the
+    # validator runs without instantiating the router.
+    from styleclaw.core.config import env_truthy, PANEL_MODELS as GLOBAL_PANEL_MODELS
+    for role, toggle_env in _PANEL_TOGGLE_FOR_ROLE.items():
+        if not env_truthy(toggle_env):
+            continue
+        role_env = f"STYLECLAW_PANEL_MODELS_{role.value.upper()}"
+        role_raw = os.getenv(role_env, "").strip()
+        if role_raw:
+            pool = [m.strip() for m in role_raw.split(",") if m.strip()]
+            source = role_env
+        else:
+            pool = list(GLOBAL_PANEL_MODELS)
+            source = "STYLECLAW_PANEL_MODELS"
+        if not pool:
+            errors.append(
+                f"panel for '{role.value}' is enabled ({toggle_env}=1) "
+                f"but no pool is configured: set {role_env} or {source}"
+            )
+        elif len(pool) != 3:
+            errors.append(
+                f"panel pool for '{role.value}' must have exactly 3 models "
+                f"(got {len(pool)} from {source})"
+            )
+
     return errors
+
+
+# Which env var turns on the panel for each role.
+_PANEL_TOGGLE_FOR_ROLE: dict[Role, str] = {
+    Role.VISION_CRITIC: "STYLECLAW_PANEL_MODEL_SELECT",
+    Role.VISION_ANALYST: "STYLECLAW_PANEL_REFINE",
+}
 
 
 def _build_provider_for_role(cfg: RoleConfig):
