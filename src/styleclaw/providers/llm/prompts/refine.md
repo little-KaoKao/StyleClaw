@@ -31,11 +31,13 @@ Return ONLY valid JSON (no markdown fences):
   "trigger_phrase": "the refined trigger phrase",
   "adjustment_note": "brief explanation of what changed and why",
   "model_params": {
-    "<model-id>": {
-      "extra_param": "value"
-    }
+    "mj-v7": {"stylize": 200, "chaos": 10}
   }
 }
 ```
 
-The `model_params` field is optional — only include it if you want to adjust model-specific parameters (stylize, chaos, etc.) for specific models.
+The `model_params` field is **optional and tightly constrained**:
+- Only include it for Midjourney-family models (`mj-v7`, `niji7`).
+- Allowed keys (all integers unless noted): `stylize` (0–1000), `chaos` (0–100), `weird` (0–3000), `style` (string: `raw` | `cute` | `scenic` | `original`).
+- Do NOT invent parameter names. The example above is literal — values must be real model parameters, never placeholders like `"extra_param"`.
+- If you don't need to tune anything, omit the `model_params` field entirely.
