@@ -205,3 +205,41 @@ class TestPanelConfig:
         cfg = self._reload()
         errs = cfg.validate_env()
         assert any("STYLECLAW_PANEL_MODELS" in e for e in errs)
+
+
+class TestValidateDesignCasesShards:
+    def test_valid_values_accepted(self, monkeypatch):
+        monkeypatch.setenv("RUNNINGHUB_API_KEY", "k")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
+        monkeypatch.setenv("LLM_MODEL", "dummy")
+        for value in ("1", "2", "5", "10"):
+            monkeypatch.setenv("STYLECLAW_DESIGN_CASES_SHARDS", value)
+            import importlib
+            import styleclaw.core.config as config_mod
+            importlib.reload(config_mod)
+            errs = config_mod.validate_env()
+            assert not any("DESIGN_CASES_SHARDS" in e for e in errs), (
+                f"value {value} should pass: {errs}"
+            )
+
+    def test_invalid_value_3_rejected(self, monkeypatch):
+        monkeypatch.setenv("RUNNINGHUB_API_KEY", "k")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
+        monkeypatch.setenv("LLM_MODEL", "dummy")
+        monkeypatch.setenv("STYLECLAW_DESIGN_CASES_SHARDS", "3")
+        import importlib
+        import styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+        errs = config_mod.validate_env()
+        assert any("DESIGN_CASES_SHARDS" in e and "3" in e for e in errs)
+
+    def test_invalid_value_0_rejected(self, monkeypatch):
+        monkeypatch.setenv("RUNNINGHUB_API_KEY", "k")
+        monkeypatch.setenv("OPENAI_COMPAT_API_KEY", "k")
+        monkeypatch.setenv("LLM_MODEL", "dummy")
+        monkeypatch.setenv("STYLECLAW_DESIGN_CASES_SHARDS", "0")
+        import importlib
+        import styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+        errs = config_mod.validate_env()
+        assert any("DESIGN_CASES_SHARDS" in e for e in errs)

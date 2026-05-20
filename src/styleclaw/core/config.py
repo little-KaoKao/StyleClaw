@@ -125,6 +125,22 @@ def validate_panel_config() -> list[str]:
     return errors
 
 
+_ALLOWED_DESIGN_CASES_SHARDS = (1, 2, 5, 10)
+
+
+def validate_design_cases_config() -> list[str]:
+    """Return error strings if DESIGN_CASES_SHARDS is not a value that
+    evenly partitions the 10 fixed categories."""
+    errors: list[str] = []
+    if DESIGN_CASES_SHARDS not in _ALLOWED_DESIGN_CASES_SHARDS:
+        errors.append(
+            f"STYLECLAW_DESIGN_CASES_SHARDS={DESIGN_CASES_SHARDS} must be one of "
+            f"{_ALLOWED_DESIGN_CASES_SHARDS} (each evenly partitions the 10 fixed "
+            f"categories)."
+        )
+    return errors
+
+
 def env_truthy(name: str) -> bool:
     raw = (os.getenv(name) or "").strip().lower()
     return raw in ("1", "true", "yes", "on")
@@ -143,6 +159,7 @@ def validate_env() -> list[str]:
             "OPENAI_COMPAT_API_KEY is not set (required for LLM access)."
         )
     errors.extend(validate_panel_config())
+    errors.extend(validate_design_cases_config())
 
     # Per-role routing checks (vision_critic / vision_analyst / writer / planner).
     # Late import to avoid circular: llm_routing imports from config.
