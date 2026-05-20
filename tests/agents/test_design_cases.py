@@ -9,23 +9,40 @@ from styleclaw.agents.design_cases import _format_skeleton, design_cases
 from styleclaw.core.case_generator import CATEGORIES, generate_case_skeleton
 
 
+@pytest.fixture(autouse=False)
+def force_single_shard(monkeypatch):
+    monkeypatch.setattr(
+        "styleclaw.agents.design_cases.DESIGN_CASES_SHARDS", 1
+    )
+
+
 @pytest.fixture
 def mock_llm() -> AsyncMock:
+    """Mock that returns a complete 100-case response covering all 10 categories."""
+    cases = []
+    for cat in CATEGORIES:
+        for i in range(1, 11):
+            cases.append({
+                "id": f"case-{cat['id']}-{i:02d}",
+                "category": cat["id"],
+                "description": f"placeholder {cat['id']} #{i:02d}",
+                "aspect_ratio": cat["aspect"],
+            })
     llm = AsyncMock()
-    cases = [
-        {"id": f"am-{i:03d}", "category": "adult_male", "description": f"Male char {i}", "aspect_ratio": "9:16"}
-        for i in range(1, 11)
-    ]
     llm.invoke.return_value = json.dumps({"cases": cases})
     return llm
 
 
 class TestDesignCases:
+    @pytest.fixture(autouse=True)
+    def _force_single_shard(self, force_single_shard):
+        return force_single_shard
+
     async def test_returns_batch_config(self, mock_llm) -> None:
         result = await design_cases(mock_llm, "anime", "bold style", batch_num=1)
         assert result.batch == 1
         assert result.trigger_phrase == "bold style"
-        assert len(result.cases) == 10
+        assert len(result.cases) == 100
 
     async def test_ip_info_in_system_prompt(self, mock_llm) -> None:
         await design_cases(mock_llm, "Spider-Verse", "trigger", batch_num=1)
@@ -35,7 +52,6 @@ class TestDesignCases:
     async def test_no_feedback_section_when_empty(self, mock_llm) -> None:
         await design_cases(mock_llm, "anime", "x", batch_num=1)
         sys_prompt = mock_llm.invoke.call_args.kwargs["system"]
-        # Placeholder must not leak through and there must be no feedback heading
         assert "{feedback_section}" not in sys_prompt
         assert "User feedback on previous batch" not in sys_prompt
 
