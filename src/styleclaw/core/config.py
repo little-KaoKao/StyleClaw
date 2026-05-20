@@ -41,6 +41,12 @@ POLL_MAX_CONSECUTIVE_FAILURES: int = _int_env("STYLECLAW_POLL_MAX_CONSEC_FAIL", 
 ORCHESTRATOR_POLL_INTERVAL: float = _float_env("STYLECLAW_ORCH_POLL_INTERVAL", "30")
 MAX_POLL_CYCLES: int = _int_env("STYLECLAW_MAX_POLL_CYCLES", "60")
 
+# Number of parallel LLM shards used by design_cases. Must divide 10 (the
+# fixed category count) evenly — allowed values are 1, 2, 5, 10. Smaller
+# shards = smaller per-request token budgets, lower 429/500 risk, but more
+# total system-prompt overhead.
+DESIGN_CASES_SHARDS: int = _int_env("STYLECLAW_DESIGN_CASES_SHARDS", "5")
+
 # Stream LLM response deltas to stdout. Default is "True iff stdout is a TTY"
 # so piped/CI invocations don't blast partial tokens and don't block the event
 # loop on synchronous prints during parallel LLM calls.

@@ -53,6 +53,10 @@ class TestConfigDefaults:
         from styleclaw.core.config import MAX_POLL_CYCLES
         assert MAX_POLL_CYCLES == 60
 
+    def test_design_cases_shards_default(self):
+        from styleclaw.core.config import DESIGN_CASES_SHARDS
+        assert DESIGN_CASES_SHARDS == 5
+
 
 class TestConfigEnvOverrides:
     def test_max_auto_rounds_from_env(self, monkeypatch):
@@ -96,6 +100,13 @@ class TestConfigEnvOverrides:
         import styleclaw.core.config as config_mod
         importlib.reload(config_mod)
         assert config_mod.MAX_POLL_CYCLES == 120
+
+    def test_design_cases_shards_from_env(self, monkeypatch):
+        monkeypatch.setenv("STYLECLAW_DESIGN_CASES_SHARDS", "2")
+        import importlib
+        import styleclaw.core.config as config_mod
+        importlib.reload(config_mod)
+        assert config_mod.DESIGN_CASES_SHARDS == 2
 
 
 class TestStreamDisplayDefault:
