@@ -51,6 +51,7 @@ All defined in `core/config.py` via `_int_env` / `_float_env`. Invalid values ra
 | `STYLECLAW_LLM_CONNECT_TIMEOUT` | `30` | httpx connect timeout (seconds) for LLM connections. |
 | `STYLECLAW_MAX_DOWNLOAD_BYTES` | `52428800` | Hard cap on a single downloaded image file (default 50MB). Aborts mid-stream if exceeded. |
 | `STYLECLAW_LLM_IMAGE_CACHE` | `1` | Enable disk cache of resized/encoded images under `DATA_ROOT/.cache/llm-images/`. Set `0` to disable. |
+| `STYLECLAW_DESIGN_CASES_SHARDS` | `5` | Number of parallel LLM shards for `design_cases`. Must evenly divide the 10 fixed categories — allowed values: 1, 2, 5, 10. Lower = simpler/cheaper but larger per-request token budgets; higher = more parallelism. |
 | `STYLECLAW_PANEL_REFINE` | unset | When truthy, `do_refine` runs a three-model panel (propose + cross-score + winner) instead of a single-model call |
 | `STYLECLAW_PANEL_MODEL_SELECT` | unset | When truthy, `do_evaluate` in MODEL_SELECT runs the same three-model panel |
 | `STYLECLAW_PANEL_MODELS` | unset | Required when either panel toggle is on — exactly 3 comma-separated OpenAI-compat model ids |
