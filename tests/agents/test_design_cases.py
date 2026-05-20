@@ -173,3 +173,27 @@ class TestShardedDesignCases:
         llm.invoke.side_effect = side
         with pytest.raises(ValueError, match="outside its assigned categories"):
             await design_cases(llm, "anime", "trigger", batch_num=1)
+
+    async def test_short_shard_rejected_with_shard_context(self) -> None:
+        """A shard returning fewer cases than its assigned count is rejected
+        with a message that identifies which shard and what was missing."""
+        import json as _json
+        llm = AsyncMock()
+        cat_ids = [c["id"] for c in CATEGORIES]
+        partitions = [cat_ids[i:i+2] for i in range(0, 10, 2)]
+        # First shard returns only 5 cases per category (= 10 total) instead of 20.
+        short_cases = []
+        for cat_id in partitions[0]:
+            aspect = next(c["aspect"] for c in CATEGORIES if c["id"] == cat_id)
+            for i in range(1, 6):
+                short_cases.append({
+                    "id": f"case-{cat_id}-{i:02d}",
+                    "category": cat_id,
+                    "description": f"truncated #{i}",
+                    "aspect_ratio": aspect,
+                })
+        short_first = _json.dumps({"cases": short_cases})
+        side = [short_first] + [_shard_response(p) for p in partitions[1:]]
+        llm.invoke.side_effect = side
+        with pytest.raises(ValueError, match=r"shard 1 returned 10 cases.*expected 20"):
+            await design_cases(llm, "anime", "trigger", batch_num=1)

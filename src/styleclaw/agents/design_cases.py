@@ -127,6 +127,12 @@ async def _design_one_shard(
             f"{sorted(allowed)}: got {sorted({c.category for c in stray})}"
         )
 
+    if len(cases) != shard_cases:
+        raise ValueError(
+            f"shard {shard_index} returned {len(cases)} cases for categories "
+            f"{sorted(allowed)}, expected {shard_cases}"
+        )
+
     return cases
 
 

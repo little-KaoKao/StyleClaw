@@ -24,7 +24,7 @@ class TestDesignCasesErrorRecovery:
         mock_llm = AsyncMock()
         mock_llm.invoke.return_value = raw
 
-        with pytest.raises(ValueError, match="expected \\d+ total cases"):
+        with pytest.raises(ValueError, match="returned 1 cases.*expected 100"):
             await design_cases(mock_llm, "anime", "bold style", 1)
 
     async def test_raises_on_no_closing_brace(self) -> None:
@@ -70,5 +70,5 @@ class TestDesignCasesErrorRecovery:
         mock_llm = AsyncMock()
         mock_llm.invoke.return_value = valid
 
-        with pytest.raises(ValueError, match="expected \\d+ total cases"):
+        with pytest.raises(ValueError, match="returned 1 cases.*expected 100"):
             await design_cases(mock_llm, "anime", "bold style", 1)
