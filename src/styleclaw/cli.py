@@ -13,13 +13,16 @@ from typing import Any, AsyncIterator, Optional
 import typer
 from dotenv import load_dotenv
 
+# Must run BEFORE importing anything from styleclaw.* — `core.config` reads
+# panel-toggle env vars at module-load time, so a late `load_dotenv()` leaves
+# `PANEL_REFINE_ENABLED` / `PANEL_MODEL_SELECT_ENABLED` permanently False.
+load_dotenv()
+
 from styleclaw.core.config import MAX_AUTO_ROUNDS, env_truthy, validate_env
 from styleclaw.core.models import Phase, ProjectState, TaskStatus
 from styleclaw.core.state_machine import advance
 from styleclaw.orchestrator.actions import ExecutionContext, StepResult
 from styleclaw.storage import project_store
-
-load_dotenv()
 
 app = typer.Typer(name="styleclaw", help="AI style trigger word exploration system")
 
