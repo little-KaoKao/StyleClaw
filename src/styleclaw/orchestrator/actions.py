@@ -106,6 +106,12 @@ class DesignCasesArgs(_StrictArgs):
     feedback: str = Field(default="", max_length=_FREE_TEXT_MAX)
 
 
+class RetestModelsArgs(_StrictArgs):
+    # Optional override. Empty string = carry the current trigger forward
+    # (the pre-existing behavior).
+    trigger: str = Field(default="", max_length=_FREE_TEXT_MAX)
+
+
 class BatchSubmitArgs(_StrictArgs):
     model: str = Field(default="", max_length=64)
 
@@ -136,7 +142,7 @@ ACTION_ARGS_SCHEMA: dict[str, type[_StrictArgs]] = {
     "design-cases":  DesignCasesArgs,
     "batch-submit":  BatchSubmitArgs,
     "report":        _NoArgs,
-    "retest-models": _NoArgs,
+    "retest-models": RetestModelsArgs,
     "back-to-t2i":   _NoArgs,
     "set-sref":      SetSrefArgs,
     "set-pass":      SetPassArgs,
@@ -992,25 +998,29 @@ async def do_retest_models(ctx: ExecutionContext, args: dict[str, Any]) -> StepR
             )
 
         old_pass = state.current_model_select_pass or 1
-        current_trigger = ""
-        if state.current_round >= 1:
-            try:
-                prompt_cfg = project_store.load_prompt_config(
-                    ctx.project, state.current_round, pass_num=old_pass,
-                )
-                current_trigger = prompt_cfg.trigger_phrase
-            except FileNotFoundError:
-                pass
-        if not current_trigger:
-            try:
-                prev_analysis = project_store.load_analysis(ctx.project, pass_num=old_pass)
-                current_trigger = prev_analysis.trigger_phrase
-            except FileNotFoundError:
-                pass
+        override = (args.get("trigger") or "").strip()
+        if override:
+            new_trigger = override
+        else:
+            new_trigger = ""
+            if state.current_round >= 1:
+                try:
+                    prompt_cfg = project_store.load_prompt_config(
+                        ctx.project, state.current_round, pass_num=old_pass,
+                    )
+                    new_trigger = prompt_cfg.trigger_phrase
+                except FileNotFoundError:
+                    pass
+            if not new_trigger:
+                try:
+                    prev_analysis = project_store.load_analysis(ctx.project, pass_num=old_pass)
+                    new_trigger = prev_analysis.trigger_phrase
+                except FileNotFoundError:
+                    pass
 
         new_pass = old_pass + 1
         project_store.save_analysis(
-            ctx.project, StyleAnalysis(trigger_phrase=current_trigger), pass_num=new_pass,
+            ctx.project, StyleAnalysis(trigger_phrase=new_trigger), pass_num=new_pass,
         )
 
         # advance() only allows forward transitions, so only call it when leaving
@@ -1024,10 +1034,11 @@ async def do_retest_models(ctx: ExecutionContext, args: dict[str, Any]) -> StepR
                 .with_model_select_pass(new_pass)
             )
         project_store.save_state(ctx.project, new_state)
+    suffix = " (trigger overridden)" if override else ""
     return StepResult(
         ok=True,
-        message=f"Entered MODEL_SELECT pass {new_pass} for re-test",
-        data={"pass_num": new_pass},
+        message=f"Entered MODEL_SELECT pass {new_pass} for re-test{suffix}",
+        data={"pass_num": new_pass, "trigger_overridden": bool(override)},
     )
 
 

@@ -178,6 +178,98 @@ class TestDoRetestModels:
         pass2_analysis = project_store.load_analysis(project_with_ref, pass_num=2)
         assert pass2_analysis.trigger_phrase == "only-analysis"
 
+    async def test_trigger_override_replaces_carried_phrase(self, project_with_ref):
+        """When the user supplies a new trigger phrase, retest-models writes
+        the override into pass-N analysis instead of carrying the existing
+        trigger forward. This is the orchestrator-level fix for "用这个触发词
+        重测" — the planner can route the user's phrase through args.trigger."""
+        from styleclaw.orchestrator.actions import do_retest_models
+
+        project_store.save_analysis(
+            project_with_ref, StyleAnalysis(trigger_phrase="old-trigger"), pass_num=1,
+        )
+        project_store.save_prompt_config(
+            project_with_ref, 1,
+            PromptConfig(round=1, trigger_phrase="refined-but-stale"),
+            pass_num=1,
+        )
+        state = ProjectState(
+            phase=Phase.MODEL_SELECT, current_round=1, current_model_select_pass=1,
+        )
+        project_store.save_state(project_with_ref, state)
+
+        ctx = ExecutionContext(project=project_with_ref)
+        result = await do_retest_models(ctx, {"trigger": "brand new trigger phrase"})
+        assert result.ok
+        assert result.data["trigger_overridden"] is True
+
+        pass2_analysis = project_store.load_analysis(project_with_ref, pass_num=2)
+        assert pass2_analysis.trigger_phrase == "brand new trigger phrase"
+
+    async def test_trigger_override_strips_surrounding_whitespace(
+        self, project_with_ref,
+    ) -> None:
+        """LLM-supplied args often pick up trailing newlines from prompt
+        templates. The action should normalize, not pass them through to the
+        on-disk trigger phrase (which then leaks into the rendered prompt)."""
+        from styleclaw.orchestrator.actions import do_retest_models
+
+        project_store.save_analysis(
+            project_with_ref, StyleAnalysis(trigger_phrase="old"), pass_num=1,
+        )
+        state = ProjectState(
+            phase=Phase.MODEL_SELECT, current_model_select_pass=1,
+        )
+        project_store.save_state(project_with_ref, state)
+
+        ctx = ExecutionContext(project=project_with_ref)
+        result = await do_retest_models(ctx, {"trigger": "  spaced trigger  \n"})
+        assert result.ok
+
+        pass2 = project_store.load_analysis(project_with_ref, pass_num=2)
+        assert pass2.trigger_phrase == "spaced trigger"
+
+    async def test_empty_trigger_arg_does_not_override(self, project_with_ref):
+        """`args.trigger=""` is the default and should be indistinguishable
+        from "no arg passed" — the carry-forward path must still run."""
+        from styleclaw.orchestrator.actions import do_retest_models
+
+        project_store.save_analysis(
+            project_with_ref, StyleAnalysis(trigger_phrase="existing"), pass_num=1,
+        )
+        state = ProjectState(
+            phase=Phase.MODEL_SELECT, current_model_select_pass=1,
+        )
+        project_store.save_state(project_with_ref, state)
+
+        ctx = ExecutionContext(project=project_with_ref)
+        result = await do_retest_models(ctx, {"trigger": ""})
+        assert result.ok
+        assert result.data.get("trigger_overridden") is False
+
+        pass2 = project_store.load_analysis(project_with_ref, pass_num=2)
+        assert pass2.trigger_phrase == "existing"
+
+    async def test_trigger_override_arg_rejected_via_schema(
+        self, project_with_ref,
+    ) -> None:
+        """Schema layer must accept `trigger` and reject anything else, so
+        the planner cannot smuggle in arbitrary keys (e.g. `trigger_override`,
+        which is what the LLM tried before this fix)."""
+        from styleclaw.orchestrator.actions import _validate_action_args
+
+        validated, err = _validate_action_args(
+            "retest-models", {"trigger": "ok"},
+        )
+        assert err is None
+        assert validated == {"trigger": "ok"}
+
+        _, err = _validate_action_args(
+            "retest-models", {"trigger_override": "no"},
+        )
+        assert err is not None
+        assert "trigger_override" in err.message
+
 
 class TestDoBackToT2i:
     async def test_from_batch_i2i(self, project_with_ref):
