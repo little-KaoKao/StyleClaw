@@ -954,7 +954,7 @@ class TestDoGenerateModelsFilter:
 
         captured: dict = {}
 
-        async def _fake_generate(name, client, trigger, *, sref_url, models, pass_num, force):
+        async def _fake_generate(name, client, trigger, *, sref_url, models, pass_num, force, test_subjects=None):
             captured["models"] = models
             return {"mj-v7/prompt-only-male": TaskRecord(task_id="t1", model_id="mj-v7")}
 
@@ -997,7 +997,7 @@ class TestDoGenerateModelsFilter:
 
         captured: dict = {}
 
-        async def _fake_generate(name, client, trigger, *, sref_url, models, pass_num, force):
+        async def _fake_generate(name, client, trigger, *, sref_url, models, pass_num, force, test_subjects=None):
             captured["models"] = models
             return {}
 

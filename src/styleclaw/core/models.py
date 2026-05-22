@@ -78,6 +78,11 @@ class StyleAnalysis(_FrozenModel):
     # 输出
     trigger_phrase: str = ""
     trigger_variants: list[str] = Field(default_factory=list)
+    # De-IP'd character descriptions extracted from the refs, keyed by gender
+    # ("male" / "female"). Used as character_desc during MODEL_SELECT generate.
+    # Empty dict / missing key falls back to the hardcoded TEST_SUBJECTS in
+    # scripts/generate.py.
+    test_subjects: dict[str, str] = Field(default_factory=dict)
     model_id: str = ""
 
 

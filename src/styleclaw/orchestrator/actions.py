@@ -394,6 +394,7 @@ async def do_generate(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult
             ctx.project, ctx.client, trigger,
             sref_url=sref_url, models=models,
             pass_num=pass_num, force=force,
+            test_subjects=analysis.test_subjects,
         )
         msg = f"Submitted {len(records)} model tasks (pass {pass_num})"
         if models:
@@ -1065,6 +1066,13 @@ async def do_retest_models(ctx: ExecutionContext, args: dict[str, Any]) -> StepR
 
         old_pass = state.current_model_select_pass or 1
         override = (args.get("trigger") or "").strip()
+        carry_subjects: dict[str, str] = {}
+        try:
+            prev_analysis = project_store.load_analysis(ctx.project, pass_num=old_pass)
+            carry_subjects = dict(prev_analysis.test_subjects)
+        except FileNotFoundError:
+            prev_analysis = None
+
         if override:
             new_trigger = override
         else:
@@ -1077,16 +1085,17 @@ async def do_retest_models(ctx: ExecutionContext, args: dict[str, Any]) -> StepR
                     new_trigger = prompt_cfg.trigger_phrase
                 except FileNotFoundError:
                     pass
-            if not new_trigger:
-                try:
-                    prev_analysis = project_store.load_analysis(ctx.project, pass_num=old_pass)
-                    new_trigger = prev_analysis.trigger_phrase
-                except FileNotFoundError:
-                    pass
+            if not new_trigger and prev_analysis is not None:
+                new_trigger = prev_analysis.trigger_phrase
 
         new_pass = old_pass + 1
         project_store.save_analysis(
-            ctx.project, StyleAnalysis(trigger_phrase=new_trigger), pass_num=new_pass,
+            ctx.project,
+            StyleAnalysis(
+                trigger_phrase=new_trigger,
+                test_subjects=carry_subjects,
+            ),
+            pass_num=new_pass,
         )
 
         # advance() only allows forward transitions, so only call it when leaving

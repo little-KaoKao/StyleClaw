@@ -34,7 +34,11 @@ Return ONLY valid JSON (no markdown fences):
   "spatial_perspective": "description",
   "dynamic_state": "description",
   "trigger_phrase": "structured trigger phrase — see format below",
-  "trigger_variants": ["variant 1", "variant 2", "variant 3"]
+  "trigger_variants": ["variant 1", "variant 2", "variant 3"],
+  "test_subjects": {
+    "male": "de-IP'd description of a prominent male character in the refs",
+    "female": "de-IP'd description of a prominent female character in the refs"
+  }
 }
 ```
 
@@ -50,3 +54,17 @@ Rules:
 - Choose 5-7 sections that best capture the style; prioritize distinctive features
 - Keep total length under 800 characters
 - `trigger_variants` should explore alternative phrasings, using the same structured format
+
+## Test Subjects
+
+The downstream `MODEL_SELECT` phase will generate one test image per `(candidate_model, variant, gender)` triple. The character description for each test is taken from `test_subjects` and concatenated after the trigger phrase (`<trigger>, <character_desc>`). Picking subjects that reflect the actual IP characters lets reviewers judge whether a candidate model reproduces both the style AND the IP's people — not just the style on a random stranger.
+
+Rules:
+- Inspect the reference images for prominent human / humanoid characters.
+- For each gender slot — `"male"` and `"female"` — if a character of that gender appears in the refs, write one short generic English noun phrase capturing key visual traits: age range, build, hair, distinctive clothing silhouette, outfit color palette.
+- **Strip IP-identifying elements**. Do NOT include named characters, copyrighted logos / emblems / symbols (e.g. "spider logo", "bat-symbol"), or proper nouns that identify the IP. Describe the figure as a generic person who happens to share the visible traits.
+  - ✅ `"a young man in a red and blue patterned full-body bodysuit, athletic build"`
+  - ❌ `"Spider-Man with web pattern and spider logo on chest"`
+- **Omit the key entirely** when no character of that gender is visible in the refs. Do not invent a character.
+- Each description must be ≤120 characters, English only, grammatically a noun phrase (not a sentence).
+- If neither gender is represented in the refs (e.g. refs are landscapes, objects, mascots), return `"test_subjects": {}`.

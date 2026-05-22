@@ -63,3 +63,40 @@ class TestAnalyzeStyle:
         await analyze_style(mock_llm, ref_images, "Spider-Verse style")
         call_args = mock_llm.invoke.call_args
         assert "Spider-Verse style" in call_args.kwargs["system"]
+
+    async def test_test_subjects_parsed_when_provided(self, ref_images) -> None:
+        llm = AsyncMock()
+        llm.invoke.return_value = json.dumps({
+            "trigger_phrase": "test trigger",
+            "test_subjects": {
+                "male": "a young man in a red and blue patterned bodysuit",
+                "female": "a young woman with long dark hair in a tactical outfit",
+            },
+        })
+        result = await analyze_style(llm, ref_images, "test")
+        assert result.test_subjects == {
+            "male": "a young man in a red and blue patterned bodysuit",
+            "female": "a young woman with long dark hair in a tactical outfit",
+        }
+
+    async def test_test_subjects_defaults_to_empty(self, mock_llm, ref_images) -> None:
+        # mock_llm response has no test_subjects key → must default to {}
+        result = await analyze_style(mock_llm, ref_images, "anime IP")
+        assert result.test_subjects == {}
+
+    async def test_partial_test_subjects_preserved(self, ref_images) -> None:
+        llm = AsyncMock()
+        llm.invoke.return_value = json.dumps({
+            "trigger_phrase": "test trigger",
+            "test_subjects": {"male": "M-only"},
+        })
+        result = await analyze_style(llm, ref_images, "test")
+        assert result.test_subjects == {"male": "M-only"}
+
+    async def test_analyze_prompt_mentions_test_subjects(self, mock_llm, ref_images) -> None:
+        await analyze_style(mock_llm, ref_images, "anime IP")
+        call_args = mock_llm.invoke.call_args
+        system_prompt = call_args.kwargs["system"]
+        assert "test_subjects" in system_prompt
+        # IP-stripping guidance must be in the prompt
+        assert "Strip IP-identifying" in system_prompt or "IP-identifying" in system_prompt

@@ -270,6 +270,59 @@ class TestDoRetestModels:
         assert err is not None
         assert "trigger_override" in err.message
 
+    async def test_test_subjects_carried_to_new_pass(self, project_with_ref):
+        """De-IP'd character descriptions extracted during analyze are part
+        of the ref's signal, not the trigger's. They must survive a pass
+        bump so downstream `generate` keeps testing against the same
+        characters."""
+        from styleclaw.orchestrator.actions import do_retest_models
+
+        project_store.save_analysis(
+            project_with_ref,
+            StyleAnalysis(
+                trigger_phrase="old-trigger",
+                test_subjects={"male": "M-DESC", "female": "F-DESC"},
+            ),
+            pass_num=1,
+        )
+        state = ProjectState(
+            phase=Phase.MODEL_SELECT, current_model_select_pass=1,
+        )
+        project_store.save_state(project_with_ref, state)
+
+        ctx = ExecutionContext(project=project_with_ref)
+        result = await do_retest_models(ctx, {})
+        assert result.ok
+
+        pass2 = project_store.load_analysis(project_with_ref, pass_num=2)
+        assert pass2.test_subjects == {"male": "M-DESC", "female": "F-DESC"}
+
+    async def test_test_subjects_carry_forward_with_override(self, project_with_ref):
+        """Even when the trigger is overridden, the ref-derived subjects
+        should still carry — the refs haven't changed."""
+        from styleclaw.orchestrator.actions import do_retest_models
+
+        project_store.save_analysis(
+            project_with_ref,
+            StyleAnalysis(
+                trigger_phrase="old",
+                test_subjects={"male": "M-DESC"},
+            ),
+            pass_num=1,
+        )
+        state = ProjectState(
+            phase=Phase.MODEL_SELECT, current_model_select_pass=1,
+        )
+        project_store.save_state(project_with_ref, state)
+
+        ctx = ExecutionContext(project=project_with_ref)
+        result = await do_retest_models(ctx, {"trigger": "totally new"})
+        assert result.ok
+
+        pass2 = project_store.load_analysis(project_with_ref, pass_num=2)
+        assert pass2.trigger_phrase == "totally new"
+        assert pass2.test_subjects == {"male": "M-DESC"}
+
 
 class TestDoBackToT2i:
     async def test_from_batch_i2i(self, project_with_ref):

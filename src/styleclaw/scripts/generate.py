@@ -25,6 +25,26 @@ VARIANT_PROMPT_ONLY = "prompt-only"
 VARIANT_PROMPT_SREF = "prompt-sref"
 
 
+def resolve_test_subjects(
+    analysis_subjects: dict[str, str] | None,
+) -> dict[str, str]:
+    """Merge analysis-extracted subjects over the hardcoded fallback.
+
+    Both `"male"` and `"female"` are always present in the returned dict.
+    Analysis values win when non-empty after stripping; otherwise the
+    corresponding entry from TEST_SUBJECTS is used. This keeps the per-gender
+    submission slot populated even when the refs only contained one gender,
+    or no characters at all.
+    """
+    out = dict(TEST_SUBJECTS)
+    if analysis_subjects:
+        for k in ("male", "female"):
+            v = (analysis_subjects.get(k) or "").strip()
+            if v:
+                out[k] = v
+    return out
+
+
 async def generate_model_select(
     name: str,
     client: RunningHubClient,
@@ -33,7 +53,9 @@ async def generate_model_select(
     models: list[str] | None = None,
     pass_num: int = 1,
     force: bool = False,
+    test_subjects: dict[str, str] | None = None,
 ) -> dict[str, TaskRecord]:
+    subjects = resolve_test_subjects(test_subjects)
     model_ids = models or list(MODEL_REGISTRY.keys())
 
     existing = project_store.load_all_task_records(name, pass_num=pass_num)
@@ -43,7 +65,7 @@ async def generate_model_select(
 
     for mid in model_ids:
         for variant in (VARIANT_PROMPT_ONLY, VARIANT_PROMPT_SREF):
-            for gender in TEST_SUBJECTS:
+            for gender in ("male", "female"):
                 key = f"{mid}/{variant}-{gender}"
                 prev = existing.get(key)
                 if not force and prev and prev.status != TaskStatus.FAILED:
@@ -60,7 +82,7 @@ async def generate_model_select(
         params = build_params(
             model_id=model_id,
             trigger_phrase=trigger_phrase,
-            character_desc=TEST_SUBJECTS[gender],
+            character_desc=subjects[gender],
             aspect_ratio="9:16",
             sref_url=use_sref,
         )

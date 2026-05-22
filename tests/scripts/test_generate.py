@@ -6,7 +6,12 @@ import pytest
 
 from styleclaw.core.models import Phase, ProjectConfig, ProjectState, TaskRecord
 from styleclaw.providers.runninghub.models import MODEL_REGISTRY
-from styleclaw.scripts.generate import TEST_SUBJECTS, generate_model_select, generate_style_refine
+from styleclaw.scripts.generate import (
+    TEST_SUBJECTS,
+    generate_model_select,
+    generate_style_refine,
+    resolve_test_subjects,
+)
 from styleclaw.storage import project_store
 
 
@@ -135,3 +140,79 @@ class TestIdempotency:
         )
         assert records["mj-v7"].task_id == "t1"
         mock_client.post.assert_called_once()
+
+
+class TestResolveTestSubjects:
+    def test_none_returns_fallback(self) -> None:
+        result = resolve_test_subjects(None)
+        assert result == TEST_SUBJECTS
+
+    def test_empty_dict_returns_fallback(self) -> None:
+        result = resolve_test_subjects({})
+        assert result == TEST_SUBJECTS
+
+    def test_full_override(self) -> None:
+        result = resolve_test_subjects({"male": "M", "female": "F"})
+        assert result == {"male": "M", "female": "F"}
+
+    def test_partial_override_male_only(self) -> None:
+        result = resolve_test_subjects({"male": "M"})
+        assert result["male"] == "M"
+        assert result["female"] == TEST_SUBJECTS["female"]
+
+    def test_partial_override_female_only(self) -> None:
+        result = resolve_test_subjects({"female": "F"})
+        assert result["male"] == TEST_SUBJECTS["male"]
+        assert result["female"] == "F"
+
+    def test_whitespace_falls_back(self) -> None:
+        result = resolve_test_subjects({"male": "   ", "female": ""})
+        assert result == TEST_SUBJECTS
+
+    def test_unknown_keys_ignored(self) -> None:
+        result = resolve_test_subjects({"male": "M", "nonbinary": "X"})
+        assert result == {"male": "M", "female": TEST_SUBJECTS["female"]}
+
+
+class TestGenerateModelSelectTestSubjects:
+    async def test_uses_provided_subjects(self, setup_project, mock_client) -> None:
+        await generate_model_select(
+            "test-proj", mock_client, "bold anime style",
+            models=["mj-v7"],
+            test_subjects={"male": "BOY-SENTINEL", "female": "GIRL-SENTINEL"},
+        )
+        male_rec = project_store.load_task_record(
+            "test-proj", "mj-v7", variant="prompt-only-male",
+        )
+        female_rec = project_store.load_task_record(
+            "test-proj", "mj-v7", variant="prompt-only-female",
+        )
+        assert "BOY-SENTINEL" in male_rec.prompt
+        assert "GIRL-SENTINEL" in female_rec.prompt
+        # Sanity: each task's prompt must not bleed across genders.
+        assert "GIRL-SENTINEL" not in male_rec.prompt
+        assert "BOY-SENTINEL" not in female_rec.prompt
+
+    async def test_partial_subjects_fall_back(self, setup_project, mock_client) -> None:
+        await generate_model_select(
+            "test-proj", mock_client, "bold anime style",
+            models=["mj-v7"],
+            test_subjects={"male": "BOY-ONLY-SENTINEL"},
+        )
+        male_rec = project_store.load_task_record(
+            "test-proj", "mj-v7", variant="prompt-only-male",
+        )
+        female_rec = project_store.load_task_record(
+            "test-proj", "mj-v7", variant="prompt-only-female",
+        )
+        assert "BOY-ONLY-SENTINEL" in male_rec.prompt
+        assert TEST_SUBJECTS["female"] in female_rec.prompt
+
+    async def test_default_uses_fallback(self, setup_project, mock_client) -> None:
+        await generate_model_select(
+            "test-proj", mock_client, "bold anime style", models=["mj-v7"],
+        )
+        male_rec = project_store.load_task_record(
+            "test-proj", "mj-v7", variant="prompt-only-male",
+        )
+        assert TEST_SUBJECTS["male"] in male_rec.prompt

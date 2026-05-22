@@ -165,3 +165,34 @@ class TestModelIdField:
         )
         assert ev.model_id == "m"
         assert ev.should_approve() is False
+
+
+class TestStyleAnalysisTestSubjects:
+    """`test_subjects` carries de-IP'd character descriptions extracted from refs.
+
+    Defaults to an empty dict so legacy on-disk JSON keeps loading unchanged.
+    """
+
+    def test_defaults_to_empty_dict(self):
+        analysis = StyleAnalysis()
+        assert analysis.test_subjects == {}
+
+    def test_legacy_json_loads_without_field(self):
+        legacy = '{"trigger_phrase": "x"}'
+        analysis = StyleAnalysis.model_validate_json(legacy)
+        assert analysis.test_subjects == {}
+
+    def test_round_trip_with_test_subjects(self):
+        original = StyleAnalysis(
+            trigger_phrase="t",
+            test_subjects={"male": "M", "female": "F"},
+        )
+        dumped = original.model_dump_json()
+        restored = StyleAnalysis.model_validate_json(dumped)
+        assert restored.test_subjects == {"male": "M", "female": "F"}
+
+    def test_partial_test_subjects_round_trip(self):
+        original = StyleAnalysis(test_subjects={"male": "M"})
+        dumped = original.model_dump_json()
+        restored = StyleAnalysis.model_validate_json(dumped)
+        assert restored.test_subjects == {"male": "M"}

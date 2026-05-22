@@ -50,8 +50,8 @@ def generate_model_select_report(name: str, pass_num: int = 1) -> Path:
     sref_idx = config.sref_index if 0 <= config.sref_index < len(ref_images) else 0
     sref_image = ref_images[sref_idx] if ref_images else ""
 
-    # Import test subjects from generate.py
-    from styleclaw.scripts.generate import TEST_SUBJECTS
+    from styleclaw.scripts.generate import resolve_test_subjects
+    subjects = resolve_test_subjects(analysis.test_subjects)
 
     model_data: list[dict] = []
     for ev in evaluation.evaluations:
@@ -108,8 +108,8 @@ def generate_model_select_report(name: str, pass_num: int = 1) -> Path:
         recommended_variant=evaluation.recommended_variant,
         ref_images=ref_images,
         sref_image=sref_image,
-        test_subject_male=TEST_SUBJECTS["male"],
-        test_subject_female=TEST_SUBJECTS["female"],
+        test_subject_male=subjects["male"],
+        test_subject_female=subjects["female"],
         models=model_data,
         panel=panel,
     )
@@ -138,8 +138,12 @@ def generate_style_refine_report(
     sref_idx = config.sref_index if 0 <= config.sref_index < len(ref_images) else 0
     sref_image = ref_images[sref_idx] if ref_images else ""
 
-    # Import test subjects from generate.py
-    from styleclaw.scripts.generate import TEST_SUBJECTS
+    from styleclaw.scripts.generate import resolve_test_subjects
+    try:
+        analysis = project_store.load_analysis(name, pass_num=pass_num)
+        subjects = resolve_test_subjects(analysis.test_subjects)
+    except FileNotFoundError:
+        subjects = resolve_test_subjects(None)
 
     model_data: list[dict] = []
     for ev in evaluation.evaluations:
@@ -166,8 +170,8 @@ def generate_style_refine_report(
         recommendation=evaluation.recommendation,
         ref_images=ref_images,
         sref_image=sref_image,
-        test_subject_male=TEST_SUBJECTS["male"],
-        test_subject_female=TEST_SUBJECTS["female"],
+        test_subject_male=subjects["male"],
+        test_subject_female=subjects["female"],
         models=model_data,
         panel=panel,
     )
