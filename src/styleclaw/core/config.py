@@ -85,6 +85,7 @@ def _list_env(name: str, default: str = "") -> list[str]:
 # raising at import time so unit tests can still load config_mod cleanly.
 PANEL_REFINE_ENABLED: bool = _bool_env("STYLECLAW_PANEL_REFINE", False)
 PANEL_MODEL_SELECT_ENABLED: bool = _bool_env("STYLECLAW_PANEL_MODEL_SELECT", False)
+PANEL_ANALYZE_ENABLED: bool = _bool_env("STYLECLAW_PANEL_ANALYZE", False)
 PANEL_MODELS: list[str] = _list_env("STYLECLAW_PANEL_MODELS")
 _PANEL_LABELS_RAW: list[str] = _list_env("STYLECLAW_PANEL_LABELS")
 PANEL_LABELS: list[str] = _PANEL_LABELS_RAW or list(PANEL_MODELS)
@@ -103,19 +104,21 @@ def validate_panel_config() -> list[str]:
     llm_routing.validate_routing_env (called separately from validate_env).
     """
     errors: list[str] = []
-    if not (PANEL_REFINE_ENABLED or PANEL_MODEL_SELECT_ENABLED):
+    if not (PANEL_REFINE_ENABLED or PANEL_MODEL_SELECT_ENABLED or PANEL_ANALYZE_ENABLED):
         return errors
     # If both panel toggles have role-specific pools, skip the global check.
     refine_overridden = bool(os.getenv("STYLECLAW_PANEL_MODELS_VISION_ANALYST"))
     select_overridden = bool(os.getenv("STYLECLAW_PANEL_MODELS_VISION_CRITIC"))
-    refine_needs_global = PANEL_REFINE_ENABLED and not refine_overridden
+    # Analyze shares the vision_analyst pool with refine.
+    vision_analyst_panel_on = PANEL_REFINE_ENABLED or PANEL_ANALYZE_ENABLED
+    refine_needs_global = vision_analyst_panel_on and not refine_overridden
     select_needs_global = PANEL_MODEL_SELECT_ENABLED and not select_overridden
     if refine_needs_global or select_needs_global:
         if len(PANEL_MODELS) != 3:
             errors.append(
                 "STYLECLAW_PANEL_MODELS must list exactly 3 comma-separated model "
-                f"ids when STYLECLAW_PANEL_REFINE or STYLECLAW_PANEL_MODEL_SELECT "
-                f"is set (got {len(PANEL_MODELS)}: {PANEL_MODELS!r})."
+                f"ids when STYLECLAW_PANEL_REFINE, STYLECLAW_PANEL_MODEL_SELECT, "
+                f"or STYLECLAW_PANEL_ANALYZE is set (got {len(PANEL_MODELS)}: {PANEL_MODELS!r})."
             )
     if _PANEL_LABELS_RAW and len(_PANEL_LABELS_RAW) != len(PANEL_MODELS):
         errors.append(

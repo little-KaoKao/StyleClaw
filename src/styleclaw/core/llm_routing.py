@@ -163,13 +163,14 @@ def validate_routing_env() -> list[str]:
                 f"set {env_name} or LLM_MODEL"
             )
 
-    # 2. Per-role panel pool length when the matching toggle is on.
+    # 2. Per-role panel pool length when any of its toggles are on.
     # Duplicates resolution logic from _resolve_panel_pool on purpose — the
     # validator runs without instantiating the router. Read all envs through
     # os.getenv directly so callers don't need to reload core.config first.
     from styleclaw.core.config import env_truthy
-    for role, toggle_env in _PANEL_TOGGLE_FOR_ROLE.items():
-        if not env_truthy(toggle_env):
+    for role, toggle_envs in _PANEL_TOGGLES_FOR_ROLE.items():
+        active_toggles = [t for t in toggle_envs if env_truthy(t)]
+        if not active_toggles:
             continue
         role_env = f"STYLECLAW_PANEL_MODELS_{role.value.upper()}"
         role_raw = os.getenv(role_env, "").strip()
@@ -180,9 +181,10 @@ def validate_routing_env() -> list[str]:
             global_raw = os.getenv("STYLECLAW_PANEL_MODELS", "").strip()
             pool = [m.strip() for m in global_raw.split(",") if m.strip()]
             source = "STYLECLAW_PANEL_MODELS"
+        toggle_label = " / ".join(active_toggles)
         if not pool:
             errors.append(
-                f"panel for '{role.value}' is enabled ({toggle_env}=1) "
+                f"panel for '{role.value}' is enabled ({toggle_label}=1) "
                 f"but no pool is configured: set {role_env} or {source}"
             )
         elif len(pool) != 3:
@@ -194,10 +196,12 @@ def validate_routing_env() -> list[str]:
     return errors
 
 
-# Which env var turns on the panel for each role.
-_PANEL_TOGGLE_FOR_ROLE: dict[Role, str] = {
-    Role.VISION_CRITIC: "STYLECLAW_PANEL_MODEL_SELECT",
-    Role.VISION_ANALYST: "STYLECLAW_PANEL_REFINE",
+# Which env vars turn on the panel for each role. A role can be activated by
+# any of the listed toggles (e.g. vision_analyst is reused by both `refine`
+# and `analyze`).
+_PANEL_TOGGLES_FOR_ROLE: dict[Role, tuple[str, ...]] = {
+    Role.VISION_CRITIC: ("STYLECLAW_PANEL_MODEL_SELECT",),
+    Role.VISION_ANALYST: ("STYLECLAW_PANEL_REFINE", "STYLECLAW_PANEL_ANALYZE"),
 }
 
 

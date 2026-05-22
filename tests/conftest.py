@@ -26,6 +26,7 @@ import pytest
 _PANEL_ENV_KEYS = (
     "STYLECLAW_PANEL_REFINE",
     "STYLECLAW_PANEL_MODEL_SELECT",
+    "STYLECLAW_PANEL_ANALYZE",
     "STYLECLAW_PANEL_MODELS",
     "STYLECLAW_PANEL_LABELS",
     # Role-specific pools — populated from .env by load_dotenv() the moment
@@ -47,6 +48,7 @@ def _reset_panel_config_state():
     import styleclaw.core.config as config_mod
     config_mod.PANEL_REFINE_ENABLED = False
     config_mod.PANEL_MODEL_SELECT_ENABLED = False
+    config_mod.PANEL_ANALYZE_ENABLED = False
     config_mod.PANEL_MODELS = []
     config_mod.PANEL_LABELS = []
     config_mod._PANEL_LABELS_RAW = []

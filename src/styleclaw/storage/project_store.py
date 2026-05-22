@@ -523,6 +523,27 @@ def load_model_select_panel_result(
     return _load_model(PanelResult, path)
 
 
+def save_analyze_panel_result(
+    name: str, result: PanelResult, pass_num: int = 1,
+) -> None:
+    # Distinct filename from save_model_select_panel_result's "panel.json"
+    # because both forensic records live in the same model-select pass dir
+    # (initial-analysis.json and evaluation.json are siblings there).
+    _save_model(
+        result,
+        model_select_dir(name, pass_num) / "initial-analysis.panel.json",
+    )
+
+
+def load_analyze_panel_result(
+    name: str, pass_num: int = 1,
+) -> PanelResult | None:
+    path = model_select_dir(name, pass_num) / "initial-analysis.panel.json"
+    if not path.exists():
+        return None
+    return _load_model(PanelResult, path)
+
+
 # --- Phase 4: batch-t2i storage ---
 
 

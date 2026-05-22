@@ -229,6 +229,7 @@ def _reject_sensitive_path(p: Path, label: str) -> StepResult | None:
 
 
 async def do_analyze(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
+    import styleclaw.core.config as _cfg
     from styleclaw.agents.analyze_style import analyze_style, analyze_style_with_thinking
     from styleclaw.core.llm_routing import Role
     from styleclaw.core.state_machine import advance
@@ -237,6 +238,72 @@ async def do_analyze(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
     root = project_store.project_dir(ctx.project)
     ref_paths = [root / r for r in config.ref_images]
 
+    pass_num = 1
+
+    if _cfg.PANEL_ANALYZE_ENABLED:
+        from styleclaw.agents.analyze_panel import analyze_style_with_panel
+
+        llms, labels = ctx.llm_router.get_panel(Role.VISION_ANALYST)
+        try:
+            analysis, panel_result = await analyze_style_with_panel(
+                llms, labels, ref_paths, config.ip_info,
+            )
+        except RuntimeError as exc:
+            return StepResult(ok=False, message=f"analyze panel failed: {exc}")
+
+        # Persist panel.json regardless — it's the forensic record. The main
+        # initial-analysis.json and phase advance only happen when the panel
+        # is healthy or the user explicitly opts into degraded results.
+        project_store.save_analyze_panel_result(
+            ctx.project, panel_result, pass_num=pass_num,
+        )
+
+        if panel_result.degraded and not _cfg.ALLOW_DEGRADED_PANEL:
+            return StepResult(
+                ok=False,
+                message=(
+                    f"analyze panel returned degraded "
+                    f"({len(panel_result.error_log)} issue(s), winner='{panel_result.winner_model_id}'). "
+                    f"Refusing to save initial-analysis.json or advance — a half-validated "
+                    f"trigger would taint every downstream pass. "
+                    f"See initial-analysis.panel.json for details; re-run `analyze` once "
+                    f"the issue clears, or set STYLECLAW_ALLOW_DEGRADED_PANEL=1 to accept "
+                    f"this run as-is."
+                ),
+                data={
+                    "panel": True, "degraded": True,
+                    "pass_num": pass_num,
+                    "error_log": panel_result.error_log,
+                },
+            )
+
+        analysis = analysis.model_copy(
+            update={"model_id": panel_result.winner_model_id},
+        )
+        project_store.save_analysis(ctx.project, analysis, pass_num=pass_num)
+
+        project_store.update_state(
+            ctx.project,
+            lambda s: advance(s, Phase.MODEL_SELECT).with_model_select_pass(pass_num),
+        )
+
+        msg = (
+            f"Trigger: {analysis.trigger_phrase} "
+            f"[panel:{panel_result.winner_model_id}]"
+        )
+        if panel_result.degraded:
+            msg += f" (degraded; accepted via STYLECLAW_ALLOW_DEGRADED_PANEL — {len(panel_result.error_log)} issue(s))"
+        return StepResult(
+            ok=True, message=msg,
+            data={
+                "trigger_phrase": analysis.trigger_phrase,
+                "pass_num": pass_num,
+                "panel": True,
+                "degraded": panel_result.degraded,
+            },
+        )
+
+    # Single-model path.
     llm = ctx.llm_router.get(Role.VISION_ANALYST)
     model_id = getattr(llm, "_model_id", "")
 
@@ -250,7 +317,6 @@ async def do_analyze(ctx: ExecutionContext, args: dict[str, Any]) -> StepResult:
 
     analysis = analysis.model_copy(update={"model_id": model_id})
 
-    pass_num = 1
     project_store.save_analysis(ctx.project, analysis, pass_num=pass_num)
     if thinking:
         project_store.save_thinking(

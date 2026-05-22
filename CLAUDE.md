@@ -54,6 +54,7 @@ All defined in `core/config.py` via `_int_env` / `_float_env`. Invalid values ra
 | `STYLECLAW_DESIGN_CASES_SHARDS` | `5` | Number of parallel LLM shards for `design_cases`. Must evenly divide the 10 fixed categories — allowed values: 1, 2, 5, 10. Lower = simpler/cheaper but larger per-request token budgets; higher = more parallelism. |
 | `STYLECLAW_PANEL_REFINE` | unset | When truthy, `do_refine` runs a three-model panel (propose + cross-score + winner) instead of a single-model call |
 | `STYLECLAW_PANEL_MODEL_SELECT` | unset | When truthy, `do_evaluate` in MODEL_SELECT runs the same three-model panel |
+| `STYLECLAW_PANEL_ANALYZE` | unset | When truthy, `do_analyze` runs the same three-model panel (vision_analyst pool). Independent of `STYLECLAW_PANEL_REFINE` so you can panel one without the other |
 | `STYLECLAW_PANEL_MODELS` | unset | Required when either panel toggle is on — exactly 3 comma-separated OpenAI-compat model ids |
 | `STYLECLAW_PANEL_LABELS` | unset | Optional human-readable labels (same length as `STYLECLAW_PANEL_MODELS`); falls back to model ids in reports/logs |
 | `STYLECLAW_MODEL_VISION_CRITIC` | unset | Model ID for the **vision_critic** role (`select_model` + `evaluate_result`). Falls back to `LLM_MODEL` when unset. |
@@ -61,7 +62,7 @@ All defined in `core/config.py` via `_int_env` / `_float_env`. Invalid values ra
 | `STYLECLAW_MODEL_WRITER` | unset | Model ID for the **writer** role (`design_cases`). Falls back to `LLM_MODEL` when unset. |
 | `STYLECLAW_MODEL_PLANNER` | unset | Model ID for the **planner** role (orchestrator `plan()` calls). Falls back to `LLM_MODEL` when unset. |
 | `STYLECLAW_PANEL_MODELS_VISION_CRITIC` | unset | 3 comma-separated model IDs for the vision_critic panel pool when `STYLECLAW_PANEL_MODEL_SELECT=1`. Falls back to `STYLECLAW_PANEL_MODELS`. |
-| `STYLECLAW_PANEL_MODELS_VISION_ANALYST` | unset | 3 comma-separated model IDs for the vision_analyst panel pool when `STYLECLAW_PANEL_REFINE=1`. Falls back to `STYLECLAW_PANEL_MODELS`. |
+| `STYLECLAW_PANEL_MODELS_VISION_ANALYST` | unset | 3 comma-separated model IDs for the vision_analyst panel pool when `STYLECLAW_PANEL_REFINE=1` or `STYLECLAW_PANEL_ANALYZE=1`. Falls back to `STYLECLAW_PANEL_MODELS`. |
 
 ## Tech Stack
 
@@ -474,7 +475,7 @@ styleclaw rollback <project-name> --to STYLE_REFINE --round 2
 - **Storage**: JSON files under `DATA_ROOT` (default `data/projects/`, overridable via `STYLECLAW_DATA_ROOT`); monkeypatch `DATA_ROOT` in tests.
 - **LLM output**: Always strip markdown fences and parse via `core.text_utils.parse_llm_response(raw, ModelCls)` before use — it surfaces a useful error preview on failure.
 - **Variant routing**: `ProjectState.selected_variant` (`"prompt-sref"` or `"prompt-only"`) decides whether STYLE_REFINE generation passes `sref_url`. Variant is locked via `select-model --variant` (or the orchestrator's confirmation prompt) and defaults to the LLM-recommended variant.
-- **Per-role LLM routing**: Every LLM call site is tagged with one of four roles — `vision_critic` (select_model + evaluate_result + their panel scorers), `vision_analyst` (analyze_style + refine_prompt + refine panel scorer), `writer` (design_cases), `planner` (orchestrator.planner.plan). `core.llm_routing.RoleRouter.from_env()` resolves each role to a `model_id` via `STYLECLAW_MODEL_<ROLE>` with fallback to `LLM_MODEL`. Panel pools use `STYLECLAW_PANEL_MODELS_<ROLE>` with fallback to the global `STYLECLAW_PANEL_MODELS`. The router is built once per CLI invocation in `cli._build_context` and disposed via `_close_resource`. Each persisted artifact (`initial-analysis.json`, `evaluation.json`, `prompt.json`, `cases.json`) records the `model_id` that produced it.
+- **Per-role LLM routing**: Every LLM call site is tagged with one of four roles — `vision_critic` (select_model + evaluate_result + their panel scorers), `vision_analyst` (analyze_style + refine_prompt + their panel scorers), `writer` (design_cases), `planner` (orchestrator.planner.plan). `core.llm_routing.RoleRouter.from_env()` resolves each role to a `model_id` via `STYLECLAW_MODEL_<ROLE>` with fallback to `LLM_MODEL`. Panel pools use `STYLECLAW_PANEL_MODELS_<ROLE>` with fallback to the global `STYLECLAW_PANEL_MODELS`. The router is built once per CLI invocation in `cli._build_context` and disposed via `_close_resource`. Each persisted artifact (`initial-analysis.json`, `evaluation.json`, `prompt.json`, `cases.json`) records the `model_id` that produced it.
 - **Prompt building**: Final prompt = `trigger_phrase + ", " + character_desc`; for prompt-sref variant with `SrefMode.PROMPT` models: `参考图1的风格：trigger_phrase + ", " + character_desc` + `imageUrls` param.
 - **Image encoding**: `encode_image_for_llm()` returns `(base64_str, media_type)` — resizes to 1024px long-edge, format determined by image mode (RGBA→PNG, else→JPEG).
 - **Submit retry**: RunningHub submit retries up to 3 times on empty `taskId` response.
@@ -482,7 +483,7 @@ styleclaw rollback <project-name> --to STYLE_REFINE --round 2
 - **Thinking traces**: When `--show-thinking` is on, each `*_with_thinking` agent writes `<artifact>.thinking.md` alongside the JSON it produced (e.g. `evaluation.thinking.md` next to `evaluation.json`).
 - **Checkpointing**: Long-running batch ops use `core.checkpoint.Checkpoint` (atomic write via `.tmp` + `replace`) so interrupted runs can resume by skipping already-recorded items.
 - **Cross-phase planning**: The planner extends action whitelist only from `INIT / STYLE_REFINE / BATCH_T2I / BATCH_I2I`; `MODEL_SELECT` stays gated so `select-model` cannot be autoplanned in. `select-model / approve / retest-models / add-refs` are excluded from cross-phase extension regardless.
-- **Panel mode**: When `STYLECLAW_PANEL_REFINE` or `STYLECLAW_PANEL_MODEL_SELECT` is on, the corresponding orchestrator action routes through `core.panel.run_panel` (3 proposals + ≤6 cross-evaluations, no self-scoring). The winner's payload still lands in the existing main artifact (`prompt.json` / `evaluation.json`), so downstream code is unchanged; full `PanelResult` is persisted alongside as `panel.json`. See `docs/superpowers/specs/2026-05-14-three-model-panel-design.md`.
+- **Panel mode**: When `STYLECLAW_PANEL_REFINE`, `STYLECLAW_PANEL_MODEL_SELECT`, or `STYLECLAW_PANEL_ANALYZE` is on, the corresponding orchestrator action routes through `core.panel.run_panel` (3 proposals + ≤6 cross-evaluations, no self-scoring). The winner's payload still lands in the existing main artifact (`initial-analysis.json` / `evaluation.json` / `prompt.json`), so downstream code is unchanged; full `PanelResult` is persisted alongside as `panel.json` (model-select + refine round) or `initial-analysis.panel.json` (analyze — distinct filename because it shares the model-select pass dir with the evaluate panel.json). See `docs/superpowers/specs/2026-05-14-three-model-panel-design.md`.
 
 ## Commands
 
