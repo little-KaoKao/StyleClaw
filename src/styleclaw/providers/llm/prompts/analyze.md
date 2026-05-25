@@ -51,8 +51,13 @@ The per-dimension fields above are your internal reasoning. The `trigger_phrase`
 - 30-60 words total (~200-400 characters). Brevity beats exhaustiveness.
 - **No bracketed category labels** (e.g. `[核心风格]:`, `[Color]:`) or other meta-organizational markup. The 7-dimension analysis stays in its own JSON fields above — it is NOT echoed inside `trigger_phrase`.
 - Comma-separated descriptive phrases only. End with a period.
-- All descriptor values in English (diffusion text encoders are English-dominant).
+- All descriptors in English **except** the optional native-language style anchor (see next rule). Diffusion text encoders are English-dominant for structural words (composition, lighting, materials), so English stays the default.
 - **IP reference is allowed and encouraged when it carries a recognizable style signal.** Lead with the IP-named style anchor when one exists. Examples: `in Fog Hill of Five Elements style`, `Spider-Verse animated film style`, `Arcane League of Legends painterly style`. This is the ONE place IP names belong — character descriptions downstream must stay IP-free.
+- **Native-language style anchor (region-dependent).** When the IP originates from a non-English region and has a culturally specific style, the style/IP anchor MAY appear in its native language. Native tokens often carry tighter visual priors than their English translations because the associated training images were tagged in that language. Apply this **only** to the style/IP anchor — every other descriptor stays English.
+  - Japanese IP: native term is strongest. `in 新海誠 style`, `浮世絵 woodblock aesthetic`, `墨絵 ink painting`.
+  - Chinese IP: native term works; double-anchor with an English alias as a hedge — `in 雾山五行 style, Fog Hill of Five Elements aesthetic`.
+  - Korean IP: prefer English; native-language coverage in training data is thin.
+  - Western IP: pure English, no native-language injection.
 - Use **semantic redundancy, not structural redundancy**: reinforce the same visual concept with 2-3 varied synonyms (e.g. `bold calligraphic linework, expressive brushstrokes, ink-splatter texture`) rather than listing it once under a label.
 - Cover only the 4-6 most distinctive visual aspects. Skip dimensions marked "not applicable" or "minimal presence".
 
