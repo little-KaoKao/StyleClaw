@@ -24,11 +24,15 @@ images, weighing all of:
    post_processing, spatial_perspective, dynamic_state) match what is actually
    in the references, or are they generic/hallucinated?
 2. **Trigger phrase quality** — does the `trigger_phrase` distill the
-   distinctive features into a tight, structured prompt that a downstream
-   image generator can act on? Vague filler, contradictory cues, or
-   wall-of-text weakens the score.
-3. **Generalization** — would the trigger work for subjects beyond the IP, or
-   has it baked in too much character-specific content?
+   distinctive features into a tight 30-60 word natural-language comma-separated
+   prompt? Penalize: bracketed category labels like `[核心风格]:` or `[Color]:`
+   (an OOD format that degrades diffusion-model output), wall-of-text, vague
+   filler, contradictory cues. An IP-named style anchor (e.g. `in Fog Hill of
+   Five Elements style`) is acceptable in the trigger phrase itself.
+3. **Generalization & IP boundary** — the trigger phrase MAY name the IP's
+   style. But `test_subjects` (downstream character descriptions) MUST be
+   de-IP'd — no named characters, no copyrighted logos/symbols. Penalize if
+   IP leaks into test_subjects.
 
 ## Output
 

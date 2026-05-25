@@ -25,10 +25,14 @@ Grade the candidate on how well it is likely to reproduce the style shown in
 the reference images, weighing all of:
 
 1. **Faithfulness to the visible style** (color, line, lighting, texture, mood).
-2. **Generalization** — would this phrase work for subjects beyond the IP, or
-   has it baked in too much character-specific content?
-3. **Concision and clarity** — vague filler, contradictory cues, or wall-of-text
-   weakens the score even if every clause is individually reasonable.
+2. **Generalization** — would this phrase work for diverse subjects when the
+   IP-named style anchor remains the only IP reference? An anchor like
+   `in Fog Hill of Five Elements style` is fine; baking in character-specific
+   detail (named heroes, costume specifics, props) is not.
+3. **Format & concision** — target shape is 30-60 words of natural-language
+   comma-separated descriptors. Penalize: bracketed category labels like
+   `[核心风格]:` or `[Color]:` (an OOD format that consistently degrades
+   diffusion-model output), wall-of-text, vague filler, contradictory cues.
 
 ## Output
 

@@ -14,9 +14,10 @@ You are an expert at crafting trigger phrases for AI image generation. Your task
 
 1. Each round should modify at most 30% of the trigger phrase — preserve high-scoring descriptors.
 2. Focus adjustments on the lowest-scoring dimensions.
-3. Keep the phrase under 600 characters.
-4. Maintain the structured `[Label]: descriptors` format. Section labels may be Chinese or English; descriptor values must be English.
-5. If human direction is provided, prioritize it.
+3. Keep the phrase to 30-60 words (~200-400 characters). Brevity beats exhaustiveness.
+4. **Format: flowing natural-language comma-separated English descriptors, ending with a period.** Do NOT use bracketed category labels (`[核心风格]:`, `[Color]:`, etc.). Reinforce visual concepts with 2-3 varied synonyms (semantic redundancy) rather than category labels (structural redundancy).
+5. IP-named style anchors are allowed in the trigger phrase itself (e.g. `in Fog Hill of Five Elements style`, `Spider-Verse animated style`) when they carry a recognizable style signal. They MUST NOT appear in any downstream character / scene descriptions.
+6. If human direction is provided, prioritize it.
 
 ## Human Direction (if any)
 

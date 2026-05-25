@@ -12,9 +12,7 @@ Analyze the reference images across 7 core dimensions:
 6. **空间透视 (spatial_perspective)**: Perspective type, depth, composition, camera angle
 7. **动态状态 (dynamic_state)**: Motion blur, speed lines, energy, frozen moment vs flow
 
-**Important**: If a dimension is not distinctive or not applicable to this style, describe it as "not applicable" or "minimal presence" in the analysis field, and DO NOT include it in the trigger phrase.
-
-Then generate a structured trigger phrase that captures this style for AI image generation.
+**Important**: If a dimension is not distinctive or not applicable to this style, describe it as "not applicable" or "minimal presence" in the analysis field, and DO NOT echo it in the trigger phrase.
 
 ## IP Information
 
@@ -33,7 +31,7 @@ Return ONLY valid JSON (no markdown fences):
   "post_processing": "description",
   "spatial_perspective": "description",
   "dynamic_state": "description",
-  "trigger_phrase": "structured trigger phrase — see format below",
+  "trigger_phrase": "natural-language trigger phrase — see format below",
   "trigger_variants": ["variant 1", "variant 2", "variant 3"],
   "test_subjects": {
     "male": "de-IP'd description of a prominent male character in the refs",
@@ -44,16 +42,25 @@ Return ONLY valid JSON (no markdown fences):
 
 ## Trigger Phrase Format
 
-Use labeled sections to organize descriptors. Each section label should be in Chinese, followed by a colon and English descriptors. Select 5-7 most distinctive dimensions. Example:
+The per-dimension fields above are your internal reasoning. The `trigger_phrase` is a separate artifact: a **flowing natural-language English prompt** — a single sentence of comma-separated descriptors, distilled from (not echoing) the analysis. This is the grammar diffusion text encoders actually trained on.
 
-`[核心风格]: 3D animated film style with 2D comic book aesthetic hybrid, [色彩科学]: vibrant neon color palette with high saturation and chromatic aberration, [光影特质]: dramatic rim lighting with high contrast and deep shadows, [材质纹理]: CMYK halftone dots and Ben-Day dots with offset printing imperfections, [后期处理]: RGB split and glitch effects, [空间透视]: extreme perspective with dynamic cinematic composition, [动态状态]: expressive speed lines and motion blur with energetic flow.`
+**Hard rules:**
 
-Rules:
-- Section labels: 核心风格, 色彩科学, 光影特质, 材质纹理, 后期处理, 空间透视, 动态状态
-- Descriptor values must be English — AI image generators respond to English tokens
-- Choose 5-7 sections that best capture the style; prioritize distinctive features
-- Keep total length under 800 characters
-- `trigger_variants` should explore alternative phrasings, using the same structured format
+- 30-60 words total (~200-400 characters). Brevity beats exhaustiveness.
+- **No bracketed category labels** (e.g. `[核心风格]:`, `[Color]:`) or other meta-organizational markup. The 7-dimension analysis stays in its own JSON fields above — it is NOT echoed inside `trigger_phrase`.
+- Comma-separated descriptive phrases only. End with a period.
+- All descriptor values in English (diffusion text encoders are English-dominant).
+- **IP reference is allowed and encouraged when it carries a recognizable style signal.** Lead with the IP-named style anchor when one exists. Examples: `in Fog Hill of Five Elements style`, `Spider-Verse animated film style`, `Arcane League of Legends painterly style`. This is the ONE place IP names belong — character descriptions downstream must stay IP-free.
+- Use **semantic redundancy, not structural redundancy**: reinforce the same visual concept with 2-3 varied synonyms (e.g. `bold calligraphic linework, expressive brushstrokes, ink-splatter texture`) rather than listing it once under a label.
+- Cover only the 4-6 most distinctive visual aspects. Skip dimensions marked "not applicable" or "minimal presence".
+
+**Target shape:**
+
+`in Fog Hill of Five Elements style, traditional Chinese ink-wash painting hybrid with modern 2D anime aesthetic, mineral pigments with vibrant teal and gold washes against stark black ink, bold calligraphic linework, expressive brushstrokes, spilled ink splashes, atmospheric misty backlighting, high contrast, dynamic kinetic composition, no watermark, no brand.`
+
+**Anti-pattern (do NOT emit):** `[核心风格]: ..., [色彩科学]: ..., [光影特质]: ...`
+
+**`trigger_variants`:** 2-3 alternative natural-language phrasings using the same rules — different word choices or emphasis, not different formats.
 
 ## Test Subjects
 

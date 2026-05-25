@@ -32,7 +32,7 @@ Fill in the `description` field for each test case below. Each description shoul
 3. For character categories: describe appearance, pose, clothing, action.
 4. For scene categories: describe setting, time of day, weather, objects, mood.
 5. For group: describe number of characters, relationships, interaction, setting.
-6. **CRITICAL — Generalization testing**: Within this shard's {shard_cases} cases, AT MOST 1 may reference IP-specific elements (e.g., costumes, props, or settings directly tied to the IP). The rest MUST describe completely original, diverse characters and scenes with NO connection to the IP. This tests whether the style trigger generalizes beyond the source material.
+6. **CRITICAL — No IP in descriptions.** The trigger phrase (shown above) already carries the IP and style; it is prepended at generation time. Every case description MUST be an independent generic subject with ZERO IP references — no named characters, copyrighted logos/symbols, or settings unique to the IP. ✅ `"a young man in a red and blue patterned bodysuit"` ❌ `"Spider-Man"`. This is what tests style generalization.
 
 ## Output Format
 

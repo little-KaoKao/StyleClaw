@@ -45,9 +45,9 @@ If the plan involves iterating (e.g., refine until scores pass), include a `loop
 2. `poll` must follow every `generate` or `batch-submit` — generation is async.
 3. `evaluate` requires images to exist — must come after `generate` + `poll`.
 4. `refine` must come before `generate` in STYLE_REFINE (it sets the trigger phrase).
-5. `select-model` requires `args.models` (model IDs only — `"mj-v7"`, not `"mj-v7-prompt-sref"`). If the user also names a variant like "prompt-sref" / "prompt-only" / "带参考图" / "不带参考图", split it into `args.variant` (exactly `"prompt-sref"` or `"prompt-only"`) instead of concatenating it onto the model ID. If the user names neither, fall back to the evaluate recommendation. **Do not emit `select-model` automatically as part of a cross-phase chain** — it always pauses for user confirmation, so only include it when the user is already in the phase that owns it (MODEL_SELECT/STYLE_REFINE) and has explicitly asked to pick a model.
+5. `select-model` **always pauses for user confirmation** — do not emit it as part of a cross-phase chain. Only include it when the user is already in the phase that owns it (MODEL_SELECT / STYLE_REFINE) and has explicitly asked to pick a model. Variant parsing & model-id rules: see the action description above. If the user names neither models nor variant, fall back to the evaluate recommendation.
 6. If the user's intent involves "until satisfied" or iterative refinement, use a loop over refine → generate → poll → evaluate.
-7. `retest-models` opens a new model-select pass (pass-002, pass-003, ...) without destroying earlier passes. Use it only when the user explicitly asks to re-test models / re-run from scratch / start a new round of model comparison. Never insert it automatically just because the previous run had partial failures — `poll` already auto-retries failed tasks once and skips the rest.
+7. Use `retest-models` only when the user explicitly asks to re-test models / re-run from scratch. Never insert it automatically because the previous run had partial failures — `poll` already auto-retries failed tasks once and skips the rest.
 8. Keep the plan minimal — don't add unnecessary steps.
 
 ## Output Format
