@@ -9,7 +9,12 @@ from tqdm import tqdm
 from styleclaw.core.models import TaskRecord, TaskStatus
 from styleclaw.core.prompt_builder import build_params
 from styleclaw.providers.runninghub.client import RunningHubClient
-from styleclaw.providers.runninghub.models import MODEL_REGISTRY, SrefMode, get_model
+from styleclaw.providers.runninghub.models import (
+    MODEL_REGISTRY,
+    SrefMode,
+    get_model,
+    resolve_submit_endpoint,
+)
 from styleclaw.providers.runninghub.tasks import submit_task
 from styleclaw.storage import project_store
 
@@ -86,7 +91,8 @@ async def generate_model_select(
             aspect_ratio="9:16",
             sref_url=use_sref,
         )
-        record = await submit_task(client, config.t2i_endpoint, params, model_id)
+        endpoint = resolve_submit_endpoint(config, use_sref)
+        record = await submit_task(client, endpoint, params, model_id)
         project_store.save_task_record(
             name, model_id, record, variant=f"{variant}-{gender}", pass_num=pass_num,
         )
@@ -158,7 +164,8 @@ async def generate_style_refine(
             sref_url=sref_url,
             extra_params=extra,
         )
-        record = await submit_task(client, config.t2i_endpoint, params, model_id)
+        endpoint = resolve_submit_endpoint(config, sref_url)
+        record = await submit_task(client, endpoint, params, model_id)
         project_store.save_round_task_record(
             name, round_num, model_id, record, pass_num=pass_num,
         )

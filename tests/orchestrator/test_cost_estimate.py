@@ -39,11 +39,12 @@ class TestEstimateGenerate:
             steps=[Action(name="generate", description="x")],
         )
         est = estimate_plan(plan, "p")
-        # 5 models × 2 variants × 2 genders = 20 tasks
-        assert est.total_tasks == 20
-        # mj-v7 (4) + niji7 (4) + nb2 (1) + seedream (1) + gpt-image-2 (1) = 11 per gender×variant cell
-        # 11 * 4 = 44 expected images
-        assert est.total_images == 44
+        # 6 models × 2 variants × 2 genders = 24 tasks
+        assert est.total_tasks == 24
+        # PARAM-mode models return 4 images per task, PROMPT-mode 1.
+        # mj-v7 (4) + niji7 (4) + nb2 (1) + seedream (1) + gpt-image-2 (1) + n-pro (1) = 12 images
+        # per (variant×gender) cell. 12 * 4 = 48 expected images.
+        assert est.total_images == 48
 
     def test_model_select_filtered(self):
         _setup("p", Phase.MODEL_SELECT)

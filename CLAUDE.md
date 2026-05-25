@@ -464,8 +464,9 @@ styleclaw rollback <project-name> --to STYLE_REFINE --round 2
 | `nb2` | NanoBanana2 | `prompt` | `参考图1的风格：` + `imageUrls`, resolution=2k, max 20000 char |
 | `seedream` | Seedream v5-lite | `prompt` | `参考图1的风格：` + `imageUrls`, width×height, max 2000 char |
 | `gpt-image-2` | GPT-Image-2 | `prompt` | `参考图1的风格：` + `imageUrls`, resolution=2k, max 20000 char |
+| `n-pro` | 全能图片PRO 官方稳定版 | `prompt` | prompt-only 走 `/text-to-image`（纯 t2i，不接受 `imageUrls`）；prompt-sref 与 BATCH_I2I 走 `/edit` 端点 + `imageUrls`（最多 10 张），resolution=2k, max 20000 char |
 
-**sref modes**: `param` = style ref via API parameter (`sref`+`sw`); `prompt` = style ref via prompt prefix + `imageUrls` parameter
+**sref modes**: `param` = style ref via API parameter (`sref`+`sw`); `prompt` = style ref via prompt prefix + `imageUrls` parameter (for `n-pro` specifically, `resolve_submit_endpoint` reroutes any sref-bearing submission from `/text-to-image` to `/edit` because the t2i endpoint refuses `imageUrls`)
 
 ## Conventions
 

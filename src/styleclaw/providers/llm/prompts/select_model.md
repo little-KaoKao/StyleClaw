@@ -45,6 +45,7 @@ Your output is a recommendation only. The user will review your scores and reaso
 - nb2: NanoBanana2 — versatile, fast, 4K capable
 - seedream: Seedream v5-lite — text rendering, layout-aware
 - gpt-image-2: GPT-Image-2 — versatile, 4K capable
+- n-pro: 全能图片PRO official — 4K-capable t2i, mobile-optimized; prompt-sref routes to the /edit endpoint (uses imageUrls), prompt-only stays on pure text-to-image
 
 ## Output Format
 

@@ -48,3 +48,27 @@ class TestBuildParams:
         params = build_params("mj-v7", "test", extra_params={"stylize": 500, "chaos": 20})
         assert params["stylize"] == 500
         assert params["chaos"] == 20
+
+    def test_n_pro_prompt_only(self):
+        # /text-to-image accepts only prompt/resolution/aspectRatio — no imageUrls
+        params = build_params("n-pro", "test prompt")
+        assert params["resolution"] == "2k"
+        assert params["aspectRatio"] == "9:16"
+        assert "imageUrls" not in params
+        assert "sref" not in params
+
+    def test_n_pro_prompt_sref_attaches_imageurls(self):
+        # The endpoint routing happens in generate.py via resolve_submit_endpoint;
+        # build_params just produces the body, which for PROMPT-mode models
+        # with sref includes the "参考图1的风格：" prefix + imageUrls.
+        params = build_params(
+            "n-pro", "test", sref_url="https://example.com/ref.png",
+        )
+        assert params["imageUrls"] == ["https://example.com/ref.png"]
+        assert params["prompt"].startswith("参考图1的风格：")
+        assert params["resolution"] == "2k"
+
+    def test_n_pro_truncates_at_20000(self):
+        long_prompt = "x" * 25000
+        params = build_params("n-pro", long_prompt)
+        assert len(params["prompt"]) == 20000

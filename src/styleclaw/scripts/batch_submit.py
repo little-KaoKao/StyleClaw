@@ -9,7 +9,11 @@ from styleclaw.core.checkpoint import Checkpoint
 from styleclaw.core.models import BatchCase, BatchConfig, TaskRecord, TaskStatus
 from styleclaw.core.prompt_builder import build_params
 from styleclaw.providers.runninghub.client import RunningHubClient
-from styleclaw.providers.runninghub.models import build_i2i_params, get_model
+from styleclaw.providers.runninghub.models import (
+    build_i2i_params,
+    get_model,
+    resolve_submit_endpoint,
+)
 from styleclaw.providers.runninghub.tasks import submit_task
 from styleclaw.storage import project_store
 
@@ -55,7 +59,8 @@ async def batch_submit_t2i(
             aspect_ratio=case.aspect_ratio,
             sref_url=sref_url,
         )
-        record = await submit_task(client, model_config.t2i_endpoint, params, model_id)
+        endpoint = resolve_submit_endpoint(model_config, sref_url)
+        record = await submit_task(client, endpoint, params, model_id)
         project_store.save_batch_task_record(name, batch_num, case.id, record)
         checkpoint.add_to_set("submitted", case.id)
         return record
