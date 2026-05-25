@@ -68,8 +68,9 @@ class TestRoundStorage:
                 RoundScore(
                     model="mj-v7",
                     scores=DimensionScores(
-                        color_palette=8, line_style=7, lighting=8,
-                        texture=6, overall_mood=8,
+                        visual_style=8, color_science=8, lighting_quality=8,
+                        material_texture=6, post_processing=7,
+                        spatial_perspective=8, dynamic_state=7,
                     ),
                     total=7.4,
                     analysis="Good color match",
@@ -81,7 +82,7 @@ class TestRoundStorage:
         project_store.save_round_evaluation("test-proj", 1, ev)
         loaded = project_store.load_round_evaluation("test-proj", 1)
         assert loaded.recommendation == "continue_refine"
-        assert loaded.evaluations[0].scores.color_palette == 8
+        assert loaded.evaluations[0].scores.color_science == 8
         assert loaded.evaluations[0].total == 7.4
 
     def test_empty_round_records(self, project_with_state):

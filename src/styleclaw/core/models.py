@@ -87,14 +87,31 @@ class StyleAnalysis(_FrozenModel):
 
 
 class DimensionScores(_FrozenModel):
-    color_palette: float = 0.0
-    line_style: float = 0.0
-    lighting: float = 0.0
-    texture: float = 0.0
-    overall_mood: float = 0.0
+    """7 scoring dimensions, aligned 1:1 with the analyze.md analysis schema.
+
+    Old projects saved with the legacy 5-dim schema (color_palette / line_style
+    / lighting / texture / overall_mood) will load with the legacy fields
+    dropped and the new fields defaulting to 0.0 — the resulting averages will
+    fail the approval threshold, so stale evaluations must be re-run.
+    """
+    visual_style: float = 0.0
+    color_science: float = 0.0
+    lighting_quality: float = 0.0
+    material_texture: float = 0.0
+    post_processing: float = 0.0
+    spatial_perspective: float = 0.0
+    dynamic_state: float = 0.0
 
     def _all_scores(self) -> list[float]:
-        return [self.color_palette, self.line_style, self.lighting, self.texture, self.overall_mood]
+        return [
+            self.visual_style,
+            self.color_science,
+            self.lighting_quality,
+            self.material_texture,
+            self.post_processing,
+            self.spatial_perspective,
+            self.dynamic_state,
+        ]
 
     def average(self) -> float:
         vals = self._all_scores()

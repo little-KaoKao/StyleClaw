@@ -400,7 +400,9 @@ class TestDoEvaluate:
         )
 
         high_scores = DimensionScores(
-            color_palette=8.0, line_style=8.0, lighting=8.0, texture=8.0, overall_mood=8.0,
+            visual_style=8.0, color_science=8.0, lighting_quality=8.0,
+            material_texture=8.0, post_processing=8.0,
+            spatial_perspective=8.0, dynamic_state=8.0,
         )
         evaluation = RoundEvaluation(
             round=1,

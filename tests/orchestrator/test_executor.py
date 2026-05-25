@@ -51,7 +51,7 @@ class TestShouldContinueLoop:
 
     def test_passing_scores(self, setup_project, ctx) -> None:
         project_store.save_state("test-proj", ProjectState(phase=Phase.STYLE_REFINE, current_round=1))
-        scores = DimensionScores(color_palette=8.0, line_style=8.0, lighting=8.0, texture=8.0, overall_mood=8.0)
+        scores = DimensionScores(visual_style=8.0, color_science=8.0, lighting_quality=8.0, material_texture=8.0, post_processing=8.0, spatial_perspective=8.0, dynamic_state=8.0)
         evaluation = RoundEvaluation(
             round=1,
             evaluations=[RoundScore(model="mj-v7", scores=scores, total=8.0)],
@@ -61,7 +61,7 @@ class TestShouldContinueLoop:
 
     def test_failing_scores(self, setup_project, ctx) -> None:
         project_store.save_state("test-proj", ProjectState(phase=Phase.STYLE_REFINE, current_round=1))
-        scores = DimensionScores(color_palette=5.0, line_style=6.0, lighting=6.0, texture=6.0, overall_mood=6.0)
+        scores = DimensionScores(visual_style=6.0, color_science=5.0, lighting_quality=6.0, material_texture=6.0, post_processing=6.0, spatial_perspective=6.0, dynamic_state=6.0)
         evaluation = RoundEvaluation(
             round=1,
             evaluations=[RoundScore(model="mj-v7", scores=scores, total=5.8)],
@@ -74,8 +74,8 @@ class TestShouldContinueLoop:
             "test-proj",
             ProjectState(phase=Phase.STYLE_REFINE, current_round=2),
         )
-        weak = DimensionScores(color_palette=4.5, line_style=7.0, lighting=7.0, texture=7.0, overall_mood=7.0)
-        strong = DimensionScores(color_palette=8.0, line_style=8.0, lighting=8.0, texture=8.0, overall_mood=8.0)
+        weak = DimensionScores(visual_style=7.0, color_science=4.5, lighting_quality=7.0, material_texture=7.0, post_processing=7.0, spatial_perspective=7.0, dynamic_state=7.0)
+        strong = DimensionScores(visual_style=8.0, color_science=8.0, lighting_quality=8.0, material_texture=8.0, post_processing=8.0, spatial_perspective=8.0, dynamic_state=8.0)
         evaluation = RoundEvaluation(
             round=2,
             evaluations=[
@@ -89,8 +89,8 @@ class TestShouldContinueLoop:
 
         err = capsys.readouterr().err
         assert "needs_human" in err
-        assert "色彩调性得分 4.5 最弱" in err
-        assert 'styleclaw run "提高色彩饱和度、减弱色差光" -p test-proj' in err
+        assert "色彩科学得分 4.5 最弱" in err
+        assert 'styleclaw run "调整色调、饱和度、色彩对比" -p test-proj' in err
         assert "style-refine/pass-001/round-002/report.html" in err
 
 

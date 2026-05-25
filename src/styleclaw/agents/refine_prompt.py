@@ -29,9 +29,10 @@ def _build_history_text(evaluations: list[RoundEvaluation]) -> str:
         for score in ev.evaluations:
             s = score.scores
             lines.append(
-                f"- {score.model}: color={s.color_palette} line={s.line_style} "
-                f"light={s.lighting} texture={s.texture} mood={s.overall_mood} "
-                f"total={score.total:.1f}"
+                f"- {score.model}: style={s.visual_style} color={s.color_science} "
+                f"light={s.lighting_quality} texture={s.material_texture} "
+                f"post={s.post_processing} space={s.spatial_perspective} "
+                f"motion={s.dynamic_state} total={score.total:.1f}"
             )
         if ev.next_direction:
             lines.append(f"  Direction: {ev.next_direction}")

@@ -35,7 +35,9 @@ def mock_llm() -> AsyncMock:
 @pytest.fixture
 def sample_evaluations() -> list[RoundEvaluation]:
     scores = DimensionScores(
-        color_palette=7.0, line_style=6.5, lighting=7.5, texture=7.0, overall_mood=8.0,
+        visual_style=7.0, color_science=7.0, lighting_quality=7.5,
+        material_texture=7.0, post_processing=6.5,
+        spatial_perspective=7.0, dynamic_state=8.0,
     )
     return [
         RoundEvaluation(

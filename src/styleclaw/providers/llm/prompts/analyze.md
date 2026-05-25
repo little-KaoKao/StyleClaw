@@ -2,17 +2,19 @@ You are an expert art style analyst. Analyze the provided reference images and I
 
 ## Task
 
-Analyze the reference images across 7 core dimensions:
+**Aesthetic essence, not subject matter.** Your goal is to extract the visual STYLE — the aesthetic soul of how these images are rendered. Strip away the specific characters, named props, narrative content, on-image text, or IP-particular subjects. Describe only HOW the rendering looks, not WHAT it depicts. A good analysis is one that could be used to render any subject in this style, not just the IP's own characters.
 
-1. **画面风格 (visual_style)**: Overall aesthetic category (realistic, anime, 3D, 2D hybrid, painterly, etc.)
-2. **色彩科学 (color_science)**: Color palette, saturation, color harmony, temperature, contrast
-3. **光影特质 (lighting_quality)**: Light source direction, contrast level, shadow characteristics, rim lighting
-4. **材质纹理 (material_texture)**: Surface quality, grain, smoothness, printing effects (halftone, Ben-Day dots)
-5. **后期处理 (post_processing)**: Chromatic aberration, glitch effects, RGB split, digital artifacts
-6. **空间透视 (spatial_perspective)**: Perspective type, depth, composition, camera angle
-7. **动态状态 (dynamic_state)**: Motion blur, speed lines, energy, frozen moment vs flow
+Analyze the reference images across 7 core dimensions. For each dimension, **only describe what is actually visible**. The 7 dimensions are an exhaustive list of categories to CHECK, not a checklist of features the refs MUST have — if a dimension has no distinctive presence, write `"not applicable"` or `"minimal presence"` and do NOT fabricate.
 
-**Important**: If a dimension is not distinctive or not applicable to this style, describe it as "not applicable" or "minimal presence" in the analysis field, and DO NOT echo it in the trigger phrase.
+1. **画面风格 (visual_style)**: What kind of image is this overall? (photorealistic / stylized 2D / 3D rendered / painterly / mixed-media / collage / …)
+2. **色彩科学 (color_science)**: How are colors used? Consider palette, saturation, harmony, temperature, contrast.
+3. **光影特质 (lighting_quality)**: How is light handled? Consider direction, contrast level, shadow character, atmospheric effects.
+4. **材质纹理 (material_texture)**: What surface quality / texture / finish characterizes the rendering? Could be brushwork, grain, smoothness, print artifacts, fabric — describe whatever is genuinely visible, not a generic list.
+5. **后期处理 (post_processing)**: Are there distinctive post-production / digital effects? Many styles have none — mark `"not applicable"` when nothing notable is present. Do NOT default to listing common effects.
+6. **空间透视 (spatial_perspective)**: How does the image organize space? Consider perspective type, depth, composition, camera angle.
+7. **动态状态 (dynamic_state)**: How does the image convey motion or stillness? Consider motion cues, energy lines, frozen-moment vs flow.
+
+**Important**: Do NOT echo dimensions marked "not applicable" or "minimal presence" inside the trigger phrase.
 
 ## IP Information
 

@@ -81,7 +81,7 @@ class TestGenerateModelSelectReport:
             evaluations=[
                 ModelScore(
                     model="mj-v7",
-                    scores=DimensionScores(color_palette=8.0, line_style=7.5, lighting=7.0, texture=7.5, overall_mood=8.0),
+                    scores=DimensionScores(visual_style=8.0, color_science=8.0, lighting_quality=7.5, material_texture=7.5, post_processing=7.0, spatial_perspective=7.5, dynamic_state=8.0),
                     total=8.0,
                     analysis="great",
                     suggestions="none",
@@ -126,7 +126,7 @@ class TestGenerateModelSelectReport:
             evaluations=[
                 ModelScore(
                     model="mj-v7",
-                    scores=DimensionScores(color_palette=7.0, line_style=7.0, lighting=7.0, texture=7.0, overall_mood=7.0),
+                    scores=DimensionScores(visual_style=7.0, color_science=7.0, lighting_quality=7.0, material_texture=7.0, post_processing=7.0, spatial_perspective=7.0, dynamic_state=7.0),
                     total=7.0,
                     analysis="ok",
                     suggestions="",
@@ -147,7 +147,7 @@ class TestGenerateModelSelectReport:
 
 class TestGenerateStyleRefineReport:
     def test_generates_html(self, setup_project) -> None:
-        scores = DimensionScores(color_palette=8.0, line_style=7.5, lighting=7.0, texture=7.5, overall_mood=8.0)
+        scores = DimensionScores(visual_style=8.0, color_science=8.0, lighting_quality=7.5, material_texture=7.5, post_processing=7.0, spatial_perspective=7.5, dynamic_state=8.0)
         evaluation = RoundEvaluation(
             round=1,
             evaluations=[RoundScore(model="mj-v7", scores=scores, total=7.6, analysis="good")],
@@ -282,7 +282,7 @@ class TestMultiImageGrid:
             "gp", ProjectState(phase=Phase.MODEL_SELECT, current_round=1, current_batch=1),
         )
         project_store.save_analysis("gp", StyleAnalysis(trigger_phrase="t"))
-        scores = DimensionScores(color_palette=8, line_style=8, lighting=8, texture=8, overall_mood=8)
+        scores = DimensionScores(visual_style=8, color_science=8, lighting_quality=8, material_texture=8, post_processing=8, spatial_perspective=8, dynamic_state=8)
         project_store.save_evaluation(
             "gp",
             ModelEvaluation(

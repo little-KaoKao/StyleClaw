@@ -20,19 +20,23 @@ logger = logging.getLogger(__name__)
 ConfirmCallback = Callable[[str, dict[str, Any], ExecutionContext], dict[str, Any] | None]
 
 _DIMENSION_LABELS: dict[str, str] = {
-    "color_palette": "色彩调性",
-    "line_style": "线条风格",
-    "lighting": "光影",
-    "texture": "材质",
-    "overall_mood": "整体氛围",
+    "visual_style": "画面风格",
+    "color_science": "色彩科学",
+    "lighting_quality": "光影特质",
+    "material_texture": "材质纹理",
+    "post_processing": "后期处理",
+    "spatial_perspective": "空间透视",
+    "dynamic_state": "动态状态",
 }
 
 _DIMENSION_HINTS: dict[str, str] = {
-    "color_palette": "提高色彩饱和度、减弱色差光",
-    "line_style": "调整线条粗细、加强轮廓",
-    "lighting": "增强光影对比、加强立体感",
-    "texture": "增加材质细节、强化笔触",
-    "overall_mood": "调整整体氛围、强化情绪表达",
+    "visual_style": "调整整体风格类别（2D/3D/写实/混合）",
+    "color_science": "调整色调、饱和度、色彩对比",
+    "lighting_quality": "增强光影对比、调整光源方向与阴影特征",
+    "material_texture": "增加材质细节、强化笔触/质感",
+    "post_processing": "增强或减弱数字效果（色差、glitch、grain）",
+    "spatial_perspective": "调整构图、透视、镜头角度",
+    "dynamic_state": "强化运动线/速度感，或反向收敛为静态瞬间",
 }
 
 

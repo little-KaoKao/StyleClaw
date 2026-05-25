@@ -41,11 +41,13 @@ def mock_llm() -> AsyncMock:
         "evaluations": [{
             "model": "mj-v7",
             "scores": {
-                "color_palette": 8.0,
-                "line_style": 7.5,
-                "lighting": 7.0,
-                "texture": 7.5,
-                "overall_mood": 8.0,
+                "visual_style": 8.0,
+                "color_science": 8.0,
+                "lighting_quality": 7.0,
+                "material_texture": 7.5,
+                "post_processing": 7.5,
+                "spatial_perspective": 7.5,
+                "dynamic_state": 8.0,
             },
             "total": 7.6,
             "analysis": "good match",
