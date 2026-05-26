@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from pathlib import Path
+from typing import Any
 
 from styleclaw.core.case_generator import CASES_PER_CATEGORY, CATEGORIES, generate_case_skeleton
 from styleclaw.core.config import DESIGN_CASES_SHARDS
@@ -12,6 +14,95 @@ from styleclaw.core.text_utils import clean_json, recover_truncated_json, saniti
 from styleclaw.providers.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
+DESIGN_CASES_SHARD_RETRIES = 1
+
+_AGE_CONTRACTS = {
+    "adult_male": (20, 30),
+    "adult_female": (20, 30),
+    "little_male_child": (8, 14),
+    "little_female_child": (8, 14),
+    "elderly_male": (50, None),
+    "elderly_female": (50, None),
+}
+
+_EXACT_AGE_PATTERNS = [
+    re.compile(r"\bage(?:d)?\s+(\d{1,3})\b", re.IGNORECASE),
+    re.compile(r"\b(\d{1,3})\s*[- ]year[- ]old\b", re.IGNORECASE),
+    re.compile(r"\b(\d{1,3})\s+years old\b", re.IGNORECASE),
+]
+
+_DECADE_AGE_PATTERNS = [
+    re.compile(
+        r"\b(?:in\s+)?(?:his|her|their)\s+(?:early\s+|mid\s+|late\s+)?(\d{2})s\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(?:early|mid|late)\s+(\d{2})s\b", re.IGNORECASE),
+    re.compile(r"\b(\d{2})s\b", re.IGNORECASE),
+]
+
+_WORD_DECADES = {
+    "twenties": 20,
+    "thirties": 30,
+    "forties": 40,
+    "fifties": 50,
+    "sixties": 60,
+    "seventies": 70,
+    "eighties": 80,
+    "nineties": 90,
+}
+_WORD_DECADE_PATTERN = re.compile(
+    r"\b(?:in\s+)?(?:(?:his|her|their)\s+)?"
+    r"(?:early\s+|mid\s+|late\s+)?"
+    r"(twenties|thirties|forties|fifties|sixties|seventies|eighties|nineties)\b",
+    re.IGNORECASE,
+)
+
+_AGE_TERM_PATTERNS: dict[str, list[re.Pattern[str]]] = {
+    "adult_male": [
+        re.compile(p, re.IGNORECASE)
+        for p in (
+            r"\bmiddle[- ]aged\b",
+            r"\belderly\b",
+            r"\bsenior\b",
+            r"\bsilver[- ](?:haired|streaked)\b",
+            r"\bgr[ae]y[- ]haired\b",
+            r"\bsalt[- ]and[- ]pepper\b",
+        )
+    ],
+    "adult_female": [
+        re.compile(p, re.IGNORECASE)
+        for p in (
+            r"\bmiddle[- ]aged\b",
+            r"\belderly\b",
+            r"\bsenior\b",
+            r"\bsilver[- ](?:haired|streaked)\b",
+            r"\bgr[ae]y[- ]haired\b",
+            r"\bsalt[- ]and[- ]pepper\b",
+        )
+    ],
+    "little_male_child": [
+        re.compile(p, re.IGNORECASE)
+        for p in (
+            r"\bbaby\b",
+            r"\binfant\b",
+            r"\btoddler\b",
+            r"\bpreschool(?:er)?\b",
+            r"\bkindergarten[- ]age\b",
+            r"\bkindergartener\b",
+        )
+    ],
+    "little_female_child": [
+        re.compile(p, re.IGNORECASE)
+        for p in (
+            r"\bbaby\b",
+            r"\binfant\b",
+            r"\btoddler\b",
+            r"\bpreschool(?:er)?\b",
+            r"\bkindergarten[- ]age\b",
+            r"\bkindergartener\b",
+        )
+    ],
+}
 
 PROMPT_TEMPLATE_PATH = (
     Path(__file__).parent.parent / "providers" / "llm" / "prompts" / "design_cases_shard.md"
@@ -36,8 +127,8 @@ async def design_cases(
     feedback_section = _build_feedback_section(feedback)
     template = PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
 
-    coros = [
-        _design_one_shard(
+    shard_specs = [
+        dict(
             llm=llm,
             template=template,
             ip_info=ip_info,
@@ -49,7 +140,7 @@ async def design_cases(
         )
         for i, partition in enumerate(partitions)
     ]
-    shard_results: list[list[BatchCase]] = await asyncio.gather(*coros)
+    shard_results = await _design_shards_with_retry(shard_specs)
 
     merged: list[BatchCase] = []
     for cases in shard_results:
@@ -69,6 +160,47 @@ async def design_cases(
         trigger_phrase=trigger_phrase,
         cases=merged,
     )
+
+
+async def _design_shards_with_retry(
+    shard_specs: list[dict[str, Any]],
+) -> list[list[BatchCase]]:
+    """Run shards concurrently, then retry transient shard failures in place.
+
+    The provider already retries transport/5xx/429 errors internally. This
+    extra layer handles the common batch-design failure mode where one parallel
+    shard exhausts provider retries while the other shards succeed. We retry
+    only that failed shard once instead of discarding all successful shard work.
+    Validation errors are not retried because the prompt/response contract is
+    already broken and retrying can hide deterministic bad output.
+    """
+    pending: list[tuple[int, dict[str, Any]]] = list(enumerate(shard_specs))
+    results: dict[int, list[BatchCase]] = {}
+    retries_used = 0
+
+    while pending:
+        outcomes = await asyncio.gather(
+            *[_design_one_shard(**spec) for _, spec in pending],
+            return_exceptions=True,
+        )
+        retry_pending: list[tuple[int, dict[str, Any]]] = []
+        for (idx, spec), outcome in zip(pending, outcomes):
+            if isinstance(outcome, BaseException):
+                if isinstance(outcome, RuntimeError) and retries_used < DESIGN_CASES_SHARD_RETRIES:
+                    logger.warning(
+                        "design_cases shard %d/%d failed after provider retries; "
+                        "retrying failed shard once: %s",
+                        spec["shard_index"], spec["total_shards"], outcome,
+                    )
+                    retry_pending.append((idx, spec))
+                    continue
+                raise outcome
+            results[idx] = outcome
+        pending = retry_pending
+        if pending:
+            retries_used += 1
+
+    return [results[i] for i in range(len(shard_specs))]
 
 
 async def _design_one_shard(
@@ -133,7 +265,76 @@ async def _design_one_shard(
             f"{sorted(allowed)}, expected {shard_cases}"
         )
 
+    _validate_age_contracts(cases, shard_index)
+
     return cases
+
+
+def _validate_age_contracts(cases: list[BatchCase], shard_index: int) -> None:
+    violations: list[str] = []
+    for case in cases:
+        contract = _AGE_CONTRACTS.get(case.category)
+        if contract is None:
+            continue
+        min_age, max_age = contract
+        desc = case.description
+
+        for pattern in _AGE_TERM_PATTERNS.get(case.category, []):
+            match = pattern.search(desc)
+            if match:
+                violations.append(
+                    f"{case.id} uses '{match.group(0)}' outside "
+                    f"{_format_age_contract(min_age, max_age)}"
+                )
+
+        for label, low, high in _iter_age_mentions(desc):
+            upper_ok = max_age is None or high <= max_age
+            if low < min_age or not upper_ok:
+                violations.append(
+                    f"{case.id} uses '{label}' outside "
+                    f"{_format_age_contract(min_age, max_age)}"
+                )
+
+    if violations:
+        shown = "; ".join(violations[:5])
+        more = f" (+{len(violations) - 5} more)" if len(violations) > 5 else ""
+        raise ValueError(f"shard {shard_index} age contract violation: {shown}{more}")
+
+
+def _iter_age_mentions(text: str) -> list[tuple[str, int, int]]:
+    mentions: list[tuple[str, int, int]] = []
+    seen: set[tuple[int, int, str]] = set()
+
+    for pattern in _EXACT_AGE_PATTERNS:
+        for match in pattern.finditer(text):
+            age = int(match.group(1))
+            key = (match.start(), match.end(), match.group(0).lower())
+            if key not in seen:
+                mentions.append((match.group(0), age, age))
+                seen.add(key)
+
+    for pattern in _DECADE_AGE_PATTERNS:
+        for match in pattern.finditer(text):
+            decade = int(match.group(1))
+            key = (match.start(), match.end(), match.group(0).lower())
+            if key not in seen:
+                mentions.append((match.group(0), decade, decade + 9))
+                seen.add(key)
+
+    for match in _WORD_DECADE_PATTERN.finditer(text):
+        decade = _WORD_DECADES[match.group(1).lower()]
+        key = (match.start(), match.end(), match.group(0).lower())
+        if key not in seen:
+            mentions.append((match.group(0), decade, decade + 9))
+            seen.add(key)
+
+    return mentions
+
+
+def _format_age_contract(min_age: int, max_age: int | None) -> str:
+    if max_age is None:
+        return f"age {min_age}+"
+    return f"age {min_age}-{max_age}"
 
 
 def _build_feedback_section(feedback: str) -> str:

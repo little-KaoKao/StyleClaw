@@ -49,6 +49,65 @@ class TestDesignCases:
         call_args = mock_llm.invoke.call_args
         assert "Spider-Verse" in call_args.kwargs["system"]
 
+    async def test_scene_categories_require_no_people(self, mock_llm) -> None:
+        await design_cases(mock_llm, "live action", "trigger", batch_num=1)
+        sys_prompt = mock_llm.invoke.call_args.kwargs["system"]
+        assert "outdoor_scene" in sys_prompt
+        assert "indoor_scene" in sys_prompt
+        assert "no people, no human figures, no silhouettes, no portraits" in sys_prompt
+        assert "commuters" in sys_prompt
+        assert "reporters" in sys_prompt
+
+    async def test_character_categories_avoid_default_melodrama(self, mock_llm) -> None:
+        await design_cases(mock_llm, "mobile drama", "trigger", batch_num=1)
+        sys_prompt = mock_llm.invoke.call_args.kwargs["system"]
+        assert "Do NOT infer melodrama from broad genre words" in sys_prompt
+        assert "natural, neutral, relaxed, focused, confident, warm" in sys_prompt
+        assert "tears, crying, red eyes, worried" in sys_prompt
+        assert "divorce, breakup, custody disputes" in sys_prompt
+
+    async def test_character_categories_include_age_contracts(self, mock_llm) -> None:
+        await design_cases(mock_llm, "mobile drama", "trigger", batch_num=1)
+        sys_prompt = mock_llm.invoke.call_args.kwargs["system"]
+        assert "`adult_male`, `adult_female`: 20-30 years old only" in sys_prompt
+        assert "`little_male_child`, `little_female_child`: 8-14 years old only" in sys_prompt
+        assert "`elderly_male`, `elderly_female`: 50+ years old" in sys_prompt
+        assert "Do not use 30s/40s/50s" in sys_prompt
+        assert "Do not use baby, infant, toddler" in sys_prompt
+
+    async def test_explicit_age_contract_violations_are_rejected(self) -> None:
+        cases = []
+        for cat in CATEGORIES:
+            for i in range(1, 11):
+                description = f"placeholder {cat['id']} #{i:02d}"
+                if cat["id"] == "adult_female" and i == 1:
+                    description = (
+                        "A woman in her 40s wearing a tailored blazer, "
+                        "standing in a bright office"
+                    )
+                if cat["id"] == "little_male_child" and i == 1:
+                    description = "A boy age 6 in a yellow raincoat jumping over a puddle"
+                if cat["id"] == "elderly_male" and i == 1:
+                    description = (
+                        "A man in his forties wearing a cardigan, reading near "
+                        "a sunny window"
+                    )
+                cases.append({
+                    "id": f"case-{cat['id']}-{i:02d}",
+                    "category": cat["id"],
+                    "description": description,
+                    "aspect_ratio": cat["aspect"],
+                })
+        llm = AsyncMock()
+        llm.invoke.return_value = json.dumps({"cases": cases})
+
+        with pytest.raises(ValueError, match="age contract violation") as exc_info:
+            await design_cases(llm, "mobile drama", "trigger", batch_num=1)
+        message = str(exc_info.value)
+        assert "case-adult_female-01" in message
+        assert "case-little_male_child-01" in message
+        assert "case-elderly_male-01" in message
+
     async def test_no_feedback_section_when_empty(self, mock_llm) -> None:
         await design_cases(mock_llm, "anime", "x", batch_num=1)
         sys_prompt = mock_llm.invoke.call_args.kwargs["system"]
@@ -151,17 +210,33 @@ class TestShardedDesignCases:
                     seen[m] = True
         assert all(seen.values()), f"missing worker markers: {seen}"
 
-    async def test_single_shard_failure_propagates(self) -> None:
+    async def test_single_shard_runtime_error_retried_successfully(self) -> None:
         llm = AsyncMock()
         cat_ids = [c["id"] for c in CATEGORIES]
         partitions = [cat_ids[i:i+2] for i in range(0, 10, 2)]
-        # Third shard raises.
+        # Third shard raises once after provider retries, then succeeds on the
+        # targeted shard retry.
         side = [_shard_response(partitions[0]), _shard_response(partitions[1])]
         side.append(RuntimeError("provider exhausted retries"))
         side.extend([_shard_response(partitions[3]), _shard_response(partitions[4])])
+        side.append(_shard_response(partitions[2]))
+        llm.invoke.side_effect = side
+        result = await design_cases(llm, "anime", "trigger", batch_num=1)
+        assert len(result.cases) == 100
+        assert llm.invoke.call_count == 6
+
+    async def test_single_shard_failure_propagates_after_retry(self) -> None:
+        llm = AsyncMock()
+        cat_ids = [c["id"] for c in CATEGORIES]
+        partitions = [cat_ids[i:i+2] for i in range(0, 10, 2)]
+        side = [_shard_response(partitions[0]), _shard_response(partitions[1])]
+        side.append(RuntimeError("provider exhausted retries"))
+        side.extend([_shard_response(partitions[3]), _shard_response(partitions[4])])
+        side.append(RuntimeError("provider exhausted retries again"))
         llm.invoke.side_effect = side
         with pytest.raises(RuntimeError, match="provider exhausted retries"):
             await design_cases(llm, "anime", "trigger", batch_num=1)
+        assert llm.invoke.call_count == 6
 
     async def test_wrong_category_in_shard_rejected(self) -> None:
         llm = AsyncMock()
