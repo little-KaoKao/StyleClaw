@@ -250,7 +250,9 @@ class TestShardedDesignCases:
         partitions = [cat_ids[i:i+2] for i in range(0, 10, 2)]
         # Third shard raises once after provider retries, then succeeds on the
         # targeted shard retry.
-        side = [_shard_response(partitions[0]), _shard_response(partitions[1])]
+        side: list[str | RuntimeError] = [
+            _shard_response(partitions[0]), _shard_response(partitions[1]),
+        ]
         side.append(RuntimeError("provider exhausted retries"))
         side.extend([_shard_response(partitions[3]), _shard_response(partitions[4])])
         side.append(_shard_response(partitions[2]))
@@ -263,7 +265,9 @@ class TestShardedDesignCases:
         llm = AsyncMock()
         cat_ids = [c["id"] for c in CATEGORIES]
         partitions = [cat_ids[i:i+2] for i in range(0, 10, 2)]
-        side = [_shard_response(partitions[0]), _shard_response(partitions[1])]
+        side: list[str | RuntimeError] = [
+            _shard_response(partitions[0]), _shard_response(partitions[1]),
+        ]
         side.append(RuntimeError("provider exhausted retries"))
         side.extend([_shard_response(partitions[3]), _shard_response(partitions[4])])
         side.append(RuntimeError("provider exhausted retries again"))
