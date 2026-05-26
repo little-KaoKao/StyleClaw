@@ -75,6 +75,40 @@ class TestDesignCases:
         assert "Do not use 30s/40s/50s" in sys_prompt
         assert "Do not use baby, infant, toddler" in sys_prompt
 
+    async def test_single_person_categories_include_framing_contracts(
+        self, mock_llm
+    ) -> None:
+        await design_cases(mock_llm, "mobile drama", "trigger", batch_num=1)
+        sys_prompt = mock_llm.invoke.call_args.kwargs["system"]
+        assert "Framing contract for single-person categories" in sys_prompt
+        assert "Cases `01`-`05` in each category" in sys_prompt
+        assert "full-body framing" in sys_prompt
+        assert "Cases `06`-`10` in each category" in sys_prompt
+        assert "medium or closer framing" in sys_prompt
+
+    async def test_single_person_category_outputs_get_framing_split(
+        self, mock_llm
+    ) -> None:
+        result = await design_cases(mock_llm, "mobile drama", "trigger", batch_num=1)
+        adult_male = [c for c in result.cases if c.category == "adult_male"]
+        first_half = [c.description for c in adult_male[:5]]
+        second_half = [c.description for c in adult_male[5:]]
+
+        assert all(
+            any(
+                term in desc.lower()
+                for term in ("full-body", "full-length", "head-to-toe")
+            )
+            for desc in first_half
+        )
+        assert all(
+            any(
+                term in desc.lower()
+                for term in ("medium", "waist-up", "close-up")
+            )
+            for desc in second_half
+        )
+
     async def test_explicit_age_contract_violations_are_rejected(self) -> None:
         cases = []
         for cat in CATEGORIES:

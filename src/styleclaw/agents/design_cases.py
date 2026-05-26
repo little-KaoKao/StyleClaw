@@ -24,6 +24,54 @@ _AGE_CONTRACTS = {
     "elderly_male": (50, None),
     "elderly_female": (50, None),
 }
+_SINGLE_PERSON_CATEGORIES = set(_AGE_CONTRACTS)
+
+_FULL_BODY_FRAMING_CUES = {
+    1: "Full-body shot",
+    2: "Full-length shot",
+    3: "Head-to-toe shot",
+    4: "Wide full-body shot",
+    5: "Full-body portrait",
+}
+_MEDIUM_OR_CLOSE_FRAMING_CUES = {
+    6: "Medium full shot",
+    7: "Medium shot",
+    8: "Waist-up shot",
+    9: "Medium close-up",
+    10: "Close-up portrait",
+}
+
+_FULL_BODY_FRAMING_PATTERNS = [
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        r"\bfull[- ]body\b",
+        r"\bfull[- ]length\b",
+        r"\bhead[- ]to[- ]toe\b",
+        r"\bwhole[- ]body\b",
+        r"\bentire body\b",
+        r"\bwide full[- ]body\b",
+        r"\bwide shot\b",
+    )
+]
+_MEDIUM_OR_CLOSE_FRAMING_PATTERNS = [
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        r"\bmedium long shot\b",
+        r"\bmedium full shot\b",
+        r"\bmedium shot\b",
+        r"\bmedium close[- ]up\b",
+        r"\bmid[- ]shot\b",
+        r"\bwaist[- ]up\b",
+        r"\bknee[- ]up\b",
+        r"\bupper[- ]body\b",
+        r"\bchest[- ]up\b",
+        r"\bshoulders[- ]up\b",
+        r"\bbust shot\b",
+        r"\bclose[- ]up\b",
+        r"\bportrait crop\b",
+        r"\bclose[- ]up portrait\b",
+    )
+]
 
 _EXACT_AGE_PATTERNS = [
     re.compile(r"\bage(?:d)?\s+(\d{1,3})\b", re.IGNORECASE),
@@ -266,6 +314,8 @@ async def _design_one_shard(
         )
 
     _validate_age_contracts(cases, shard_index)
+    cases = _apply_framing_contracts(cases)
+    _validate_framing_contracts(cases, shard_index)
 
     return cases
 
@@ -335,6 +385,94 @@ def _format_age_contract(min_age: int, max_age: int | None) -> str:
     if max_age is None:
         return f"age {min_age}+"
     return f"age {min_age}-{max_age}"
+
+
+def _apply_framing_contracts(cases: list[BatchCase]) -> list[BatchCase]:
+    framed: list[BatchCase] = []
+    for case in cases:
+        cue = _expected_framing_cue(case)
+        if cue is None or _has_expected_framing(case):
+            framed.append(case)
+            continue
+        framed.append(
+            case.model_copy(update={"description": f"{cue}, {case.description}"})
+        )
+    return framed
+
+
+def _validate_framing_contracts(cases: list[BatchCase], shard_index: int) -> None:
+    violations: list[str] = []
+    per_category: dict[str, list[BatchCase]] = {}
+    for case in cases:
+        if case.category in _SINGLE_PERSON_CATEGORIES:
+            per_category.setdefault(case.category, []).append(case)
+
+    for category, category_cases in per_category.items():
+        full_count = sum(
+            1 for case in category_cases
+            if _has_full_body_framing(case.description)
+        )
+        medium_or_close_count = sum(
+            1 for case in category_cases
+            if _has_medium_or_close_framing(case.description)
+        )
+        if full_count < 5:
+            violations.append(
+                f"{category} has {full_count}/5 required full-body cases"
+            )
+        if medium_or_close_count < 5:
+            violations.append(
+                f"{category} has {medium_or_close_count}/5 required medium-or-close cases"
+            )
+
+        for case in category_cases:
+            if not _has_expected_framing(case):
+                cue = _expected_framing_cue(case) or "expected framing"
+                violations.append(f"{case.id} missing {cue}")
+
+    if violations:
+        shown = "; ".join(violations[:5])
+        more = f" (+{len(violations) - 5} more)" if len(violations) > 5 else ""
+        raise ValueError(
+            f"shard {shard_index} framing contract violation: {shown}{more}"
+        )
+
+
+def _expected_framing_cue(case: BatchCase) -> str | None:
+    if case.category not in _SINGLE_PERSON_CATEGORIES:
+        return None
+    idx = _case_index(case.id)
+    if idx is None:
+        return None
+    if idx in _FULL_BODY_FRAMING_CUES:
+        return _FULL_BODY_FRAMING_CUES[idx]
+    return _MEDIUM_OR_CLOSE_FRAMING_CUES.get(idx)
+
+
+def _has_expected_framing(case: BatchCase) -> bool:
+    idx = _case_index(case.id)
+    if idx is None or case.category not in _SINGLE_PERSON_CATEGORIES:
+        return True
+    if idx in _FULL_BODY_FRAMING_CUES:
+        return _has_full_body_framing(case.description)
+    if idx in _MEDIUM_OR_CLOSE_FRAMING_CUES:
+        return _has_medium_or_close_framing(case.description)
+    return True
+
+
+def _has_full_body_framing(text: str) -> bool:
+    return any(pattern.search(text) for pattern in _FULL_BODY_FRAMING_PATTERNS)
+
+
+def _has_medium_or_close_framing(text: str) -> bool:
+    return any(pattern.search(text) for pattern in _MEDIUM_OR_CLOSE_FRAMING_PATTERNS)
+
+
+def _case_index(case_id: str) -> int | None:
+    match = re.search(r"-(\d{2})$", case_id)
+    if not match:
+        return None
+    return int(match.group(1))
 
 
 def _build_feedback_section(feedback: str) -> str:
