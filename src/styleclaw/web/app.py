@@ -10,6 +10,9 @@ def create_app() -> FastAPI:
     """
     app = FastAPI(title="StyleClaw", docs_url="/api/docs", openapi_url="/api/openapi.json")
 
+    from styleclaw.web.run_manager import RunManager
+    app.state.run_manager = RunManager()
+
     @app.get("/api/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
