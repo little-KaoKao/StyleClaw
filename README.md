@@ -77,6 +77,30 @@ uv run styleclaw --help
 
 ## 快速上手
 
+### 🖥️ 网页版（最简单，推荐给非程序员）
+
+不想碰命令行？配好 `.env`（见上文「安装」）后，一条命令启动本地网页：
+
+```bash
+uv run styleclaw web
+# 浏览器自动打开 http://127.0.0.1:8800
+```
+
+打开后在网页里即可走完整条流水线，无需记任何命令：
+
+- **阶段向导** — 顶部 6 阶段进度条（INIT → MODEL_SELECT → STYLE_REFINE → BATCH_T2I → BATCH_I2I → COMPLETED），每个阶段对应一组大按钮（分析风格 / 生成图片 / 评分 / 精炼…），点一下就执行。
+- **聊天助手** — 右侧用中文说「帮我精炼一轮再评分」，系统生成执行计划让你预览，确认后自动跑。
+- **实时进度** — 运行时实时显示每一步状态，并把 LLM 输出逐字流式打出来。
+- **图库 + 评分** — 生成的图片直接在网页里看（点击放大），附 7 个维度的评分。
+- **新建项目** — 直接在浏览器里拖拽上传参考图、填 IP 描述创建项目。
+
+```bash
+uv run styleclaw web --port 8800        # 指定端口（默认 8800）
+uv run styleclaw web --no-open-browser  # 不自动打开浏览器（如远程/CI）
+```
+
+> 网页版为**本地单用户**设计，绑定 `127.0.0.1`、无需登录鉴权，同一项目同一时刻只跑一个任务。它复用与命令行完全相同的后端逻辑——网页里能做的，命令行也能做，反之亦然。
+
 ### 自然语言模式（推荐）
 
 使用 `styleclaw run` + 自然语言描述你想做什么，系统自动规划并执行：
@@ -554,6 +578,19 @@ uv run python -m pytest tests/ --cov=src
 uv run python -m pytest tests/ -m "not integration"
 ```
 
+### 网页前端开发
+
+终端用户**无需** Node —— 仓库已包含预构建产物（`src/styleclaw/web/static/`），`uv run styleclaw web` 直接托管。仅当你要改前端 UI 时才需要：
+
+```bash
+cd frontend
+pnpm install          # 安装依赖（需 Node 20+ / pnpm）
+pnpm run dev          # 开发服务器（localhost:5173，自动代理 /api 到后端 8800）
+pnpm run build        # 构建并输出到 ../src/styleclaw/web/static/（提交此产物）
+```
+
+前端为 Vite + React + TypeScript + TailwindCSS + shadcn/ui；后端 API 是 FastAPI + WebSocket，复用现有 orchestrator（`src/styleclaw/web/`）。
+
 ---
 
 ## 技术栈
@@ -566,6 +603,8 @@ uv run python -m pytest tests/ -m "not integration"
 | LLM | OpenAI 兼容 API（如 gptproto.com） |
 | 数据模型 | Pydantic v2 |
 | 命令行 | Typer |
+| 网页后端 | FastAPI + WebSocket（uvicorn） |
+| 网页前端 | Vite + React + TypeScript + TailwindCSS + shadcn/ui |
 | 报告 | Jinja2 HTML 模板 |
 | 图像处理 | Pillow |
 | 配置 | python-dotenv |

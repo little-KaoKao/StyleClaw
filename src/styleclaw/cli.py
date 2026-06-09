@@ -47,7 +47,7 @@ def _global_options(
     # Skip env validation for commands that don't touch any external service.
     _skip_validation = {
         "status", "rollback", "set-sref", "set-pass", "migrate",
-        "archive", "clean",
+        "archive", "clean", "web",
     }
     if (
         os.getenv("STYLECLAW_SKIP_ENV_CHECK")
@@ -1475,6 +1475,19 @@ def run(
             for line in suggestions:
                 typer.echo(f"  {line}")
         typer.echo("\nDone.")
+
+
+@app.command()
+def web(
+    port: int = typer.Option(8800, help="Port to serve the web UI on"),
+    open_browser: bool = typer.Option(
+        True, "--open-browser/--no-open-browser", help="Auto-open the browser",
+    ),
+) -> None:
+    """Launch the local web UI (single-user, binds to 127.0.0.1)."""
+    from styleclaw.web.launch import serve
+
+    serve(port=port, open_browser=open_browser)
 
 
 if __name__ == "__main__":

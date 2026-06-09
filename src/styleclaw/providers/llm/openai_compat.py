@@ -17,6 +17,7 @@ from styleclaw.core.config import (
     STREAM_DISPLAY,
 )
 from styleclaw.providers.llm._retry import llm_retry_loop
+from styleclaw.core.stream_sink import emit_delta
 from styleclaw.providers.llm.base import LLMResponse
 
 logger = logging.getLogger(__name__)
@@ -113,7 +114,10 @@ class OpenAICompatProvider:
                                 continue
                             if not delta:
                                 continue
-                            if STREAM_DISPLAY:
+                            # Prefer the in-context delta sink (web UI). Only
+                            # fall back to stdout printing when no sink is set,
+                            # so CLI behavior is unchanged.
+                            if not emit_delta(delta) and STREAM_DISPLAY:
                                 if not stream_started:
                                     print("  ↓ ", end="", flush=True)
                                     stream_started = True
