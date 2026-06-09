@@ -6,6 +6,9 @@ import { PhaseBar } from "@/components/layout/PhaseBar";
 import { AppShell } from "@/components/layout/AppShell";
 import { PhasePanel } from "@/components/phases/PhasePanel";
 import { ChatPanel } from "@/components/chat/ChatPanel";
+import { NewProjectModal } from "@/components/modals/NewProjectModal";
+import { SelectModelModal } from "@/components/modals/SelectModelModal";
+import { AddRefsModal } from "@/components/modals/AddRefsModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useProject } from "@/hooks/useProject";
@@ -39,15 +42,12 @@ export default function App() {
   const currentProject = useAppStore((s) => s.currentProject);
   const { detail } = useProject();
 
-  // Placeholder for the "new project" modal (Task 10). For now we only
-  // track intent so the wiring is in place.
-  const [, setShowNew] = useState(false);
+  // Confirm-action modals (Task 10).
+  const [showNew, setShowNew] = useState(false);
   const onNewProject = () => setShowNew(true);
 
-  // Confirm-action modals (select-model / add-refs) land in Task 10. For now
-  // we only record intent so PhasePanel's wiring is in place.
-  const [, setShowSelectModel] = useState(false);
-  const [, setShowAddRefs] = useState(false);
+  const [showSelectModel, setShowSelectModel] = useState(false);
+  const [showAddRefs, setShowAddRefs] = useState(false);
 
   return (
     <div className="flex h-screen flex-col">
@@ -65,6 +65,18 @@ export default function App() {
           )
         }
         chat={currentProject ? <ChatPanel key={currentProject} /> : null}
+      />
+
+      <NewProjectModal open={showNew} onOpenChange={setShowNew} />
+      <SelectModelModal
+        open={showSelectModel}
+        onOpenChange={setShowSelectModel}
+        projectName={currentProject}
+      />
+      <AddRefsModal
+        open={showAddRefs}
+        onOpenChange={setShowAddRefs}
+        projectName={currentProject}
       />
     </div>
   );
