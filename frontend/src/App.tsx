@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { PhaseBar } from "@/components/layout/PhaseBar";
 import { AppShell } from "@/components/layout/AppShell";
 import { PhasePanel } from "@/components/phases/PhasePanel";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useProject } from "@/hooks/useProject";
@@ -30,14 +31,6 @@ function EmptyState({ onNewProject }: { onNewProject: () => void }) {
           </Button>
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function ChatPlaceholder() {
-  return (
-    <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
-      聊天助手（Task 9）
     </div>
   );
 }
@@ -71,7 +64,7 @@ export default function App() {
             <EmptyState onNewProject={onNewProject} />
           )
         }
-        chat={currentProject ? <ChatPlaceholder /> : null}
+        chat={currentProject ? <ChatPanel key={currentProject} /> : null}
       />
     </div>
   );
