@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, WebSocket
 from pydantic import BaseModel
 
 from styleclaw.core.models import Action, ActionPlan, LoopConfig
@@ -91,3 +92,43 @@ async def get_run(name: str, run_id: str, request: Request) -> dict:
         return mgr.get(run_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"run '{run_id}' not found")
+
+
+@router.websocket("/{name}/events")
+async def ws_events(websocket: WebSocket, name: str) -> None:
+    await websocket.accept()
+    mgr = websocket.app.state.run_manager
+    run_id = websocket.query_params.get("run_id") or mgr.active_run_id(name)
+    if not run_id:
+        await websocket.send_json(
+            {"type": "error", "message": "no active run for project", "detail": ""}
+        )
+        await websocket.close()
+        return
+    try:
+        queue, replay = mgr.subscribe(run_id)
+    except KeyError:
+        await websocket.send_json(
+            {"type": "error", "message": f"run '{run_id}' not found", "detail": ""}
+        )
+        await websocket.close()
+        return
+    try:
+        for ev in replay:
+            await websocket.send_json(ev)
+            if ev["type"] in ("done", "error"):
+                await websocket.close()
+                return
+        while True:
+            ev = await queue.get()
+            await websocket.send_json(ev)
+            if ev["type"] in ("done", "error"):
+                break
+    except Exception:  # noqa: BLE001 - client disconnect etc.
+        pass
+    finally:
+        mgr.unsubscribe(run_id, queue)
+        try:
+            await websocket.close()
+        except RuntimeError:
+            pass
