@@ -14,4 +14,7 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    from styleclaw.web.routes_projects import router as projects_router
+    app.include_router(projects_router)
+
     return app
