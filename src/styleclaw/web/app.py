@@ -20,4 +20,7 @@ def create_app() -> FastAPI:
     from styleclaw.web.routes_projects import media_router
     app.include_router(media_router)
 
+    from styleclaw.web.routes_runs import router as runs_router
+    app.include_router(runs_router)
+
     return app
