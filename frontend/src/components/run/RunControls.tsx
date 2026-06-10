@@ -30,9 +30,9 @@ export function RunControls({
 
   if (status === "error") {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         {onReset && (
-          <Button size="sm" variant="destructive" onClick={() => onReset()}>
+          <Button size="sm" variant="yellow" onClick={() => onReset()}>
             <RotateCcw />
             重试
           </Button>
@@ -47,9 +47,9 @@ export function RunControls({
 
   // status === "done"
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3">
       {onNext && (
-        <Button size="sm" onClick={() => onNext()}>
+        <Button size="sm" variant="red" onClick={() => onNext()}>
           {nextLabel ?? "继续"}
           <ArrowRight />
         </Button>

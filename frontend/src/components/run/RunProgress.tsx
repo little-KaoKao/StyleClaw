@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Check, Loader2, X } from "lucide-react";
 
-import { cn } from "@/lib/utils";
+import { ACCENTS, SHADOW_SM } from "@/lib/bauhaus";
 import type { WsEvent } from "@/lib/types";
 
 interface RunProgressProps {
@@ -65,47 +65,47 @@ export function RunProgress({ events, llmBuffer, status }: RunProgressProps) {
 
   if (events.length === 0) {
     return status === "running" ? (
-      <p className="text-xs text-muted-foreground">准备中…</p>
+      <p className="text-xs font-bold uppercase tracking-wide text-foreground/60">
+        准备中…
+      </p>
     ) : null;
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {steps.length > 0 && (
-        <ol className="flex flex-col gap-1.5">
+        <ol className="flex flex-col gap-2">
           {steps.map((step) => {
             const running = !step.done;
             return (
-              <li key={step.index} className="flex items-start gap-2 text-sm">
-                <span className="mt-0.5 shrink-0">
-                  {running ? (
-                    <Loader2 className="size-3.5 animate-spin text-zinc-400" />
-                  ) : step.ok ? (
-                    <Check className="size-3.5 text-emerald-600" />
-                  ) : (
-                    <X className="size-3.5 text-destructive" />
-                  )}
+              <li key={step.index} className="flex items-center gap-3 text-sm">
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-none border-2 border-foreground text-sm font-black"
+                  style={{
+                    backgroundColor: ACCENTS[step.index % ACCENTS.length],
+                  }}
+                >
+                  {step.index + 1}
                 </span>
-                <div className="min-w-0">
-                  <span
-                    className={cn(
-                      "font-medium",
-                      running && "text-zinc-900",
-                      step.done && !step.ok && "text-destructive"
-                    )}
-                  >
-                    {step.name}
+                <span className="font-bold uppercase tracking-wide">
+                  {step.name}
+                </span>
+                {running ? (
+                  <Loader2 className="h-5 w-5 shrink-0 animate-spin text-foreground/50" />
+                ) : step.ok ? (
+                  <Check className="h-5 w-5 shrink-0 text-bauhaus-blue" />
+                ) : (
+                  <X className="h-5 w-5 shrink-0 text-bauhaus-red" />
+                )}
+                {step.done && step.summary ? (
+                  <span className="text-sm font-medium text-foreground/70">
+                    {step.summary}
                   </span>
-                  {step.done && step.summary ? (
-                    <span className="ml-1.5 text-muted-foreground">
-                      {step.summary}
-                    </span>
-                  ) : step.description ? (
-                    <span className="ml-1.5 text-muted-foreground">
-                      {step.description}
-                    </span>
-                  ) : null}
-                </div>
+                ) : step.description ? (
+                  <span className="text-sm font-medium text-foreground/70">
+                    {step.description}
+                  </span>
+                ) : null}
               </li>
             );
           })}
@@ -113,30 +113,30 @@ export function RunProgress({ events, llmBuffer, status }: RunProgressProps) {
       )}
 
       {llmBuffer && (
-        <div className="rounded-md border bg-zinc-50">
-          <div className="border-b px-2.5 py-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+        <div className="rounded-none border-2 border-foreground bg-[#FFF9C4] p-3">
+          <div className="text-xs font-bold uppercase tracking-widest text-foreground">
             LLM 输出
           </div>
           <div
             ref={bufferRef}
-            className="max-h-40 overflow-y-auto px-2.5 py-1.5 font-mono text-xs leading-relaxed whitespace-pre-wrap text-zinc-600"
+            className="mt-2 max-h-40 overflow-y-auto font-mono text-sm leading-relaxed whitespace-pre-wrap text-foreground"
           >
             {llmBuffer}
             {status === "running" && (
-              <span className="ml-0.5 inline-block animate-pulse text-zinc-400">
-                ↓
-              </span>
+              <span className="ml-0.5 inline-block animate-pulse">▌</span>
             )}
           </div>
         </div>
       )}
 
       {status === "error" && errorEvent?.type === "error" && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-2 text-sm text-destructive">
-          <p className="font-medium">运行出错</p>
-          <p className="mt-0.5 text-xs break-words">{errorEvent.message}</p>
+        <div
+          className={`rounded-none border-2 border-foreground bg-bauhaus-red p-3 font-bold text-white ${SHADOW_SM}`}
+        >
+          <p className="uppercase tracking-wide">运行出错</p>
+          <p className="mt-1 text-sm break-words">{errorEvent.message}</p>
           {errorEvent.detail && (
-            <p className="mt-0.5 text-xs break-words opacity-70">
+            <p className="mt-1 text-sm break-words opacity-80">
               {errorEvent.detail}
             </p>
           )}

@@ -6,6 +6,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScoreCard } from "@/components/gallery/ScoreCard";
+import { ACCENTS, SHADOW_SM } from "@/lib/bauhaus";
 import type { GalleryGroup } from "@/lib/types";
 
 interface GalleryGridProps {
@@ -21,17 +22,21 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
 
   if (groups.length === 0 && !hasRefs) {
     return (
-      <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+      <div className="flex items-center justify-center py-12 text-sm font-bold uppercase tracking-wide text-foreground/40">
         还没有生成结果
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       {hasRefs && (
-        <section className="flex flex-col gap-2">
-          <h3 className="text-xs font-medium tracking-wide text-muted-foreground">
+        <section className="flex flex-col gap-3">
+          <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest">
+            <span
+              className="h-3 w-3 shrink-0"
+              style={{ backgroundColor: ACCENTS[0] }}
+            />
             参考图
           </h3>
           <div className="flex flex-wrap gap-2">
@@ -40,7 +45,7 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
                 key={src}
                 type="button"
                 onClick={() => setSelectedSrc(src)}
-                className="overflow-hidden rounded-md border transition-opacity hover:opacity-80"
+                className="overflow-hidden rounded-none border-2 border-foreground transition-opacity hover:opacity-80"
               >
                 <img
                   src={src}
@@ -54,12 +59,14 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
         </section>
       )}
 
-      {groups.map((group) => (
-        <section key={group.label} className="flex flex-col gap-2">
-          <div className="flex items-start justify-between gap-3">
-            <h3 className="font-mono text-sm font-medium text-zinc-900">
-              {group.label}
-            </h3>
+      {groups.map((group, groupIndex) => (
+        <section key={group.label} className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <span
+              className="h-5 w-5 shrink-0 border-2 border-foreground"
+              style={{ backgroundColor: ACCENTS[groupIndex % ACCENTS.length] }}
+            />
+            <h3 className="font-bold uppercase tracking-wide">{group.label}</h3>
           </div>
 
           {group.scores && (
@@ -69,21 +76,23 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
           )}
 
           {group.images.length === 0 ? (
-            <p className="text-xs text-muted-foreground">暂无图片</p>
+            <p className="text-sm font-bold uppercase tracking-wide text-foreground/40">
+              暂无图片
+            </p>
           ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {group.images.map((src) => (
                 <button
                   key={src}
                   type="button"
                   onClick={() => setSelectedSrc(src)}
-                  className="overflow-hidden rounded-md border bg-zinc-50 transition-opacity hover:opacity-80"
+                  className={`overflow-hidden rounded-none border-2 border-foreground md:border-4 ${SHADOW_SM}`}
                 >
                   <img
                     src={src}
                     alt={group.label}
                     loading="lazy"
-                    className="aspect-square w-full object-cover"
+                    className="aspect-square w-full object-cover grayscale transition-all duration-200 hover:grayscale-0"
                   />
                 </button>
               ))}
@@ -98,13 +107,13 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
           if (!open) setSelectedSrc(null);
         }}
       >
-        <DialogContent className="max-w-3xl p-2">
+        <DialogContent className="max-w-3xl border-4 border-foreground p-2">
           <DialogTitle className="sr-only">预览图片</DialogTitle>
           {selectedSrc && (
             <img
               src={selectedSrc}
               alt="预览"
-              className="max-h-[80vh] w-full rounded-md object-contain"
+              className="max-h-[80vh] w-full rounded-none object-contain"
             />
           )}
         </DialogContent>
