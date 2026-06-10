@@ -84,3 +84,56 @@ async def add_refs(name: str, files: list[UploadFile] = File(...)) -> dict:
     tmp_dir = await _save_uploads(files)
     result = await _run_single(name, "add-refs", {"image_dir": str(tmp_dir)})
     return _result_payload(result)
+
+
+class RollbackRequest(BaseModel):
+    to: str          # phase name, case-insensitive, e.g. "STYLE_REFINE"
+    round: int | None = None
+
+
+@router.post("/{name}/rollback")
+async def rollback(name: str, req: RollbackRequest) -> dict:
+    from styleclaw.core.models import Phase
+    from styleclaw.core.state_machine import can_rollback
+    from styleclaw.core.state_machine import rollback as do_rollback
+    from styleclaw.storage import project_store
+
+    # 1. Parse target phase (case-insensitive); 400 on invalid.
+    try:
+        target = Phase(req.to.upper())
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"invalid phase: {req.to}")
+
+    with project_store.project_lock(name):
+        try:
+            state = project_store.load_state(name)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"project '{name}' not found")
+
+        if not can_rollback(state, target):
+            return {
+                "ok": False,
+                "message": f"无法回滚到 {target.value}（必须是更早且访问过的阶段）",
+                "data": None,
+            }
+
+        # If rolling back to STYLE_REFINE with a specific round > 0, verify it exists on disk.
+        if target == Phase.STYLE_REFINE and req.round is not None and req.round > 0:
+            sr_root = project_store.project_dir(name) / "style-refine"
+            matches = sorted(sr_root.glob(project_store.round_glob_across_passes(req.round)))
+            if not matches:
+                return {"ok": False, "message": f"round {req.round} 不存在", "data": None}
+
+        new_state = do_rollback(state, target)
+        if req.round is not None:
+            new_state = new_state.with_round(req.round)
+        project_store.save_state(name, new_state)
+
+    return {
+        "ok": True,
+        "message": (
+            f"已回滚到 {target.value}"
+            + (f" round {req.round}" if req.round is not None else "")
+        ),
+        "data": {"phase": target.value, "round": req.round},
+    }
