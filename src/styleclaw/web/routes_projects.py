@@ -44,6 +44,15 @@ async def project_detail(name: str) -> dict:
     }
 
 
+@router.get("/{name}/history")
+async def project_history(name: str) -> dict:
+    from styleclaw.web.history import build_history
+    try:
+        return build_history(name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"project '{name}' not found")
+
+
 @router.get("/{name}/gallery")
 async def project_gallery(
     name: str,
