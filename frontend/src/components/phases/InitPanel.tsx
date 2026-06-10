@@ -19,7 +19,7 @@ export function InitPanel(panel: PanelProps) {
       actions={
         <ActionButton
           label="分析风格"
-          variant="default"
+          variant="red"
           icon={<Sparkles />}
           disabled={running}
           onClick={makeRunHandler(run, "analyze")}

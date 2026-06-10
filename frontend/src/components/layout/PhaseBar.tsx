@@ -6,6 +6,8 @@ import type { Phase } from "@/lib/types";
 
 interface PhaseBarProps {
   current: Phase | null;
+  /** Optional click hook — when provided, each phase block becomes interactive. */
+  onSelectPhase?: (phase: Phase) => void;
 }
 
 const PHASES: { phase: Phase; label: string }[] = [
@@ -17,13 +19,14 @@ const PHASES: { phase: Phase; label: string }[] = [
   { phase: "COMPLETED", label: "✓ 完成" },
 ];
 
-export function PhaseBar({ current }: PhaseBarProps) {
+export function PhaseBar({ current, onSelectPhase }: PhaseBarProps) {
   const currentIndex = current
     ? PHASES.findIndex((p) => p.phase === current)
     : -1;
+  const interactive = Boolean(onSelectPhase);
 
   return (
-    <nav className="flex shrink-0 items-center gap-1 overflow-x-auto border-b px-4 py-2">
+    <nav className="flex shrink-0 items-center gap-2 overflow-x-auto border-b-4 border-foreground bg-background px-4 py-3">
       {PHASES.map((p, i) => {
         const isCurrent = i === currentIndex;
         const isDone = currentIndex >= 0 && i < currentIndex;
@@ -32,19 +35,24 @@ export function PhaseBar({ current }: PhaseBarProps) {
         return (
           <Fragment key={p.phase}>
             {i > 0 && (
-              <ChevronRight className="size-3.5 shrink-0 text-zinc-300" />
+              <ChevronRight className="h-5 w-5 shrink-0 text-foreground/60" />
             )}
-            <span
+            <button
+              type="button"
+              onClick={() => onSelectPhase?.(p.phase)}
               className={cn(
-                "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-colors",
-                isCurrent && "bg-zinc-900 text-white",
-                isDone && "text-zinc-500",
-                isFuture && "text-zinc-300"
+                "flex shrink-0 items-center gap-2 border-2 border-foreground px-3 py-1.5",
+                "text-sm font-bold uppercase tracking-wide whitespace-nowrap",
+                "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2",
+                interactive ? "cursor-pointer" : "cursor-default",
+                isCurrent && "bg-bauhaus-blue text-white",
+                isDone && "bg-foreground text-white",
+                isFuture && "bg-muted text-foreground/40"
               )}
             >
-              {isDone && <Check className="size-3" />}
+              {isDone && <Check className="h-5 w-5 shrink-0" />}
               {p.label}
-            </span>
+            </button>
           </Fragment>
         );
       })}

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { RunProgress } from "@/components/run/RunProgress";
@@ -27,13 +27,14 @@ interface ActionButtonProps {
   label: string;
   onClick: () => void;
   disabled?: boolean;
-  variant?: "default" | "outline" | "secondary";
+  /** Picks up the restyled Button variants (red / blue / yellow / outline / ghost). */
+  variant?: ComponentProps<typeof Button>["variant"];
   icon?: ReactNode;
 }
 
 /**
  * A single action button. Disabled while a run is in flight so the user can't
- * stack overlapping runs.
+ * stack overlapping runs. Icons auto-size to h-5 w-5 via the Button primitive.
  */
 export function ActionButton({
   label,
@@ -43,7 +44,7 @@ export function ActionButton({
   icon,
 }: ActionButtonProps) {
   return (
-    <Button size="sm" variant={variant} onClick={onClick} disabled={disabled}>
+    <Button size="default" variant={variant} onClick={onClick} disabled={disabled}>
       {icon}
       {label}
     </Button>
@@ -89,14 +90,16 @@ export function PanelShell({
   const { gallery, runStatus, runEvents, llmBuffer, refresh, resetRun } = panel;
   return (
     <div className="space-y-6 p-6">
-      <header className="space-y-1">
-        <h2 className="text-base font-semibold text-zinc-900">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
+      <header className="space-y-2">
+        <h2 className="font-black uppercase tracking-tight text-2xl md:text-3xl text-foreground">
+          {title}
+        </h2>
+        <p className="font-medium text-foreground/70">{description}</p>
       </header>
 
       {extra}
 
-      <div className="flex flex-wrap gap-2">{actions}</div>
+      <div className="flex flex-wrap items-center gap-3">{actions}</div>
 
       <RunProgress events={runEvents} llmBuffer={llmBuffer} status={runStatus} />
 

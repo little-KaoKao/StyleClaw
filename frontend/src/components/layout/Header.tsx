@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Sparkles, ChevronDown, Plus, Check } from "lucide-react";
+import { ChevronDown, Plus, Check } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,20 @@ import { useAppStore } from "@/store/app-store";
 
 interface HeaderProps {
   onNewProject?: () => void;
+}
+
+/** Three geometric Bauhaus shapes in a row: red circle, blue square, yellow triangle. */
+function GeometricLogo() {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="h-4 w-4 shrink-0 rounded-full bg-bauhaus-red" />
+      <span className="h-4 w-4 shrink-0 bg-bauhaus-blue" />
+      <span
+        className="h-4 w-4 shrink-0 bg-bauhaus-yellow"
+        style={{ clipPath: "polygon(50% 0, 0 100%, 100% 100%)" }}
+      />
+    </div>
+  );
 }
 
 export function Header({ onNewProject }: HeaderProps) {
@@ -42,22 +56,22 @@ export function Header({ onNewProject }: HeaderProps) {
   }, []);
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b px-4">
+    <header className="flex h-16 shrink-0 items-center justify-between border-b-4 border-foreground bg-background px-4">
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 font-semibold">
-          <Sparkles className="size-4 text-zinc-900" />
-          <span>StyleClaw</span>
+        <div className="flex items-center gap-3">
+          <GeometricLogo />
+          <span className="font-black uppercase tracking-tight text-xl text-foreground">
+            STYLECLAW
+          </span>
         </div>
-
-        <div className="h-5 w-px bg-border" />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-1.5">
+            <Button variant="outline" size="default" className="gap-2">
               <span className="max-w-[180px] truncate">
                 {currentProject ?? "选择项目"}
               </span>
-              <ChevronDown className="size-3.5 opacity-60" />
+              <ChevronDown className="h-5 w-5 shrink-0 opacity-60" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="min-w-[220px]">
@@ -74,11 +88,11 @@ export function Header({ onNewProject }: HeaderProps) {
                 >
                   <span className="flex items-center gap-2 truncate">
                     {p.name === currentProject && (
-                      <Check className="size-3.5 shrink-0 text-zinc-900" />
+                      <Check className="h-5 w-5 shrink-0 text-foreground" />
                     )}
                     <span className="truncate">{p.name}</span>
                   </span>
-                  <span className="ml-2 shrink-0 text-[10px] font-medium text-muted-foreground">
+                  <span className="ml-2 shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                     {p.phase}
                   </span>
                 </DropdownMenuItem>
@@ -86,14 +100,14 @@ export function Header({ onNewProject }: HeaderProps) {
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => onNewProject?.()}>
-              <Plus className="size-3.5" />
+              <Plus className="h-5 w-5 shrink-0" />
               新建项目
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <Badge variant="outline">本地</Badge>
       </div>
     </header>

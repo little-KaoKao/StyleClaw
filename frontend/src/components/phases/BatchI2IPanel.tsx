@@ -18,27 +18,31 @@ export function BatchI2IPanel(panel: PanelProps) {
         <>
           <ActionButton
             label="提交 i2i 批量"
-            variant="default"
+            variant="blue"
             disabled={running}
             onClick={makeRunHandler(run, "batch-submit")}
           />
           <ActionButton
             label="轮询"
+            variant="yellow"
             disabled={running}
             onClick={makeRunHandler(run, "poll")}
           />
           <ActionButton
             label="生成报告"
+            variant="blue"
             disabled={running}
             onClick={makeRunHandler(run, "report")}
           />
           <ActionButton
             label="标记完成"
+            variant="red"
             disabled={running}
             onClick={makeRunHandler(run, "approve", { target: "completed" })}
           />
           <ActionButton
             label="返回 T2I"
+            variant="outline"
             disabled={running}
             onClick={makeRunHandler(run, "back-to-t2i")}
           />
