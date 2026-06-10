@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { ACCENTS, SHADOW_SM, PRESS, LIFT } from "@/lib/bauhaus";
+import { ORB_GRADIENTS, PRIMARY_GRADIENT } from "@/lib/clay";
 
 interface HistoryTileProps {
   label: string;
@@ -19,29 +19,30 @@ export function HistoryTile({
   accentIndex = 0,
   onClick,
 }: HistoryTileProps) {
-  const accent = ACCENTS[accentIndex % ACCENTS.length];
+  const orb = ORB_GRADIENTS[accentIndex % ORB_GRADIENTS.length];
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "relative border-2 border-foreground rounded-none px-4 py-3",
-        "font-bold uppercase tracking-wide whitespace-nowrap",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-foreground",
-        SHADOW_SM,
-        PRESS,
-        LIFT,
-        active ? "bg-bauhaus-blue text-white" : "bg-white text-foreground"
+        "rounded-[20px] px-4 py-3 font-bold whitespace-nowrap transition-all hover:-translate-y-1",
+        "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-clay-accent/30",
+        active
+          ? cn(PRIMARY_GRADIENT, "text-white shadow-clayButton")
+          : "bg-white/70 text-foreground shadow-clayCard"
       )}
+      style={{ fontFamily: "Nunito, sans-serif" }}
     >
-      <span
-        className="absolute left-1 top-1 h-2.5 w-2.5"
-        style={{ backgroundColor: accent }}
-      />
-      <span className="flex items-center gap-2 pl-2">
+      <span className="flex items-center gap-2">
+        <span
+          className={cn(
+            "h-3 w-3 shrink-0 rounded-full bg-gradient-to-br",
+            orb
+          )}
+        />
         {label}
         {current && (
-          <Badge variant="yellow" className="ml-1">
+          <Badge variant="secondary" className="ml-1">
             当前
           </Badge>
         )}

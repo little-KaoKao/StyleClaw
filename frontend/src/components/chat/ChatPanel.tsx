@@ -68,7 +68,7 @@ export function ChatPanel() {
 
   if (!currentProject) {
     return (
-      <div className="flex h-full items-center justify-center p-8 font-bold uppercase text-foreground/40">
+      <div className="flex h-full items-center justify-center p-8 font-bold text-muted">
         请先选择或新建项目
       </div>
     );
@@ -76,16 +76,22 @@ export function ChatPanel() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-2 border-b-4 border-foreground px-4 py-3">
-        <MessageCircle className="h-5 w-5 shrink-0 text-foreground" />
-        <span className="font-black uppercase tracking-tight text-foreground">
+      <header className="flex items-center gap-2 px-4 py-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-400 to-purple-600 text-white shadow-clayButton">
+          <MessageCircle className="h-5 w-5 shrink-0" />
+        </span>
+        <span
+          className="font-extrabold text-foreground"
+          style={{ fontFamily: "Nunito, sans-serif" }}
+        >
           助手
         </span>
       </header>
+      <div className="mx-4 h-px bg-clay-surface" />
 
       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {messages.length === 0 && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted">
             用自然语言描述你想做什么，例如「帮我精炼一轮再评分」。
           </p>
         )}
@@ -113,14 +119,15 @@ export function ChatPanel() {
         })}
 
         {pending && (
-          <p className="text-xs text-muted-foreground">正在生成计划…</p>
+          <p className="text-xs text-muted">正在生成计划…</p>
         )}
 
         {/* Live execution stream, shared with the phase panel via the store. */}
         <RunProgress events={runEvents} llmBuffer={llmBuffer} status={runStatus} />
       </div>
 
-      <div className="flex items-center gap-2 border-t-4 border-foreground p-3">
+      <div className="mx-4 h-px bg-clay-surface" />
+      <div className="flex items-center gap-2 p-3">
         <Input
           className="flex-1"
           value={intent}
@@ -135,8 +142,9 @@ export function ChatPanel() {
           disabled={disabled}
         />
         <Button
-          variant="red"
+          variant="primary"
           size="icon"
+          className="rounded-2xl"
           onClick={onSend}
           disabled={disabled || !intent.trim()}
           aria-label="发送"

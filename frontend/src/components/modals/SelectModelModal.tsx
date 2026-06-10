@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { selectModel } from "@/lib/api";
 import { useProject } from "@/hooks/useProject";
 import { cn } from "@/lib/utils";
+import { PRIMARY_GRADIENT } from "@/lib/clay";
 
 interface SelectModelModalProps {
   open: boolean;
@@ -99,8 +100,8 @@ export function SelectModelModal({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-bold uppercase tracking-wider">
-              模型 <span className="text-bauhaus-red">*</span>
+            <label className="text-sm font-bold text-muted">
+              模型 <span className="text-clay-accent-alt">*</span>
             </label>
             <div className="grid grid-cols-2 gap-2">
               {MODELS.map((model) => {
@@ -112,10 +113,10 @@ export function SelectModelModal({
                     disabled={submitting}
                     onClick={() => toggle(model)}
                     className={cn(
-                      "flex items-center justify-between gap-2 rounded-none border-2 border-foreground px-3 py-2 text-sm font-bold uppercase tracking-wider transition-colors disabled:pointer-events-none disabled:opacity-50",
+                      "flex items-center justify-between gap-2 rounded-2xl px-3 py-2 text-sm font-bold transition-all disabled:pointer-events-none disabled:opacity-50",
                       active
-                        ? "bg-bauhaus-blue text-white"
-                        : "bg-white text-foreground hover:bg-muted"
+                        ? cn(PRIMARY_GRADIENT, "text-white shadow-clayButton")
+                        : "bg-clay-surface text-foreground shadow-clayPressed hover:bg-white"
                     )}
                   >
                     <span className="truncate">{model}</span>
@@ -127,7 +128,7 @@ export function SelectModelModal({
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-bold uppercase tracking-wider">
+            <label className="text-sm font-bold text-muted">
               构图方式 variant
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -140,30 +141,24 @@ export function SelectModelModal({
                     disabled={submitting}
                     onClick={() => setVariant(v.value)}
                     className={cn(
-                      "flex flex-col gap-1 rounded-none border-2 border-foreground px-3 py-2 text-left transition-colors disabled:pointer-events-none disabled:opacity-50",
+                      "flex flex-col gap-1 rounded-[20px] px-3 py-2 text-left transition-all disabled:pointer-events-none disabled:opacity-50",
                       active
-                        ? "bg-bauhaus-blue text-white"
-                        : "bg-white text-foreground hover:bg-muted"
+                        ? cn(PRIMARY_GRADIENT, "text-white shadow-clayButton")
+                        : "bg-clay-surface text-foreground shadow-clayPressed hover:bg-white"
                     )}
                   >
                     <span className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-current"
-                        )}
-                      >
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-current">
                         {active && (
                           <span className="h-2 w-2 rounded-full bg-current" />
                         )}
                       </span>
-                      <span className="text-sm font-bold uppercase tracking-wider">
-                        {v.label}
-                      </span>
+                      <span className="text-sm font-bold">{v.label}</span>
                     </span>
                     <span
                       className={cn(
                         "text-xs font-medium",
-                        active ? "text-white/80" : "text-foreground/70"
+                        active ? "text-white/80" : "text-muted"
                       )}
                     >
                       {v.hint}
@@ -175,7 +170,7 @@ export function SelectModelModal({
           </div>
 
           {error && (
-            <p className="bg-bauhaus-red px-2 py-1 font-bold text-white">
+            <p className="rounded-2xl bg-gradient-to-br from-[#FCE7F3] to-[#FBCFE8] px-3 py-2 font-bold text-clay-accent-alt">
               {error}
             </p>
           )}
@@ -189,7 +184,7 @@ export function SelectModelModal({
           >
             取消
           </Button>
-          <Button variant="red" onClick={handleSubmit} disabled={!canSubmit}>
+          <Button variant="primary" onClick={handleSubmit} disabled={!canSubmit}>
             {submitting && <Loader2 className="animate-spin" />}
             确认选择
           </Button>

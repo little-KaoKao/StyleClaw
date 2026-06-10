@@ -78,7 +78,7 @@ export function AddRefsModal({
         <div className="space-y-4">
           <Dropzone files={files} onFilesChange={setFiles} disabled={submitting} />
           {error && (
-            <p className="bg-bauhaus-red px-2 py-1 font-bold text-white">
+            <p className="rounded-2xl bg-gradient-to-br from-[#FCE7F3] to-[#FBCFE8] px-3 py-2 font-bold text-clay-accent-alt">
               {error}
             </p>
           )}
@@ -92,7 +92,7 @@ export function AddRefsModal({
           >
             取消
           </Button>
-          <Button variant="red" onClick={handleSubmit} disabled={!canSubmit}>
+          <Button variant="primary" onClick={handleSubmit} disabled={!canSubmit}>
             {submitting && <Loader2 className="animate-spin" />}
             上传并添加
           </Button>

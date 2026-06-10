@@ -11,11 +11,7 @@ interface HistoryPanelProps {
 const pad = (n: number) => String(n).padStart(3, "0");
 
 function MutedNote({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-sm font-bold uppercase tracking-wide text-foreground/40">
-      {children}
-    </p>
-  );
+  return <p className="text-sm font-bold text-muted">{children}</p>;
 }
 
 export function HistoryPanel({
@@ -57,7 +53,7 @@ export function HistoryPanel({
               const passNum = Number(passStr);
               return (
                 <div key={passStr} className="flex flex-col gap-2">
-                  <span className="text-xs font-bold uppercase tracking-widest text-foreground/60">
+                  <span className="text-xs font-bold text-muted">
                     pass-{pad(passNum)}
                   </span>
                   {rounds.length === 0 ? (
@@ -144,7 +140,12 @@ export function HistoryPanel({
 
   return (
     <section className="flex flex-col gap-4">
-      <h2 className="font-black uppercase tracking-tight">{phase} 历史</h2>
+      <h2
+        className="font-extrabold text-foreground"
+        style={{ fontFamily: "Nunito, sans-serif" }}
+      >
+        {phase} 历史
+      </h2>
       {renderBody()}
     </section>
   );

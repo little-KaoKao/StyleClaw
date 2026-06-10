@@ -8,7 +8,6 @@ import { useProject } from "@/hooks/useProject";
 import { useRun } from "@/hooks/useRun";
 import { useAppStore } from "@/store/app-store";
 import { rollback as apiRollback } from "@/lib/api";
-import { SHADOW_SM } from "@/lib/bauhaus";
 import type { History, ViewSlice } from "@/lib/types";
 
 interface HistoryViewProps {
@@ -99,7 +98,7 @@ export function HistoryView({ viewing, history, onHistoryChange }: HistoryViewPr
         return (
           <>
             <Button
-              variant="red"
+              variant="primary"
               size="sm"
               disabled={busy}
               onClick={() => doRun("set-pass", { pass_num: viewing.pass })}
@@ -107,7 +106,7 @@ export function HistoryView({ viewing, history, onHistoryChange }: HistoryViewPr
               切换到此 pass 继续
             </Button>
             <Button
-              variant="blue"
+              variant="outline"
               size="sm"
               disabled={busy}
               onClick={() => doRun("retest-models", {})}
@@ -119,7 +118,7 @@ export function HistoryView({ viewing, history, onHistoryChange }: HistoryViewPr
       case "STYLE_REFINE":
         return (
           <Button
-            variant="red"
+            variant="primary"
             size="sm"
             disabled={busy}
             onClick={() => doRollback(viewing.round)}
@@ -131,7 +130,7 @@ export function HistoryView({ viewing, history, onHistoryChange }: HistoryViewPr
       case "BATCH_I2I":
         return (
           <Button
-            variant="red"
+            variant="primary"
             size="sm"
             disabled={busy}
             onClick={() => doRun("design-cases", {})}
@@ -151,7 +150,12 @@ export function HistoryView({ viewing, history, onHistoryChange }: HistoryViewPr
           <ArrowLeft />
           回到当前
         </Button>
-        <h1 className="font-black uppercase tracking-tight">{viewing.phase}</h1>
+        <h1
+          className="font-black text-foreground"
+          style={{ fontFamily: "Nunito, sans-serif" }}
+        >
+          {viewing.phase}
+        </h1>
       </div>
 
       <HistoryPanel
@@ -165,9 +169,7 @@ export function HistoryView({ viewing, history, onHistoryChange }: HistoryViewPr
       />
 
       {showBanner && (
-        <div
-          className={`flex flex-wrap items-center gap-3 border-2 border-foreground bg-bauhaus-yellow p-3 font-bold ${SHADOW_SM}`}
-        >
+        <div className="flex flex-wrap items-center gap-3 rounded-[24px] bg-gradient-to-br from-[#FEF3C7] to-[#FDE68A] p-4 font-bold text-foreground shadow-clayCard">
           <span>
             正在查看历史 — {viewing.phase} {sliceLabel(viewing)}（只读）
           </span>
@@ -176,7 +178,7 @@ export function HistoryView({ viewing, history, onHistoryChange }: HistoryViewPr
       )}
 
       {msg && (
-        <div className="border-2 border-foreground bg-white p-3 text-sm font-bold">
+        <div className="rounded-[24px] bg-white/70 p-4 text-sm font-bold text-foreground shadow-clayCard">
           {msg}
         </div>
       )}
@@ -185,14 +187,10 @@ export function HistoryView({ viewing, history, onHistoryChange }: HistoryViewPr
         gallery ? (
           <GalleryGrid groups={gallery.groups} refImages={gallery.ref_images} />
         ) : (
-          <p className="text-sm font-bold uppercase tracking-wide text-foreground/40">
-            加载图库…
-          </p>
+          <p className="text-sm font-bold text-muted">加载图库…</p>
         )
       ) : (
-        <p className="text-sm font-bold uppercase tracking-wide text-foreground/40">
-          选择一份查看
-        </p>
+        <p className="text-sm font-bold text-muted">选择一份查看</p>
       )}
     </div>
   );
