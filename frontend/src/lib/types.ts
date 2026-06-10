@@ -43,6 +43,7 @@ export interface GalleryGroup {
   label: string;
   images: string[];
   scores: Record<string, number> | null;
+  prompt?: string | null;
 }
 
 export interface Gallery {

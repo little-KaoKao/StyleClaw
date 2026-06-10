@@ -76,6 +76,7 @@ def build_gallery(
                 "label": rec_key,
                 "images": [_media_url(name, p) for p in imgs],
                 "scores": score_by_key.get(score_key),
+                "prompt": (records[rec_key].prompt or None),
             })
 
     elif eff_phase == Phase.STYLE_REFINE:
@@ -99,6 +100,7 @@ def build_gallery(
                 "label": mid,
                 "images": [_media_url(name, p) for p in imgs],
                 "scores": score_by_model.get(mid),
+                "prompt": (records[mid].prompt or None),
             })
 
     elif eff_phase == Phase.BATCH_T2I:
@@ -108,26 +110,39 @@ def build_gallery(
         except FileNotFoundError:
             batch_config = None
         if batch_config is not None:
+            try:
+                batch_records = project_store.load_all_batch_task_records(name, batch_num)
+            except FileNotFoundError:
+                batch_records = {}
             for case in batch_config.cases:
                 case_dir = project_store.batch_t2i_case_dir(name, batch_num, case.id)
                 imgs = list_output_images(case_dir) if case_dir.exists() else []
+                rec = batch_records.get(case.id)
+                prompt = (rec.prompt if rec and rec.prompt else case.description) or None
                 groups.append({
                     "label": f"{case.id} · {case.category}",
                     "images": [_media_url(name, p) for p in imgs],
                     "scores": None,
+                    "prompt": prompt,
                 })
 
     elif eff_phase == Phase.BATCH_I2I:
         batch_num = eff_batch
         uploads = project_store.load_i2i_uploads(name, batch_num)
+        try:
+            i2i_records = project_store.load_all_i2i_task_records(name, batch_num)
+        except FileNotFoundError:
+            i2i_records = {}
         for i, _upload in enumerate(uploads, 1):
             case_id = f"i2i-{i:03d}"
             case_dir = project_store.batch_i2i_case_dir(name, batch_num, case_id)
             imgs = list_output_images(case_dir) if case_dir.exists() else []
+            rec = i2i_records.get(case_id)
             groups.append({
                 "label": case_id,
                 "images": [_media_url(name, p) for p in imgs],
                 "scores": None,
+                "prompt": (rec.prompt if rec and rec.prompt else None),
             })
 
     return {

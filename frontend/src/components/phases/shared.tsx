@@ -88,6 +88,7 @@ export function PanelShell({
   panel,
 }: PanelShellProps) {
   const { gallery, runStatus, runEvents, llmBuffer, refresh, resetRun } = panel;
+  const hasRun = runStatus !== "idle" || runEvents.length > 0;
   return (
     <div className="space-y-6 p-6">
       <header className="space-y-2">
@@ -99,16 +100,35 @@ export function PanelShell({
 
       {extra}
 
-      <div className="flex flex-wrap items-center gap-3">{actions}</div>
+      <section className="space-y-2">
+        <SectionLabel>操作 · Actions</SectionLabel>
+        <div className="flex flex-wrap items-center gap-3">{actions}</div>
+      </section>
 
-      <RunProgress events={runEvents} llmBuffer={llmBuffer} status={runStatus} />
+      {hasRun && (
+        <section className="space-y-2">
+          <SectionLabel>运行状态 · Status</SectionLabel>
+          <RunProgress events={runEvents} llmBuffer={llmBuffer} status={runStatus} />
+          <RunControls status={runStatus} onRefresh={refresh} onReset={resetRun} />
+        </section>
+      )}
 
-      <RunControls status={runStatus} onRefresh={refresh} onReset={resetRun} />
+      <section className="space-y-2">
+        <SectionLabel>结果 · Results</SectionLabel>
+        <GalleryGrid
+          groups={gallery?.groups ?? []}
+          refImages={gallery?.ref_images}
+        />
+      </section>
+    </div>
+  );
+}
 
-      <GalleryGrid
-        groups={gallery?.groups ?? []}
-        refImages={gallery?.ref_images}
-      />
+/** A small divider label that makes each region's purpose unambiguous. */
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 border-b-2 border-foreground/20 pb-1 text-xs font-bold uppercase tracking-widest text-foreground/50">
+      {children}
     </div>
   );
 }

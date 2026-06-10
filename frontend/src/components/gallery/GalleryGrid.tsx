@@ -28,15 +28,24 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
     );
   }
 
+  // Adaptive density: model/refine groups carry several images each (compare
+  // side-by-side → fewer, wider cards); batch cases carry 1 image each (pack
+  // many cards per row to use the full width instead of one column).
+  const maxImgs = groups.reduce((m, g) => Math.max(m, g.images.length), 0);
+  const gridCols =
+    maxImgs >= 3
+      ? "grid-cols-1 xl:grid-cols-2"
+      : "grid-cols-2 md:grid-cols-3 xl:grid-cols-4";
+  const innerCols = maxImgs >= 3 ? "grid-cols-2" : "grid-cols-1";
+
+  const openLightbox = (src: string) => setSelectedSrc(src);
+
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       {hasRefs && (
         <section className="flex flex-col gap-3">
           <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest">
-            <span
-              className="h-3 w-3 shrink-0"
-              style={{ backgroundColor: ACCENTS[0] }}
-            />
+            <span className="h-3 w-3 shrink-0" style={{ backgroundColor: ACCENTS[0] }} />
             参考图
           </h3>
           <div className="flex flex-wrap gap-2">
@@ -44,62 +53,69 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
               <button
                 key={src}
                 type="button"
-                onClick={() => setSelectedSrc(src)}
+                onClick={() => openLightbox(src)}
                 className="overflow-hidden rounded-none border-2 border-foreground transition-opacity hover:opacity-80"
               >
-                <img
-                  src={src}
-                  alt="参考图"
-                  loading="lazy"
-                  className="size-20 object-cover"
-                />
+                <img src={src} alt="参考图" loading="lazy" className="size-20 object-cover" />
               </button>
             ))}
           </div>
         </section>
       )}
 
-      {groups.map((group, groupIndex) => (
-        <section key={group.label} className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <span
-              className="h-5 w-5 shrink-0 border-2 border-foreground"
-              style={{ backgroundColor: ACCENTS[groupIndex % ACCENTS.length] }}
-            />
-            <h3 className="font-bold uppercase tracking-wide">{group.label}</h3>
-          </div>
-
-          {group.scores && (
-            <div className="max-w-xs">
-              <ScoreCard scores={group.scores} />
+      <div className={`grid gap-4 ${gridCols}`}>
+        {groups.map((group, groupIndex) => (
+          <section
+            key={group.label}
+            className={`flex flex-col gap-2 border-2 border-foreground bg-white p-3 ${SHADOW_SM}`}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className="h-4 w-4 shrink-0 border-2 border-foreground"
+                style={{ backgroundColor: ACCENTS[groupIndex % ACCENTS.length] }}
+              />
+              <h3 className="truncate font-bold uppercase tracking-wide text-sm" title={group.label}>
+                {group.label}
+              </h3>
             </div>
-          )}
 
-          {group.images.length === 0 ? (
-            <p className="text-sm font-bold uppercase tracking-wide text-foreground/40">
-              暂无图片
-            </p>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {group.images.map((src) => (
-                <button
-                  key={src}
-                  type="button"
-                  onClick={() => setSelectedSrc(src)}
-                  className={`overflow-hidden rounded-none border-2 border-foreground md:border-4 ${SHADOW_SM}`}
-                >
-                  <img
-                    src={src}
-                    alt={group.label}
-                    loading="lazy"
-                    className="aspect-square w-full object-cover grayscale transition-all duration-200 hover:grayscale-0"
-                  />
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      ))}
+            {group.prompt && (
+              <p
+                className="line-clamp-3 text-xs leading-snug text-foreground/60"
+                title={group.prompt}
+              >
+                {group.prompt}
+              </p>
+            )}
+
+            {group.scores && <ScoreCard scores={group.scores} />}
+
+            {group.images.length === 0 ? (
+              <p className="py-4 text-center text-xs font-bold uppercase tracking-wide text-foreground/40">
+                暂无图片
+              </p>
+            ) : (
+              <div className={`grid gap-2 ${innerCols}`}>
+                {group.images.map((src) => (
+                  <button
+                    key={src}
+                    type="button"
+                    onClick={() => openLightbox(src)}
+                    className="overflow-hidden rounded-none border-2 border-foreground bg-muted/40 transition-transform hover:-translate-y-0.5"
+                  >
+                    <img
+                      src={src}
+                      alt={group.label}
+                      loading="lazy"
+                      className="h-auto w-full object-contain"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        ))}
+      </div>
 
       <Dialog
         open={!!selectedSrc}
