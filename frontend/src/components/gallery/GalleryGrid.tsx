@@ -6,7 +6,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScoreCard } from "@/components/gallery/ScoreCard";
-import { ACCENTS, SHADOW_SM } from "@/lib/bauhaus";
+import { ORB_GRADIENTS } from "@/lib/clay";
 import type { GalleryGroup } from "@/lib/types";
 
 interface GalleryGridProps {
@@ -22,7 +22,7 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
 
   if (groups.length === 0 && !hasRefs) {
     return (
-      <div className="flex items-center justify-center py-12 text-sm font-bold uppercase tracking-wide text-foreground/40">
+      <div className="flex items-center justify-center rounded-[24px] py-12 font-bold text-muted">
         还没有生成结果
       </div>
     );
@@ -44,17 +44,17 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
     <div className="flex flex-col gap-6">
       {hasRefs && (
         <section className="flex flex-col gap-3">
-          <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest">
-            <span className="h-3 w-3 shrink-0" style={{ backgroundColor: ACCENTS[0] }} />
+          <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted">
+            <span className="h-4 w-4 shrink-0 rounded-full bg-gradient-to-br from-purple-400 to-purple-600" />
             参考图
           </h3>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {refImages!.map((src) => (
               <button
                 key={src}
                 type="button"
                 onClick={() => openLightbox(src)}
-                className="overflow-hidden rounded-none border-2 border-foreground transition-opacity hover:opacity-80"
+                className="overflow-hidden rounded-2xl bg-clay-surface shadow-clayCard transition-all duration-300 hover:-translate-y-0.5 hover:shadow-clayCardHover"
               >
                 <img src={src} alt="参考图" loading="lazy" className="size-20 object-cover" />
               </button>
@@ -67,21 +67,26 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
         {groups.map((group, groupIndex) => (
           <section
             key={group.label}
-            className={`flex flex-col gap-2 border-2 border-foreground bg-white p-3 ${SHADOW_SM}`}
+            className="flex flex-col gap-2 rounded-[24px] bg-white/70 p-4 shadow-clayCard backdrop-blur-xl transition-all duration-500 hover:-translate-y-1 hover:shadow-clayCardHover"
           >
             <div className="flex items-center gap-2">
               <span
-                className="h-4 w-4 shrink-0 border-2 border-foreground"
-                style={{ backgroundColor: ACCENTS[groupIndex % ACCENTS.length] }}
+                className={`h-4 w-4 shrink-0 rounded-full bg-gradient-to-br ${
+                  ORB_GRADIENTS[groupIndex % ORB_GRADIENTS.length]
+                }`}
               />
-              <h3 className="truncate font-bold uppercase tracking-wide text-sm" title={group.label}>
+              <h3
+                className="truncate text-sm font-bold text-foreground"
+                style={{ fontFamily: "Nunito, sans-serif" }}
+                title={group.label}
+              >
                 {group.label}
               </h3>
             </div>
 
             {group.prompt && (
               <p
-                className="line-clamp-3 text-xs leading-snug text-foreground/60"
+                className="line-clamp-3 text-xs leading-snug text-muted"
                 title={group.prompt}
               >
                 {group.prompt}
@@ -91,7 +96,7 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
             {group.scores && <ScoreCard scores={group.scores} />}
 
             {group.images.length === 0 ? (
-              <p className="py-4 text-center text-xs font-bold uppercase tracking-wide text-foreground/40">
+              <p className="py-4 text-center text-xs font-bold text-muted">
                 暂无图片
               </p>
             ) : (
@@ -101,7 +106,7 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
                     key={src}
                     type="button"
                     onClick={() => openLightbox(src)}
-                    className="overflow-hidden rounded-none border-2 border-foreground bg-muted/40 transition-transform hover:-translate-y-0.5"
+                    className="overflow-hidden rounded-[20px] bg-clay-surface shadow-clayCard transition-all duration-300 hover:-translate-y-0.5 hover:shadow-clayCardHover"
                   >
                     <img
                       src={src}
@@ -123,13 +128,13 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
           if (!open) setSelectedSrc(null);
         }}
       >
-        <DialogContent className="max-w-3xl border-4 border-foreground p-2">
+        <DialogContent className="max-w-3xl p-2">
           <DialogTitle className="sr-only">预览图片</DialogTitle>
           {selectedSrc && (
             <img
               src={selectedSrc}
               alt="预览"
-              className="max-h-[80vh] w-full rounded-none object-contain"
+              className="max-h-[80vh] w-full rounded-[24px] object-contain"
             />
           )}
         </DialogContent>

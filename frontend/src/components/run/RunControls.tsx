@@ -32,7 +32,7 @@ export function RunControls({
     return (
       <div className="flex items-center gap-3">
         {onReset && (
-          <Button size="sm" variant="yellow" onClick={() => onReset()}>
+          <Button size="sm" variant="destructive" onClick={() => onReset()}>
             <RotateCcw />
             重试
           </Button>
@@ -49,12 +49,12 @@ export function RunControls({
   return (
     <div className="flex items-center gap-3">
       {onNext && (
-        <Button size="sm" variant="red" onClick={() => onNext()}>
+        <Button size="sm" variant="primary" onClick={() => onNext()}>
           {nextLabel ?? "继续"}
           <ArrowRight />
         </Button>
       )}
-      <Button size="sm" variant="outline" onClick={onRefresh}>
+      <Button size="sm" variant="secondary" onClick={onRefresh}>
         <RefreshCw />
         刷新数据
       </Button>

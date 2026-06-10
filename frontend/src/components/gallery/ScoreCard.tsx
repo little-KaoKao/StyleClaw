@@ -1,5 +1,3 @@
-import { SHADOW_SM } from "@/lib/bauhaus";
-
 interface ScoreCardProps {
   scores: Record<string, number> | null;
 }
@@ -22,40 +20,43 @@ export function ScoreCard({ scores }: ScoreCardProps) {
   const rows = DIMENSIONS.filter((d) => d.key in scores);
 
   return (
-    <div
-      className={`flex flex-col gap-2 rounded-none border-2 border-foreground bg-white p-3 ${SHADOW_SM}`}
-    >
+    <div className="flex flex-col gap-3 rounded-[20px] bg-white/70 p-4 shadow-clayCard">
       {typeof total === "number" && (
         <div className="flex items-center gap-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+          <span className="text-xs font-bold uppercase tracking-widest text-muted">
             总分
           </span>
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center bg-bauhaus-blue text-2xl font-black tabular-nums text-white">
+          <span
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#A78BFA] to-[#7C3AED] text-xl font-black tabular-nums text-white shadow-clayButton"
+            style={{ fontFamily: "Nunito, sans-serif" }}
+          >
             {total.toFixed(1)}
           </span>
         </div>
       )}
 
       {rows.length > 0 && (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
           {rows.map((d) => {
             const score = scores[d.key];
             const pct = Math.max(0, Math.min(100, score * 10));
             const strong = score >= 7;
             return (
               <div key={d.key} className="flex items-center gap-2">
-                <span className="w-16 shrink-0 text-xs font-bold uppercase tracking-wider">
+                <span className="w-16 shrink-0 text-xs font-bold text-muted">
                   {d.label}
                 </span>
-                <div className="h-3 flex-1 border-2 border-foreground bg-muted">
+                <div className="h-3 flex-1 overflow-hidden rounded-full bg-clay-surface shadow-clayPressed">
                   <div
-                    className={`h-full ${
-                      strong ? "bg-bauhaus-blue" : "bg-bauhaus-red"
+                    className={`h-full rounded-full bg-gradient-to-r ${
+                      strong
+                        ? "from-[#A78BFA] to-[#7C3AED]"
+                        : "from-[#F472B6] to-[#DB2777]"
                     }`}
                     style={{ width: `${pct}%` }}
                   />
                 </div>
-                <span className="w-8 shrink-0 text-right text-xs font-bold tabular-nums">
+                <span className="w-8 shrink-0 text-right text-xs font-bold tabular-nums text-foreground">
                   {score.toFixed(1)}
                 </span>
               </div>
