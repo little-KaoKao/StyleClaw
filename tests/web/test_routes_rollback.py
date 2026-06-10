@@ -61,3 +61,36 @@ def test_rollback_nonexistent_round(client, data_root):
     resp = client.post("/api/projects/r4/rollback", json={"to": "STYLE_REFINE", "round": 99})
     assert resp.status_code == 200
     assert resp.json()["ok"] is False
+
+
+def test_rollback_same_phase_round_within_style_refine(client, data_root):
+    # Project currently IN STYLE_REFINE at round 3; redo/navigate to round 2.
+    project_store.create_project(
+        ProjectConfig(name="sr", ip_info="anime", ref_images=["refs/ref-001.png"])
+    )
+    s = ProjectState(phase=Phase.INIT)
+    s = advance(s, Phase.MODEL_SELECT)
+    s = advance(s, Phase.STYLE_REFINE).with_round(3)
+    project_store.save_state("sr", s)
+    for rnum in (1, 2, 3):
+        (project_store.project_dir("sr") / "style-refine" / project_store.pass_label(1) / project_store.round_label(rnum)).mkdir(parents=True, exist_ok=True)
+
+    resp = client.post("/api/projects/sr/rollback", json={"to": "STYLE_REFINE", "round": 2})
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    assert project_store.load_state("sr").phase == Phase.STYLE_REFINE  # phase unchanged
+    assert project_store.load_state("sr").current_round == 2
+
+
+def test_rollback_same_phase_nonexistent_round(client, data_root):
+    project_store.create_project(
+        ProjectConfig(name="sr2", ip_info="anime", ref_images=["refs/ref-001.png"])
+    )
+    s = ProjectState(phase=Phase.INIT)
+    s = advance(s, Phase.MODEL_SELECT)
+    s = advance(s, Phase.STYLE_REFINE).with_round(3)
+    project_store.save_state("sr2", s)
+    (project_store.project_dir("sr2") / "style-refine" / project_store.pass_label(1) / project_store.round_label(1)).mkdir(parents=True, exist_ok=True)
+    resp = client.post("/api/projects/sr2/rollback", json={"to": "STYLE_REFINE", "round": 99})
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is False

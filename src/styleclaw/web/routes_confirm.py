@@ -110,6 +110,21 @@ async def rollback(name: str, req: RollbackRequest) -> dict:
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"project '{name}' not found")
 
+        # Same-phase round navigation: project is already IN STYLE_REFINE and caller
+        # wants to switch to a different round within the same phase.
+        if target == Phase.STYLE_REFINE and state.phase == Phase.STYLE_REFINE and req.round is not None:
+            sr_root = project_store.project_dir(name) / "style-refine"
+            matches = sorted(sr_root.glob(project_store.round_glob_across_passes(req.round)))
+            if not matches:
+                return {"ok": False, "message": f"round {req.round} 不存在", "data": None}
+            new_state = state.with_round(req.round)
+            project_store.save_state(name, new_state)
+            return {
+                "ok": True,
+                "message": f"已切换到 round {req.round}",
+                "data": {"phase": state.phase.value, "round": req.round},
+            }
+
         if not can_rollback(state, target):
             return {
                 "ok": False,
