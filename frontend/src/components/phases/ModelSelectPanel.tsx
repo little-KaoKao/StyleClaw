@@ -18,19 +18,19 @@ export function ModelSelectPanel(panel: PanelProps) {
         <>
           <ActionButton
             label="生成图片"
-            variant="blue"
+            variant="default"
             disabled={running}
             onClick={makeRunHandler(run, "generate")}
           />
           <ActionButton
             label="轮询结果"
-            variant="yellow"
+            variant="secondary"
             disabled={running}
             onClick={makeRunHandler(run, "poll")}
           />
           <ActionButton
             label="评分"
-            variant="blue"
+            variant="secondary"
             disabled={running}
             onClick={makeRunHandler(run, "evaluate")}
           />
@@ -42,7 +42,7 @@ export function ModelSelectPanel(panel: PanelProps) {
           />
           <ActionButton
             label="重测模型"
-            variant="outline"
+            variant="ghost"
             disabled={running}
             onClick={makeRunHandler(run, "retest-models")}
           />

@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ORB_GRADIENTS } from "@/lib/clay";
 import { listProjects } from "@/lib/api";
 import type { ProjectSummary } from "@/lib/types";
 import { useAppStore } from "@/store/app-store";
@@ -18,16 +19,13 @@ interface HeaderProps {
   onNewProject?: () => void;
 }
 
-/** Three geometric Bauhaus shapes in a row: red circle, blue square, yellow triangle. */
-function GeometricLogo() {
+/** Three soft clay gradient orbs in a row. */
+function ClayLogo() {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="h-4 w-4 shrink-0 rounded-full bg-bauhaus-red" />
-      <span className="h-4 w-4 shrink-0 bg-bauhaus-blue" />
-      <span
-        className="h-4 w-4 shrink-0 bg-bauhaus-yellow"
-        style={{ clipPath: "polygon(50% 0, 0 100%, 100% 100%)" }}
-      />
+      <span className={`h-5 w-5 shrink-0 rounded-full bg-gradient-to-br ${ORB_GRADIENTS[0]} shadow-clayButton`} />
+      <span className={`h-5 w-5 shrink-0 rounded-full bg-gradient-to-br ${ORB_GRADIENTS[1]} shadow-clayButton`} />
+      <span className={`h-5 w-5 shrink-0 rounded-full bg-gradient-to-br ${ORB_GRADIENTS[2]} shadow-clayButton`} />
     </div>
   );
 }
@@ -56,18 +54,21 @@ export function Header({ onNewProject }: HeaderProps) {
   }, []);
 
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b-4 border-foreground bg-background px-4">
-      <div className="flex items-center gap-3">
+    <header className="m-4 mb-0 flex h-16 shrink-0 items-center justify-between rounded-[32px] bg-white/70 px-6 backdrop-blur-xl shadow-clayCard">
+      <div className="flex items-center gap-4">
         <div className="flex items-center gap-3">
-          <GeometricLogo />
-          <span className="font-black uppercase tracking-tight text-xl text-foreground">
-            STYLECLAW
+          <ClayLogo />
+          <span
+            className="text-xl font-black tracking-tight text-foreground"
+            style={{ fontFamily: "Nunito, sans-serif" }}
+          >
+            StyleClaw
           </span>
         </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="default" className="gap-2">
+            <Button variant="secondary" size="sm" className="gap-2">
               <span className="max-w-[180px] truncate">
                 {currentProject ?? "选择项目"}
               </span>
@@ -76,7 +77,7 @@ export function Header({ onNewProject }: HeaderProps) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="min-w-[220px]">
             {projects.length === 0 ? (
-              <div className="px-2 py-3 text-center text-xs text-muted-foreground">
+              <div className="px-2 py-3 text-center text-xs text-muted">
                 暂无项目
               </div>
             ) : (
@@ -84,22 +85,25 @@ export function Header({ onNewProject }: HeaderProps) {
                 <DropdownMenuItem
                   key={p.name}
                   onSelect={() => setCurrentProject(p.name)}
-                  className="justify-between"
+                  className="justify-between rounded-xl hover:bg-clay-accent/10"
                 >
                   <span className="flex items-center gap-2 truncate">
                     {p.name === currentProject && (
-                      <Check className="h-5 w-5 shrink-0 text-foreground" />
+                      <Check className="h-5 w-5 shrink-0 text-clay-accent" />
                     )}
                     <span className="truncate">{p.name}</span>
                   </span>
-                  <span className="ml-2 shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <span className="ml-2 shrink-0 text-[10px] font-bold tracking-wider text-muted">
                     {p.phase}
                   </span>
                 </DropdownMenuItem>
               ))
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => onNewProject?.()}>
+            <DropdownMenuItem
+              onSelect={() => onNewProject?.()}
+              className="rounded-xl hover:bg-clay-accent/10"
+            >
               <Plus className="h-5 w-5 shrink-0" />
               新建项目
             </DropdownMenuItem>
@@ -108,7 +112,7 @@ export function Header({ onNewProject }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-3">
-        <Badge variant="outline">本地</Badge>
+        <Badge variant="secondary">本地</Badge>
       </div>
     </header>
   );

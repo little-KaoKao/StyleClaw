@@ -92,10 +92,13 @@ export function PanelShell({
   return (
     <div className="space-y-6 p-6">
       <header className="space-y-2">
-        <h2 className="font-black uppercase tracking-tight text-2xl md:text-3xl text-foreground">
+        <h2
+          className="text-3xl font-black tracking-tight text-foreground md:text-4xl"
+          style={{ fontFamily: "Nunito, sans-serif" }}
+        >
           {title}
         </h2>
-        <p className="font-medium text-foreground/70">{description}</p>
+        <p className="font-medium text-muted">{description}</p>
       </header>
 
       {extra}
@@ -127,7 +130,8 @@ export function PanelShell({
 /** A small divider label that makes each region's purpose unambiguous. */
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-center gap-2 border-b-2 border-foreground/20 pb-1 text-xs font-bold uppercase tracking-widest text-foreground/50">
+    <div className="flex items-center gap-2 pb-1 text-xs font-bold uppercase tracking-widest text-muted">
+      <span className="h-2 w-2 shrink-0 rounded-full bg-gradient-to-br from-[#A78BFA] to-[#7C3AED]" />
       {children}
     </div>
   );

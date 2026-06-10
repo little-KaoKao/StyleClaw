@@ -25,7 +25,7 @@ export function StyleRefinePanel(panel: PanelProps) {
       description="逐轮精炼 trigger phrase：精炼 → 生成 → 轮询 → 评分，直到五个维度都达标，再批准进入批量测试。"
       extra={
         <div className="max-w-md space-y-2">
-          <label className="block font-bold uppercase tracking-wider text-xs text-foreground/70">
+          <label className="block text-xs font-bold uppercase tracking-wider text-muted">
             精炼方向（可选）
           </label>
           <Input
@@ -40,31 +40,31 @@ export function StyleRefinePanel(panel: PanelProps) {
         <>
           <ActionButton
             label="精炼一轮"
-            variant="red"
+            variant="default"
             disabled={running}
             onClick={onRefine}
           />
           <ActionButton
             label="生成"
-            variant="blue"
+            variant="secondary"
             disabled={running}
             onClick={makeRunHandler(run, "generate")}
           />
           <ActionButton
             label="轮询"
-            variant="yellow"
+            variant="secondary"
             disabled={running}
             onClick={makeRunHandler(run, "poll")}
           />
           <ActionButton
             label="评分"
-            variant="blue"
+            variant="secondary"
             disabled={running}
             onClick={makeRunHandler(run, "evaluate")}
           />
           <ActionButton
             label="批准进入批量测试"
-            variant="red"
+            variant="default"
             disabled={running}
             onClick={makeRunHandler(run, "approve", { target: "batch-t2i" })}
           />

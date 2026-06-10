@@ -18,25 +18,25 @@ export function BatchT2IPanel(panel: PanelProps) {
         <>
           <ActionButton
             label="设计 100 案例"
-            variant="red"
+            variant="default"
             disabled={running}
             onClick={makeRunHandler(run, "design-cases")}
           />
           <ActionButton
             label="提交批量生成"
-            variant="blue"
+            variant="secondary"
             disabled={running}
             onClick={makeRunHandler(run, "batch-submit")}
           />
           <ActionButton
             label="轮询"
-            variant="yellow"
+            variant="secondary"
             disabled={running}
             onClick={makeRunHandler(run, "poll")}
           />
           <ActionButton
             label="生成报告"
-            variant="blue"
+            variant="secondary"
             disabled={running}
             onClick={makeRunHandler(run, "report")}
           />

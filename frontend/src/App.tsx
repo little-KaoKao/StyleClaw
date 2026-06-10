@@ -10,6 +10,7 @@ import { NewProjectModal } from "@/components/modals/NewProjectModal";
 import { SelectModelModal } from "@/components/modals/SelectModelModal";
 import { AddRefsModal } from "@/components/modals/AddRefsModal";
 import { HistoryView } from "@/components/history/HistoryView";
+import { ClayBackdrop } from "@/components/layout/ClayBackdrop";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useProject } from "@/hooks/useProject";
@@ -21,12 +22,14 @@ function EmptyState({ onNewProject }: { onNewProject: () => void }) {
     <div className="flex h-full items-center justify-center p-8">
       <Card className="w-full max-w-sm text-center">
         <CardContent className="flex flex-col items-center gap-4 py-4">
-          <div className="flex size-12 items-center justify-center rounded-full bg-zinc-100">
-            <FolderPlus className="size-6 text-zinc-500" />
+          <div className="flex size-14 items-center justify-center rounded-full bg-gradient-to-br from-[#A78BFA] to-[#7C3AED] shadow-clayButton">
+            <FolderPlus className="size-6 text-white" />
           </div>
           <div className="space-y-1">
-            <p className="font-medium">还没有项目</p>
-            <p className="text-sm text-muted-foreground">
+            <p className="font-bold text-foreground" style={{ fontFamily: "Nunito, sans-serif" }}>
+              还没有项目
+            </p>
+            <p className="text-sm text-muted">
               从一组参考图新建项目，开始风格探索。
             </p>
           </div>
@@ -65,7 +68,7 @@ export default function App() {
         onHistoryChange={refreshHistory}
       />
     ) : (
-      <div className="flex h-full items-center justify-center p-8 text-sm font-bold uppercase tracking-wide text-foreground/40">
+      <div className="flex h-full items-center justify-center p-8 text-sm font-bold tracking-wide text-muted">
         加载历史…
       </div>
     );
@@ -79,7 +82,8 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="relative flex min-h-screen h-screen flex-col bg-background text-foreground">
+      <ClayBackdrop />
       <Header onNewProject={onNewProject} />
       <PhaseBar
         current={detail?.state.phase ?? null}
