@@ -1,15 +1,16 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
-import { SHADOW_LG } from "@/lib/bauhaus"
+import { CLAY_CARD, CLAY_CARD_HOVER } from "@/lib/clay"
 
 function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card"
       className={cn(
-        "flex flex-col gap-6 rounded-none border-4 border-foreground bg-white py-8 text-card-foreground",
-        SHADOW_LG,
+        "relative overflow-hidden flex flex-col gap-6 py-8 text-foreground",
+        CLAY_CARD,
+        CLAY_CARD_HOVER,
         className
       )}
       {...props}
@@ -34,7 +35,8 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn("font-black uppercase tracking-tight leading-none", className)}
+      className={cn("font-extrabold tracking-tight leading-none", className)}
+      style={{ fontFamily: "Nunito, sans-serif" }}
       {...props}
     />
   )

@@ -3,97 +3,98 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Bauhaus design tokens.
+ * Claymorphism design tokens.
  * shadcn/ui components reference --background / --foreground / --border / --ring /
- * --primary etc. We remap ALL of them to Bauhaus values so no zinc/violet defaults
- * leak through. --radius is forced to 0 so any leftover rounded-* collapses to square.
+ * --primary etc. We remap ALL of them to clay values so no zinc/Bauhaus defaults
+ * leak through. --border is transparent (clay has no hard borders), --radius is 20px.
  */
 :root {
-  --radius: 0px;
+  --radius: 20px;
 
-  --background: #f0f0f0;
-  --foreground: #121212;
+  --background: #F4F1FA;
+  --foreground: #332F3A;
   --card: #ffffff;
-  --card-foreground: #121212;
+  --card-foreground: #332F3A;
   --popover: #ffffff;
-  --popover-foreground: #121212;
-  --primary: #121212;
+  --popover-foreground: #332F3A;
+  --primary: #7C3AED;
   --primary-foreground: #ffffff;
-  --secondary: #e0e0e0;
-  --secondary-foreground: #121212;
-  --muted: #e0e0e0;
-  --muted-foreground: #4a4a4a;
-  --accent: #f0c020;
-  --accent-foreground: #121212;
-  --destructive: #d02020;
-  --border: #121212;
-  --input: #121212;
-  --ring: #121212;
-  --chart-1: #d02020;
-  --chart-2: #1040c0;
-  --chart-3: #f0c020;
-  --chart-4: #121212;
-  --chart-5: #4a4a4a;
-  --sidebar: #f0f0f0;
-  --sidebar-foreground: #121212;
-  --sidebar-primary: #121212;
+  --secondary: #EFEBF5;
+  --secondary-foreground: #332F3A;
+  --muted: #EFEBF5;
+  --muted-foreground: #635F69;
+  --accent: #7C3AED;
+  --accent-foreground: #ffffff;
+  --destructive: #DB2777;
+  --border: transparent;
+  --input: #EFEBF5;
+  --ring: #7C3AED;
+  --chart-1: #7C3AED;
+  --chart-2: #DB2777;
+  --chart-3: #0EA5E9;
+  --chart-4: #10B981;
+  --chart-5: #F59E0B;
+  --sidebar: #EFEBF5;
+  --sidebar-foreground: #332F3A;
+  --sidebar-primary: #7C3AED;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f0c020;
-  --sidebar-accent-foreground: #121212;
-  --sidebar-border: #121212;
-  --sidebar-ring: #121212;
-
-  /* Bauhaus primaries (also exposed as Tailwind tokens below) */
-  --bauhaus-red: #d02020;
-  --bauhaus-blue: #1040c0;
-  --bauhaus-yellow: #f0c020;
+  --sidebar-accent: #DB2777;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: transparent;
+  --sidebar-ring: #7C3AED;
 }
 
-/* Bauhaus is a single light scheme; keep dark identical so nothing inverts. */
+/* Claymorphism is a single light scheme; keep dark identical so nothing inverts. */
 .dark {
-  --background: #f0f0f0;
-  --foreground: #121212;
+  --background: #F4F1FA;
+  --foreground: #332F3A;
   --card: #ffffff;
-  --card-foreground: #121212;
+  --card-foreground: #332F3A;
   --popover: #ffffff;
-  --popover-foreground: #121212;
-  --primary: #121212;
+  --popover-foreground: #332F3A;
+  --primary: #7C3AED;
   --primary-foreground: #ffffff;
-  --secondary: #e0e0e0;
-  --secondary-foreground: #121212;
-  --muted: #e0e0e0;
-  --muted-foreground: #4a4a4a;
-  --accent: #f0c020;
-  --accent-foreground: #121212;
-  --destructive: #d02020;
-  --border: #121212;
-  --input: #121212;
-  --ring: #121212;
-  --chart-1: #d02020;
-  --chart-2: #1040c0;
-  --chart-3: #f0c020;
-  --chart-4: #121212;
-  --chart-5: #4a4a4a;
-  --sidebar: #f0f0f0;
-  --sidebar-foreground: #121212;
-  --sidebar-primary: #121212;
+  --secondary: #EFEBF5;
+  --secondary-foreground: #332F3A;
+  --muted: #EFEBF5;
+  --muted-foreground: #635F69;
+  --accent: #7C3AED;
+  --accent-foreground: #ffffff;
+  --destructive: #DB2777;
+  --border: transparent;
+  --input: #EFEBF5;
+  --ring: #7C3AED;
+  --chart-1: #7C3AED;
+  --chart-2: #DB2777;
+  --chart-3: #0EA5E9;
+  --chart-4: #10B981;
+  --chart-5: #F59E0B;
+  --sidebar: #EFEBF5;
+  --sidebar-foreground: #332F3A;
+  --sidebar-primary: #7C3AED;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f0c020;
-  --sidebar-accent-foreground: #121212;
-  --sidebar-border: #121212;
-  --sidebar-ring: #121212;
+  --sidebar-accent: #DB2777;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: transparent;
+  --sidebar-ring: #7C3AED;
 }
 
 @theme {
-  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Nunito", ui-sans-serif, system-ui, sans-serif;
 
-  --radius-sm: 0px;
-  --radius-md: 0px;
-  --radius-lg: 0px;
-  --radius-xl: 0px;
+  --color-background: #F4F1FA;
+  --color-foreground: #332F3A;
+  --color-muted: #635F69;
+  --color-clay-accent: #7C3AED;
+  --color-clay-accent-alt: #DB2777;
+  --color-clay-sky: #0EA5E9;
+  --color-clay-emerald: #10B981;
+  --color-clay-amber: #F59E0B;
+  --color-clay-surface: #EFEBF5;
+  --radius: 20px;
 
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  /* shadcn token surfaces mapped to clay values */
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -102,7 +103,6 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
@@ -123,22 +123,34 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-
-  /* Bauhaus palette as first-class Tailwind colors:
-     bg-bauhaus-red, text-bauhaus-blue, bg-bauhaus-yellow, ... */
-  --color-bauhaus-red: #d02020;
-  --color-bauhaus-blue: #1040c0;
-  --color-bauhaus-yellow: #f0c020;
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
   body {
-    background: #f0f0f0;
-    color: #121212;
+    background: #F4F1FA;
+    color: #332F3A;
     font-family: var(--font-sans);
-    @apply font-medium;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
   }
 }
+
+@layer utilities {
+  .shadow-clayCard { box-shadow: 16px 16px 32px rgba(160,150,180,0.2), -10px -10px 24px rgba(255,255,255,0.9), inset 6px 6px 12px rgba(139,92,246,0.03), inset -6px -6px 12px rgba(255,255,255,1); }
+  .shadow-clayCardHover { box-shadow: 22px 22px 44px rgba(160,150,180,0.28), -12px -12px 28px rgba(255,255,255,0.95), inset 6px 6px 12px rgba(139,92,246,0.03), inset -6px -6px 12px rgba(255,255,255,1); }
+  .shadow-clayButton { box-shadow: 12px 12px 24px rgba(139,92,246,0.3), -8px -8px 16px rgba(255,255,255,0.4), inset 4px 4px 8px rgba(255,255,255,0.4), inset -4px -4px 8px rgba(0,0,0,0.1); }
+  .shadow-clayButtonHover { box-shadow: 16px 16px 32px rgba(139,92,246,0.4), -10px -10px 20px rgba(255,255,255,0.5), inset 4px 4px 8px rgba(255,255,255,0.4), inset -4px -4px 8px rgba(0,0,0,0.1); }
+  .shadow-clayPressed { box-shadow: inset 10px 10px 20px #d9d4e3, inset -10px -10px 20px #ffffff; }
+  .shadow-claySurface { box-shadow: 30px 30px 60px #cdc6d9, -30px -30px 60px #ffffff, inset 10px 10px 20px rgba(139,92,246,0.05), inset -10px -10px 20px rgba(255,255,255,0.8); }
+  .animate-clay-float { animation: clay-float 8s ease-in-out infinite; }
+  .animate-clay-float-delayed { animation: clay-float-delayed 10s ease-in-out infinite; }
+  .animate-clay-float-slow { animation: clay-float-slow 12s ease-in-out infinite; }
+  .animation-delay-2000 { animation-delay: 2s; }
+  .animation-delay-4000 { animation-delay: 4s; }
+}
+
+@keyframes clay-float { 0%,100%{transform:translateY(0) rotate(0)} 50%{transform:translateY(-20px) rotate(2deg)} }
+@keyframes clay-float-delayed { 0%,100%{transform:translateY(0) rotate(0)} 50%{transform:translateY(-15px) rotate(-2deg)} }
+@keyframes clay-float-slow { 0%,100%{transform:translateY(0) rotate(0)} 50%{transform:translateY(-30px) rotate(5deg)} }
+@media (prefers-reduced-motion: reduce) { .animate-clay-float,.animate-clay-float-delayed,.animate-clay-float-slow{animation:none} }
