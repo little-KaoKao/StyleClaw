@@ -9,9 +9,11 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { NewProjectModal } from "@/components/modals/NewProjectModal";
 import { SelectModelModal } from "@/components/modals/SelectModelModal";
 import { AddRefsModal } from "@/components/modals/AddRefsModal";
+import { HistoryView } from "@/components/history/HistoryView";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useProject } from "@/hooks/useProject";
+import { useHistory } from "@/hooks/useHistory";
 import { useAppStore } from "@/store/app-store";
 
 function EmptyState({ onNewProject }: { onNewProject: () => void }) {
@@ -40,7 +42,10 @@ function EmptyState({ onNewProject }: { onNewProject: () => void }) {
 
 export default function App() {
   const currentProject = useAppStore((s) => s.currentProject);
+  const viewing = useAppStore((s) => s.viewing);
+  const setViewing = useAppStore((s) => s.setViewing);
   const { detail } = useProject();
+  const { history, refresh: refreshHistory } = useHistory();
 
   // Confirm-action modals (Task 10).
   const [showNew, setShowNew] = useState(false);
@@ -49,21 +54,39 @@ export default function App() {
   const [showSelectModel, setShowSelectModel] = useState(false);
   const [showAddRefs, setShowAddRefs] = useState(false);
 
+  let mainContent: React.ReactNode;
+  if (!currentProject) {
+    mainContent = <EmptyState onNewProject={onNewProject} />;
+  } else if (viewing) {
+    mainContent = history ? (
+      <HistoryView
+        viewing={viewing}
+        history={history}
+        onHistoryChange={refreshHistory}
+      />
+    ) : (
+      <div className="flex h-full items-center justify-center p-8 text-sm font-bold uppercase tracking-wide text-foreground/40">
+        加载历史…
+      </div>
+    );
+  } else {
+    mainContent = (
+      <PhasePanel
+        onSelectModel={() => setShowSelectModel(true)}
+        onAddRefs={() => setShowAddRefs(true)}
+      />
+    );
+  }
+
   return (
     <div className="flex h-screen flex-col">
       <Header onNewProject={onNewProject} />
-      <PhaseBar current={detail?.state.phase ?? null} />
+      <PhaseBar
+        current={detail?.state.phase ?? null}
+        onSelectPhase={currentProject ? (phase) => setViewing({ phase }) : undefined}
+      />
       <AppShell
-        main={
-          currentProject ? (
-            <PhasePanel
-              onSelectModel={() => setShowSelectModel(true)}
-              onAddRefs={() => setShowAddRefs(true)}
-            />
-          ) : (
-            <EmptyState onNewProject={onNewProject} />
-          )
-        }
+        main={mainContent}
         chat={currentProject ? <ChatPanel key={currentProject} /> : null}
       />
 

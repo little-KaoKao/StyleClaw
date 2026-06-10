@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Gallery, ProjectDetail, WsEvent } from "@/lib/types";
+import type { Gallery, ProjectDetail, ViewSlice, WsEvent } from "@/lib/types";
 
 interface AppState {
   currentProject: string | null;
@@ -10,6 +10,9 @@ interface AppState {
 
   gallery: Gallery | null;
   setGallery: (g: Gallery | null) => void;
+
+  viewing: ViewSlice | null;
+  setViewing: (v: ViewSlice | null) => void;
 
   runId: string | null;
   runStatus: "idle" | "running" | "done" | "error";
@@ -22,13 +25,17 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set) => ({
   currentProject: null,
-  setCurrentProject: (name) => set({ currentProject: name, detail: null, gallery: null }),
+  setCurrentProject: (name) =>
+    set({ currentProject: name, detail: null, gallery: null, viewing: null }),
 
   detail: null,
   setDetail: (d) => set({ detail: d }),
 
   gallery: null,
   setGallery: (g) => set({ gallery: g }),
+
+  viewing: null,
+  setViewing: (v) => set({ viewing: v }),
 
   runId: null,
   runStatus: "idle",
