@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from styleclaw.orchestrator.suggestions import suggest_next_steps
@@ -44,12 +44,29 @@ async def project_detail(name: str) -> dict:
     }
 
 
-@router.get("/{name}/gallery")
-async def project_gallery(name: str) -> dict:
+@router.get("/{name}/history")
+async def project_history(name: str) -> dict:
+    from styleclaw.web.history import build_history
     try:
-        return build_gallery(name)
+        return build_history(name)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"project '{name}' not found")
+
+
+@router.get("/{name}/gallery")
+async def project_gallery(
+    name: str,
+    phase: str | None = Query(None),
+    pass_: int | None = Query(None, alias="pass"),
+    round_: int | None = Query(None, alias="round"),
+    batch: int | None = Query(None),
+) -> dict:
+    try:
+        return build_gallery(name, phase=phase, pass_num=pass_, round_num=round_, batch_num=batch)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"project '{name}' not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 media_router = APIRouter(prefix="/media", tags=["media"])

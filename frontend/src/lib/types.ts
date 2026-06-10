@@ -43,12 +43,29 @@ export interface GalleryGroup {
   label: string;
   images: string[];
   scores: Record<string, number> | null;
+  caption?: string | null;
 }
 
 export interface Gallery {
   phase: Phase;
+  trigger?: string | null;
   ref_images: string[];
   groups: GalleryGroup[];
+}
+
+export interface History {
+  model_select: { passes: number[] };
+  style_refine: { passes: Record<string, number[]> };
+  batch_t2i: { batches: number[] };
+  batch_i2i: { batches: number[] };
+  current: { phase: Phase; pass: number; round: number; batch: number };
+}
+
+export interface ViewSlice {
+  phase: Phase;
+  pass?: number;
+  round?: number;
+  batch?: number;
 }
 
 export interface ActionStep {

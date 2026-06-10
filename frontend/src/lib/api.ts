@@ -2,6 +2,7 @@ import type {
   ActionPlan,
   ActionStep,
   Gallery,
+  History,
   ProjectDetail,
   ProjectSummary,
   RunResponse,
@@ -30,8 +31,33 @@ export async function getProject(name: string): Promise<ProjectDetail> {
   return json(`/api/projects/${name}`);
 }
 
-export async function getGallery(name: string): Promise<Gallery> {
-  return json(`/api/projects/${name}/gallery`);
+export async function getGallery(
+  name: string,
+  params?: { phase?: string; pass?: number; round?: number; batch?: number }
+): Promise<Gallery> {
+  const qs = new URLSearchParams();
+  if (params?.phase) qs.set("phase", params.phase);
+  if (params?.pass != null) qs.set("pass", String(params.pass));
+  if (params?.round != null) qs.set("round", String(params.round));
+  if (params?.batch != null) qs.set("batch", String(params.batch));
+  const q = qs.toString();
+  return json(`/api/projects/${name}/gallery${q ? "?" + q : ""}`);
+}
+
+export async function getHistory(name: string): Promise<History> {
+  return json(`/api/projects/${name}/history`);
+}
+
+export async function rollback(
+  name: string,
+  to: string,
+  round?: number
+): Promise<{ ok: boolean; message: string; data: unknown }> {
+  return json(`/api/projects/${name}/rollback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to, round }),
+  });
 }
 
 // --- Runs ---

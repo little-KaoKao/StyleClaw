@@ -24,21 +24,25 @@ export function BatchI2IPanel(panel: PanelProps) {
           />
           <ActionButton
             label="轮询"
+            variant="secondary"
             disabled={running}
             onClick={makeRunHandler(run, "poll")}
           />
           <ActionButton
             label="生成报告"
+            variant="secondary"
             disabled={running}
             onClick={makeRunHandler(run, "report")}
           />
           <ActionButton
             label="标记完成"
+            variant="default"
             disabled={running}
             onClick={makeRunHandler(run, "approve", { target: "completed" })}
           />
           <ActionButton
             label="返回 T2I"
+            variant="ghost"
             disabled={running}
             onClick={makeRunHandler(run, "back-to-t2i")}
           />

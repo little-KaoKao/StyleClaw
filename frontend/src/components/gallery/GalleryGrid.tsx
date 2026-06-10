@@ -6,91 +6,133 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScoreCard } from "@/components/gallery/ScoreCard";
+import { ORB_GRADIENTS } from "@/lib/clay";
 import type { GalleryGroup } from "@/lib/types";
 
 interface GalleryGridProps {
   groups: GalleryGroup[];
   refImages?: string[];
+  trigger?: string | null;
 }
 
-export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
+export function GalleryGrid({ groups, refImages, trigger }: GalleryGridProps) {
   // One controlled lightbox at grid level, driven by the selected image src.
   const [selectedSrc, setSelectedSrc] = useState<string | null>(null);
 
   const hasRefs = !!refImages && refImages.length > 0;
 
-  if (groups.length === 0 && !hasRefs) {
+  if (groups.length === 0 && !hasRefs && !trigger) {
     return (
-      <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+      <div className="flex items-center justify-center rounded-[24px] py-12 font-bold text-muted">
         还没有生成结果
       </div>
     );
   }
 
+  // Adaptive density: model/refine groups carry several images each (compare
+  // side-by-side → fewer, wider cards); batch cases carry 1 image each (pack
+  // many cards per row to use the full width instead of one column).
+  const maxImgs = groups.reduce((m, g) => Math.max(m, g.images.length), 0);
+  const gridCols =
+    maxImgs >= 3
+      ? "grid-cols-1 xl:grid-cols-2"
+      : "grid-cols-2 md:grid-cols-3 xl:grid-cols-4";
+  const innerCols = maxImgs >= 3 ? "grid-cols-2" : "grid-cols-1";
+
+  const openLightbox = (src: string) => setSelectedSrc(src);
+
   return (
     <div className="flex flex-col gap-6">
-      {hasRefs && (
+      {trigger && (
         <section className="flex flex-col gap-2">
-          <h3 className="text-xs font-medium tracking-wide text-muted-foreground">
+          <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted">
+            <span className="h-4 w-4 shrink-0 rounded-full bg-gradient-to-br from-purple-400 to-purple-600" />
+            触发词 · Trigger
+          </h3>
+          <div className="rounded-[20px] bg-white/70 p-4 shadow-clayCard backdrop-blur-xl">
+            <p className="select-text whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
+              {trigger}
+            </p>
+          </div>
+        </section>
+      )}
+
+      {hasRefs && (
+        <section className="flex flex-col gap-3">
+          <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted">
+            <span className="h-4 w-4 shrink-0 rounded-full bg-gradient-to-br from-purple-400 to-purple-600" />
             参考图
           </h3>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {refImages!.map((src) => (
               <button
                 key={src}
                 type="button"
-                onClick={() => setSelectedSrc(src)}
-                className="overflow-hidden rounded-md border transition-opacity hover:opacity-80"
+                onClick={() => openLightbox(src)}
+                className="overflow-hidden rounded-2xl bg-clay-surface shadow-clayCard transition-all duration-300 hover:-translate-y-0.5 hover:shadow-clayCardHover"
               >
-                <img
-                  src={src}
-                  alt="参考图"
-                  loading="lazy"
-                  className="size-20 object-cover"
-                />
+                <img src={src} alt="参考图" loading="lazy" className="size-20 object-cover" />
               </button>
             ))}
           </div>
         </section>
       )}
 
-      {groups.map((group) => (
-        <section key={group.label} className="flex flex-col gap-2">
-          <div className="flex items-start justify-between gap-3">
-            <h3 className="font-mono text-sm font-medium text-zinc-900">
-              {group.label}
-            </h3>
-          </div>
-
-          {group.scores && (
-            <div className="max-w-xs">
-              <ScoreCard scores={group.scores} />
+      <div className={`grid gap-4 ${gridCols}`}>
+        {groups.map((group, groupIndex) => (
+          <section
+            key={group.label}
+            className="flex flex-col gap-2 rounded-[24px] bg-white/70 p-4 shadow-clayCard backdrop-blur-xl transition-all duration-500 hover:-translate-y-1 hover:shadow-clayCardHover"
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className={`h-4 w-4 shrink-0 rounded-full bg-gradient-to-br ${
+                  ORB_GRADIENTS[groupIndex % ORB_GRADIENTS.length]
+                }`}
+              />
+              <h3
+                className="truncate text-sm font-bold text-foreground"
+                style={{ fontFamily: "Nunito, sans-serif" }}
+                title={group.label}
+              >
+                {group.label}
+              </h3>
             </div>
-          )}
 
-          {group.images.length === 0 ? (
-            <p className="text-xs text-muted-foreground">暂无图片</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-              {group.images.map((src) => (
-                <button
-                  key={src}
-                  type="button"
-                  onClick={() => setSelectedSrc(src)}
-                  className="overflow-hidden rounded-md border bg-zinc-50 transition-opacity hover:opacity-80"
-                >
-                  <img
-                    src={src}
-                    alt={group.label}
-                    loading="lazy"
-                    className="aspect-square w-full object-cover"
-                  />
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      ))}
+            {group.caption && (
+              <p className="whitespace-pre-wrap break-words text-xs leading-snug text-muted">
+                {group.caption}
+              </p>
+            )}
+
+            {group.scores && <ScoreCard scores={group.scores} />}
+
+            {group.images.length === 0 ? (
+              <p className="py-4 text-center text-xs font-bold text-muted">
+                暂无图片
+              </p>
+            ) : (
+              <div className={`grid gap-2 ${innerCols}`}>
+                {group.images.map((src) => (
+                  <button
+                    key={src}
+                    type="button"
+                    onClick={() => openLightbox(src)}
+                    className="overflow-hidden rounded-[20px] bg-clay-surface shadow-clayCard transition-all duration-300 hover:-translate-y-0.5 hover:shadow-clayCardHover"
+                  >
+                    <img
+                      src={src}
+                      alt={group.label}
+                      loading="lazy"
+                      className="h-auto w-full object-contain"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        ))}
+      </div>
 
       <Dialog
         open={!!selectedSrc}
@@ -104,7 +146,7 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
             <img
               src={selectedSrc}
               alt="预览"
-              className="max-h-[80vh] w-full rounded-md object-contain"
+              className="max-h-[80vh] w-full rounded-[24px] object-contain"
             />
           )}
         </DialogContent>

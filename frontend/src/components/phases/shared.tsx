@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { RunProgress } from "@/components/run/RunProgress";
@@ -27,13 +27,14 @@ interface ActionButtonProps {
   label: string;
   onClick: () => void;
   disabled?: boolean;
-  variant?: "default" | "outline" | "secondary";
+  /** Picks up the restyled Button variants (red / blue / yellow / outline / ghost). */
+  variant?: ComponentProps<typeof Button>["variant"];
   icon?: ReactNode;
 }
 
 /**
  * A single action button. Disabled while a run is in flight so the user can't
- * stack overlapping runs.
+ * stack overlapping runs. Icons auto-size to h-5 w-5 via the Button primitive.
  */
 export function ActionButton({
   label,
@@ -43,7 +44,7 @@ export function ActionButton({
   icon,
 }: ActionButtonProps) {
   return (
-    <Button size="sm" variant={variant} onClick={onClick} disabled={disabled}>
+    <Button size="default" variant={variant} onClick={onClick} disabled={disabled}>
       {icon}
       {label}
     </Button>
@@ -87,25 +88,52 @@ export function PanelShell({
   panel,
 }: PanelShellProps) {
   const { gallery, runStatus, runEvents, llmBuffer, refresh, resetRun } = panel;
+  const hasRun = runStatus !== "idle" || runEvents.length > 0;
   return (
     <div className="space-y-6 p-6">
-      <header className="space-y-1">
-        <h2 className="text-base font-semibold text-zinc-900">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
+      <header className="space-y-2">
+        <h2
+          className="text-3xl font-black tracking-tight text-foreground md:text-4xl"
+          style={{ fontFamily: "Nunito, sans-serif" }}
+        >
+          {title}
+        </h2>
+        <p className="font-medium text-muted">{description}</p>
       </header>
 
       {extra}
 
-      <div className="flex flex-wrap gap-2">{actions}</div>
+      <section className="space-y-2">
+        <SectionLabel>操作 · Actions</SectionLabel>
+        <div className="flex flex-wrap items-center gap-3">{actions}</div>
+      </section>
 
-      <RunProgress events={runEvents} llmBuffer={llmBuffer} status={runStatus} />
+      {hasRun && (
+        <section className="space-y-2">
+          <SectionLabel>运行状态 · Status</SectionLabel>
+          <RunProgress events={runEvents} llmBuffer={llmBuffer} status={runStatus} />
+          <RunControls status={runStatus} onRefresh={refresh} onReset={resetRun} />
+        </section>
+      )}
 
-      <RunControls status={runStatus} onRefresh={refresh} onReset={resetRun} />
+      <section className="space-y-2">
+        <SectionLabel>结果 · Results</SectionLabel>
+        <GalleryGrid
+          groups={gallery?.groups ?? []}
+          refImages={gallery?.ref_images}
+          trigger={gallery?.trigger}
+        />
+      </section>
+    </div>
+  );
+}
 
-      <GalleryGrid
-        groups={gallery?.groups ?? []}
-        refImages={gallery?.ref_images}
-      />
+/** A small divider label that makes each region's purpose unambiguous. */
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 pb-1 text-xs font-bold uppercase tracking-widest text-muted">
+      <span className="h-2 w-2 shrink-0 rounded-full bg-gradient-to-br from-[#A78BFA] to-[#7C3AED]" />
+      {children}
     </div>
   );
 }

@@ -52,7 +52,7 @@ export function PhasePanel({ onSelectModel, onAddRefs }: PhasePanelProps) {
 
   if (!detail) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center p-8 text-sm text-muted">
         加载中…
       </div>
     );

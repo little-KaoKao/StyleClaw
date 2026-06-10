@@ -30,7 +30,7 @@ export function RunControls({
 
   if (status === "error") {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         {onReset && (
           <Button size="sm" variant="destructive" onClick={() => onReset()}>
             <RotateCcw />
@@ -47,14 +47,14 @@ export function RunControls({
 
   // status === "done"
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3">
       {onNext && (
-        <Button size="sm" onClick={() => onNext()}>
+        <Button size="sm" variant="primary" onClick={() => onNext()}>
           {nextLabel ?? "继续"}
           <ArrowRight />
         </Button>
       )}
-      <Button size="sm" variant="outline" onClick={onRefresh}>
+      <Button size="sm" variant="secondary" onClick={onRefresh}>
         <RefreshCw />
         刷新数据
       </Button>

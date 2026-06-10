@@ -9,9 +9,12 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { NewProjectModal } from "@/components/modals/NewProjectModal";
 import { SelectModelModal } from "@/components/modals/SelectModelModal";
 import { AddRefsModal } from "@/components/modals/AddRefsModal";
+import { HistoryView } from "@/components/history/HistoryView";
+import { ClayBackdrop } from "@/components/layout/ClayBackdrop";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useProject } from "@/hooks/useProject";
+import { useHistory } from "@/hooks/useHistory";
 import { useAppStore } from "@/store/app-store";
 
 function EmptyState({ onNewProject }: { onNewProject: () => void }) {
@@ -19,12 +22,14 @@ function EmptyState({ onNewProject }: { onNewProject: () => void }) {
     <div className="flex h-full items-center justify-center p-8">
       <Card className="w-full max-w-sm text-center">
         <CardContent className="flex flex-col items-center gap-4 py-4">
-          <div className="flex size-12 items-center justify-center rounded-full bg-zinc-100">
-            <FolderPlus className="size-6 text-zinc-500" />
+          <div className="flex size-14 items-center justify-center rounded-full bg-gradient-to-br from-[#A78BFA] to-[#7C3AED] shadow-clayButton">
+            <FolderPlus className="size-6 text-white" />
           </div>
           <div className="space-y-1">
-            <p className="font-medium">还没有项目</p>
-            <p className="text-sm text-muted-foreground">
+            <p className="font-bold text-foreground" style={{ fontFamily: "Nunito, sans-serif" }}>
+              还没有项目
+            </p>
+            <p className="text-sm text-muted">
               从一组参考图新建项目，开始风格探索。
             </p>
           </div>
@@ -40,7 +45,10 @@ function EmptyState({ onNewProject }: { onNewProject: () => void }) {
 
 export default function App() {
   const currentProject = useAppStore((s) => s.currentProject);
+  const viewing = useAppStore((s) => s.viewing);
+  const setViewing = useAppStore((s) => s.setViewing);
   const { detail } = useProject();
+  const { history, refresh: refreshHistory } = useHistory();
 
   // Confirm-action modals (Task 10).
   const [showNew, setShowNew] = useState(false);
@@ -49,21 +57,40 @@ export default function App() {
   const [showSelectModel, setShowSelectModel] = useState(false);
   const [showAddRefs, setShowAddRefs] = useState(false);
 
+  let mainContent: React.ReactNode;
+  if (!currentProject) {
+    mainContent = <EmptyState onNewProject={onNewProject} />;
+  } else if (viewing) {
+    mainContent = history ? (
+      <HistoryView
+        viewing={viewing}
+        history={history}
+        onHistoryChange={refreshHistory}
+      />
+    ) : (
+      <div className="flex h-full items-center justify-center p-8 text-sm font-bold tracking-wide text-muted">
+        加载历史…
+      </div>
+    );
+  } else {
+    mainContent = (
+      <PhasePanel
+        onSelectModel={() => setShowSelectModel(true)}
+        onAddRefs={() => setShowAddRefs(true)}
+      />
+    );
+  }
+
   return (
-    <div className="flex h-screen flex-col">
+    <div className="relative flex min-h-screen h-screen flex-col bg-background text-foreground">
+      <ClayBackdrop />
       <Header onNewProject={onNewProject} />
-      <PhaseBar current={detail?.state.phase ?? null} />
+      <PhaseBar
+        current={detail?.state.phase ?? null}
+        onSelectPhase={currentProject ? (phase) => setViewing({ phase }) : undefined}
+      />
       <AppShell
-        main={
-          currentProject ? (
-            <PhasePanel
-              onSelectModel={() => setShowSelectModel(true)}
-              onAddRefs={() => setShowAddRefs(true)}
-            />
-          ) : (
-            <EmptyState onNewProject={onNewProject} />
-          )
-        }
+        main={mainContent}
         chat={currentProject ? <ChatPanel key={currentProject} /> : null}
       />
 

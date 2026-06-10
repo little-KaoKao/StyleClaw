@@ -24,21 +24,25 @@ export function BatchT2IPanel(panel: PanelProps) {
           />
           <ActionButton
             label="提交批量生成"
+            variant="secondary"
             disabled={running}
             onClick={makeRunHandler(run, "batch-submit")}
           />
           <ActionButton
             label="轮询"
+            variant="secondary"
             disabled={running}
             onClick={makeRunHandler(run, "poll")}
           />
           <ActionButton
             label="生成报告"
+            variant="secondary"
             disabled={running}
             onClick={makeRunHandler(run, "report")}
           />
           <ActionButton
             label="添加 i2i 参考图"
+            variant="outline"
             disabled={running}
             onClick={() => onAddRefs?.()}
           />
