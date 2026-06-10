@@ -12,15 +12,16 @@ import type { GalleryGroup } from "@/lib/types";
 interface GalleryGridProps {
   groups: GalleryGroup[];
   refImages?: string[];
+  trigger?: string | null;
 }
 
-export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
+export function GalleryGrid({ groups, refImages, trigger }: GalleryGridProps) {
   // One controlled lightbox at grid level, driven by the selected image src.
   const [selectedSrc, setSelectedSrc] = useState<string | null>(null);
 
   const hasRefs = !!refImages && refImages.length > 0;
 
-  if (groups.length === 0 && !hasRefs) {
+  if (groups.length === 0 && !hasRefs && !trigger) {
     return (
       <div className="flex items-center justify-center rounded-[24px] py-12 font-bold text-muted">
         还没有生成结果
@@ -42,6 +43,20 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
 
   return (
     <div className="flex flex-col gap-6">
+      {trigger && (
+        <section className="flex flex-col gap-2">
+          <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted">
+            <span className="h-4 w-4 shrink-0 rounded-full bg-gradient-to-br from-purple-400 to-purple-600" />
+            触发词 · Trigger
+          </h3>
+          <div className="rounded-[20px] bg-white/70 p-4 shadow-clayCard backdrop-blur-xl">
+            <p className="select-text whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
+              {trigger}
+            </p>
+          </div>
+        </section>
+      )}
+
       {hasRefs && (
         <section className="flex flex-col gap-3">
           <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted">
@@ -84,12 +99,9 @@ export function GalleryGrid({ groups, refImages }: GalleryGridProps) {
               </h3>
             </div>
 
-            {group.prompt && (
-              <p
-                className="line-clamp-3 text-xs leading-snug text-muted"
-                title={group.prompt}
-              >
-                {group.prompt}
+            {group.caption && (
+              <p className="whitespace-pre-wrap break-words text-xs leading-snug text-muted">
+                {group.caption}
               </p>
             )}
 

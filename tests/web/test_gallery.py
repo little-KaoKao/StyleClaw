@@ -169,3 +169,6 @@ def test_gallery_batch_t2i_lists_case_images(data_root):
     gallery = build_gallery("b")
     assert gallery["phase"] == "BATCH_T2I"
     assert gallery["groups"][0]["images"] == ["/media/b/batch-t2i/batch-001/results/case-001/output-001.png"]
+    # Trigger surfaced once at top; per-group caption carries only the varying part.
+    assert gallery["trigger"] == "trig"
+    assert gallery["groups"][0]["caption"] == "d"

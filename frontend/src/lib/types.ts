@@ -43,11 +43,12 @@ export interface GalleryGroup {
   label: string;
   images: string[];
   scores: Record<string, number> | null;
-  prompt?: string | null;
+  caption?: string | null;
 }
 
 export interface Gallery {
   phase: Phase;
+  trigger?: string | null;
   ref_images: string[];
   groups: GalleryGroup[];
 }

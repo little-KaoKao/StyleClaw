@@ -121,6 +121,7 @@ export function PanelShell({
         <GalleryGrid
           groups={gallery?.groups ?? []}
           refImages={gallery?.ref_images}
+          trigger={gallery?.trigger}
         />
       </section>
     </div>

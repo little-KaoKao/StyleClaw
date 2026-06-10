@@ -185,7 +185,7 @@ export function HistoryView({ viewing, history, onHistoryChange }: HistoryViewPr
 
       {concrete ? (
         gallery ? (
-          <GalleryGrid groups={gallery.groups} refImages={gallery.ref_images} />
+          <GalleryGrid groups={gallery.groups} refImages={gallery.ref_images} trigger={gallery.trigger} />
         ) : (
           <p className="text-sm font-bold text-muted">加载图库…</p>
         )
