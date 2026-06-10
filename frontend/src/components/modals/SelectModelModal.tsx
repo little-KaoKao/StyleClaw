@@ -99,8 +99,8 @@ export function SelectModelModal({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">
-              模型 <span className="text-destructive">*</span>
+            <label className="text-sm font-bold uppercase tracking-wider">
+              模型 <span className="text-bauhaus-red">*</span>
             </label>
             <div className="grid grid-cols-2 gap-2">
               {MODELS.map((model) => {
@@ -112,14 +112,14 @@ export function SelectModelModal({
                     disabled={submitting}
                     onClick={() => toggle(model)}
                     className={cn(
-                      "flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm transition-colors disabled:pointer-events-none disabled:opacity-50",
+                      "flex items-center justify-between gap-2 rounded-none border-2 border-foreground px-3 py-2 text-sm font-bold uppercase tracking-wider transition-colors disabled:pointer-events-none disabled:opacity-50",
                       active
-                        ? "border-zinc-900 bg-zinc-900 text-white"
-                        : "hover:bg-accent/50"
+                        ? "bg-bauhaus-blue text-white"
+                        : "bg-white text-foreground hover:bg-muted"
                     )}
                   >
                     <span className="truncate">{model}</span>
-                    {active && <Check className="size-3.5 shrink-0" />}
+                    {active && <Check className="h-5 w-5 shrink-0" />}
                   </button>
                 );
               })}
@@ -127,8 +127,10 @@ export function SelectModelModal({
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">构图方式 variant</label>
-            <div className="space-y-2">
+            <label className="text-sm font-bold uppercase tracking-wider">
+              构图方式 variant
+            </label>
+            <div className="grid grid-cols-2 gap-2">
               {VARIANTS.map((v) => {
                 const active = variant === v.value;
                 return (
@@ -138,23 +140,33 @@ export function SelectModelModal({
                     disabled={submitting}
                     onClick={() => setVariant(v.value)}
                     className={cn(
-                      "flex w-full items-start gap-2 rounded-md border px-3 py-2 text-left transition-colors disabled:pointer-events-none disabled:opacity-50",
-                      active ? "border-zinc-900 bg-accent/50" : "hover:bg-accent/50"
+                      "flex flex-col gap-1 rounded-none border-2 border-foreground px-3 py-2 text-left transition-colors disabled:pointer-events-none disabled:opacity-50",
+                      active
+                        ? "bg-bauhaus-blue text-white"
+                        : "bg-white text-foreground hover:bg-muted"
                     )}
                   >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-current"
+                        )}
+                      >
+                        {active && (
+                          <span className="h-2 w-2 rounded-full bg-current" />
+                        )}
+                      </span>
+                      <span className="text-sm font-bold uppercase tracking-wider">
+                        {v.label}
+                      </span>
+                    </span>
                     <span
                       className={cn(
-                        "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
-                        active ? "border-zinc-900 bg-zinc-900" : "border-zinc-300"
+                        "text-xs font-medium",
+                        active ? "text-white/80" : "text-foreground/70"
                       )}
                     >
-                      {active && <span className="size-1.5 rounded-full bg-white" />}
-                    </span>
-                    <span className="space-y-0.5">
-                      <span className="block text-sm font-medium">{v.label}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {v.hint}
-                      </span>
+                      {v.hint}
                     </span>
                   </button>
                 );
@@ -162,7 +174,11 @@ export function SelectModelModal({
             </div>
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p className="bg-bauhaus-red px-2 py-1 font-bold text-white">
+              {error}
+            </p>
+          )}
         </div>
 
         <DialogFooter>
@@ -173,7 +189,7 @@ export function SelectModelModal({
           >
             取消
           </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
+          <Button variant="red" onClick={handleSubmit} disabled={!canSubmit}>
             {submitting && <Loader2 className="animate-spin" />}
             确认选择
           </Button>

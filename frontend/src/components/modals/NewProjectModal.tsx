@@ -87,8 +87,8 @@ export function NewProjectModal({ open, onOpenChange }: NewProjectModalProps) {
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">
-              项目名 <span className="text-destructive">*</span>
+            <label className="text-sm font-bold uppercase tracking-wider">
+              项目名 <span className="text-bauhaus-red">*</span>
             </label>
             <Input
               value={name}
@@ -99,7 +99,9 @@ export function NewProjectModal({ open, onOpenChange }: NewProjectModalProps) {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">IP 信息</label>
+            <label className="text-sm font-bold uppercase tracking-wider">
+              IP 信息
+            </label>
             <Input
               value={ipInfo}
               onChange={(e) => setIpInfo(e.target.value)}
@@ -109,7 +111,9 @@ export function NewProjectModal({ open, onOpenChange }: NewProjectModalProps) {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">描述</label>
+            <label className="text-sm font-bold uppercase tracking-wider">
+              描述
+            </label>
             <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -119,8 +123,8 @@ export function NewProjectModal({ open, onOpenChange }: NewProjectModalProps) {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">
-              参考图 <span className="text-destructive">*</span>
+            <label className="text-sm font-bold uppercase tracking-wider">
+              参考图 <span className="text-bauhaus-red">*</span>
             </label>
             <Dropzone
               files={files}
@@ -129,7 +133,11 @@ export function NewProjectModal({ open, onOpenChange }: NewProjectModalProps) {
             />
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p className="bg-bauhaus-red px-2 py-1 font-bold text-white">
+              {error}
+            </p>
+          )}
         </div>
 
         <DialogFooter>
@@ -140,7 +148,7 @@ export function NewProjectModal({ open, onOpenChange }: NewProjectModalProps) {
           >
             取消
           </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
+          <Button variant="red" onClick={handleSubmit} disabled={!canSubmit}>
             {submitting && <Loader2 className="animate-spin" />}
             创建项目
           </Button>

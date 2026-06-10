@@ -68,7 +68,7 @@ export function ChatPanel() {
 
   if (!currentProject) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center p-8 font-bold uppercase text-foreground/40">
         请先选择或新建项目
       </div>
     );
@@ -76,9 +76,11 @@ export function ChatPanel() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-2 border-b px-4 py-3">
-        <MessageCircle className="size-4 text-zinc-500" />
-        <span className="text-sm font-medium text-zinc-900">助手</span>
+      <header className="flex items-center gap-2 border-b-4 border-foreground px-4 py-3">
+        <MessageCircle className="h-5 w-5 shrink-0 text-foreground" />
+        <span className="font-black uppercase tracking-tight text-foreground">
+          助手
+        </span>
       </header>
 
       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
@@ -118,8 +120,9 @@ export function ChatPanel() {
         <RunProgress events={runEvents} llmBuffer={llmBuffer} status={runStatus} />
       </div>
 
-      <div className="flex items-center gap-2 border-t p-3">
+      <div className="flex items-center gap-2 border-t-4 border-foreground p-3">
         <Input
+          className="flex-1"
           value={intent}
           onChange={(e) => setIntent(e.target.value)}
           onKeyDown={(e) => {
@@ -132,12 +135,13 @@ export function ChatPanel() {
           disabled={disabled}
         />
         <Button
+          variant="red"
           size="icon"
           onClick={onSend}
           disabled={disabled || !intent.trim()}
           aria-label="发送"
         >
-          <Send className="size-4" />
+          <Send className="h-5 w-5" />
         </Button>
       </div>
     </div>

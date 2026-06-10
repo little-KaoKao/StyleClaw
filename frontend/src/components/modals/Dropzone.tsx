@@ -61,18 +61,20 @@ export function Dropzone({ files, onFilesChange, disabled }: DropzoneProps) {
           addFiles(e.dataTransfer.files);
         }}
         className={cn(
-          "flex flex-col items-center justify-center gap-1.5 rounded-md border border-dashed px-4 py-6 text-center transition-colors",
+          "flex flex-col items-center justify-center gap-2 rounded-none border-4 border-dashed border-foreground bg-white p-6 text-center transition-colors",
           disabled
             ? "cursor-not-allowed opacity-60"
-            : "cursor-pointer hover:bg-accent/50",
-          dragging && "border-ring bg-accent/50"
+            : "cursor-pointer hover:bg-muted",
+          dragging && "bg-muted"
         )}
       >
-        <ImagePlus className="size-5 text-zinc-400" />
-        <p className="text-sm">
-          拖拽图片到此，或<span className="text-zinc-900">点击选择</span>
+        <ImagePlus className="h-8 w-8 shrink-0 text-foreground" />
+        <p className="font-bold uppercase tracking-wide">
+          拖拽图片到此，或点击选择
         </p>
-        <p className="text-xs text-muted-foreground">支持多张，仅图片格式</p>
+        <p className="text-xs font-medium text-foreground/60">
+          支持多张，仅图片格式
+        </p>
         <input
           ref={inputRef}
           type="file"
@@ -88,24 +90,24 @@ export function Dropzone({ files, onFilesChange, disabled }: DropzoneProps) {
       </div>
 
       {files.length > 0 && (
-        <ul className="space-y-1">
-          <li className="text-xs text-muted-foreground">
+        <ul className="space-y-1.5">
+          <li className="text-xs font-bold uppercase tracking-wider text-foreground/60">
             已选 {files.length} 张
           </li>
           {files.map((f, i) => (
             <li
               key={`${f.name}-${i}`}
-              className="flex items-center justify-between gap-2 rounded-md bg-zinc-50 px-2 py-1 text-xs"
+              className="flex items-center gap-2 border-2 border-foreground bg-white px-2 py-1 text-xs font-medium"
             >
-              <span className="truncate">{f.name}</span>
+              <span className="flex-1 truncate">{f.name}</span>
               <button
                 type="button"
                 disabled={disabled}
                 onClick={() => removeAt(i)}
-                className="shrink-0 rounded p-0.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 disabled:pointer-events-none"
+                className="shrink-0 text-foreground hover:text-bauhaus-red disabled:pointer-events-none"
                 aria-label={`移除 ${f.name}`}
               >
-                <X className="size-3.5" />
+                <X className="h-5 w-5 shrink-0" />
               </button>
             </li>
           ))}
