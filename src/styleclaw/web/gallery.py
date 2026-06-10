@@ -22,15 +22,27 @@ def _ref_urls(name: str, config) -> list[str]:
     return urls
 
 
-def build_gallery(name: str) -> dict:
-    """Return a JSON-serializable gallery for the project's current phase."""
+def build_gallery(
+    name: str,
+    *,
+    phase: str | None = None,
+    pass_num: int | None = None,
+    round_num: int | None = None,
+    batch_num: int | None = None,
+) -> dict:
+    """Return a JSON-serializable gallery for the requested (or current) slice."""
     state = project_store.load_state(name)
     config = project_store.load_config(name)
     refs = _ref_urls(name, config)
     groups: list[dict] = []
 
-    if state.phase == Phase.MODEL_SELECT:
-        pass_num = state.current_model_select_pass or 1
+    eff_phase = Phase(phase) if phase else state.phase
+    eff_pass = pass_num if pass_num is not None else (state.current_model_select_pass or 1)
+    eff_round = round_num if round_num is not None else state.current_round
+    eff_batch = batch_num if batch_num is not None else state.current_batch
+
+    if eff_phase == Phase.MODEL_SELECT:
+        pass_num = eff_pass
         try:
             evaluation = project_store.load_evaluation(name, pass_num=pass_num)
         except FileNotFoundError:
@@ -66,9 +78,9 @@ def build_gallery(name: str) -> dict:
                 "scores": score_by_key.get(score_key),
             })
 
-    elif state.phase == Phase.STYLE_REFINE:
-        pass_num = state.current_model_select_pass or 1
-        round_num = state.current_round
+    elif eff_phase == Phase.STYLE_REFINE:
+        pass_num = eff_pass
+        round_num = eff_round
         try:
             evaluation = project_store.load_round_evaluation(name, round_num, pass_num=pass_num)
         except FileNotFoundError:
@@ -89,8 +101,8 @@ def build_gallery(name: str) -> dict:
                 "scores": score_by_model.get(mid),
             })
 
-    elif state.phase == Phase.BATCH_T2I:
-        batch_num = state.current_batch
+    elif eff_phase == Phase.BATCH_T2I:
+        batch_num = eff_batch
         try:
             batch_config = project_store.load_batch_config(name, batch_num)
         except FileNotFoundError:
@@ -105,8 +117,8 @@ def build_gallery(name: str) -> dict:
                     "scores": None,
                 })
 
-    elif state.phase == Phase.BATCH_I2I:
-        batch_num = state.current_batch
+    elif eff_phase == Phase.BATCH_I2I:
+        batch_num = eff_batch
         uploads = project_store.load_i2i_uploads(name, batch_num)
         for i, _upload in enumerate(uploads, 1):
             case_id = f"i2i-{i:03d}"
@@ -118,4 +130,11 @@ def build_gallery(name: str) -> dict:
                 "scores": None,
             })
 
-    return {"phase": state.phase.value, "ref_images": refs, "groups": groups}
+    return {
+        "phase": eff_phase.value,
+        "pass": eff_pass,
+        "round": eff_round,
+        "batch": eff_batch,
+        "ref_images": refs,
+        "groups": groups,
+    }

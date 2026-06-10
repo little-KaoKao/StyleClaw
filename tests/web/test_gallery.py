@@ -90,6 +90,64 @@ def test_gallery_model_select_attaches_scores(data_root):
     assert grp["scores"]["total"] == 8.0
 
 
+def test_build_gallery_explicit_pass(data_root):
+    from styleclaw.core.models import (
+        DimensionScores, ModelEvaluation, ModelScore, TaskRecord, TaskStatus,
+    )
+    project_store.create_project(
+        ProjectConfig(name="h", ip_info="anime", ref_images=["refs/ref-001.png"])
+    )
+    # current state points at pass 2, but we'll request pass 1 explicitly
+    project_store.save_state("h", ProjectState(phase=Phase.MODEL_SELECT, current_model_select_pass=2))
+
+    # pass 1 data: model mj-v7
+    rec1 = TaskRecord(task_id="t1", model_id="mj-v7", status=TaskStatus.SUCCESS)
+    project_store.save_task_record("h", "mj-v7", rec1, variant="prompt-sref-male", pass_num=1)
+    d1 = project_store.model_results_dir("h", "mj-v7", variant="prompt-sref-male", pass_num=1)
+    (d1 / "output-001.png").write_bytes(b"\x89PNG")
+    project_store.save_evaluation(
+        "h",
+        ModelEvaluation(evaluations=[ModelScore(model="mj-v7", variant="prompt-sref", total=7.0, scores=DimensionScores(visual_style=7.0))], recommendation="mj-v7"),
+        pass_num=1,
+    )
+
+    # pass 2 data: model niji7
+    rec2 = TaskRecord(task_id="t2", model_id="niji7", status=TaskStatus.SUCCESS)
+    project_store.save_task_record("h", "niji7", rec2, variant="prompt-sref-male", pass_num=2)
+    d2 = project_store.model_results_dir("h", "niji7", variant="prompt-sref-male", pass_num=2)
+    (d2 / "output-001.png").write_bytes(b"\x89PNG")
+
+    g1 = build_gallery("h", phase="MODEL_SELECT", pass_num=1)
+    assert g1["pass"] == 1
+    assert any("mj-v7" in grp["label"] for grp in g1["groups"])
+    assert not any("niji7" in grp["label"] for grp in g1["groups"])
+
+    g2 = build_gallery("h", phase="MODEL_SELECT", pass_num=2)
+    assert g2["pass"] == 2
+    assert any("niji7" in grp["label"] for grp in g2["groups"])
+
+
+def test_gallery_endpoint_with_query_params(client, data_root):
+    project_store.create_project(
+        ProjectConfig(name="h2", ip_info="anime", ref_images=["refs/ref-001.png"])
+    )
+    project_store.save_state("h2", ProjectState(phase=Phase.MODEL_SELECT, current_model_select_pass=1))
+    resp = client.get("/api/projects/h2/gallery?phase=MODEL_SELECT&pass=1")
+    assert resp.status_code == 200
+    assert resp.json()["phase"] == "MODEL_SELECT"
+    assert resp.json()["pass"] == 1
+
+
+def test_gallery_no_params_unchanged(client, data_root):
+    project_store.create_project(
+        ProjectConfig(name="h3", ip_info="anime", ref_images=["refs/ref-001.png"])
+    )
+    project_store.save_state("h3", ProjectState(phase=Phase.INIT))
+    resp = client.get("/api/projects/h3/gallery")
+    assert resp.status_code == 200
+    assert resp.json()["phase"] == "INIT"
+
+
 def test_gallery_batch_t2i_lists_case_images(data_root):
     from styleclaw.core.models import BatchCase, BatchConfig
 
