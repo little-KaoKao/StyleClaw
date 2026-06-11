@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useState } from "react";
-import { MessageCircle, Send } from "lucide-react";
+import { MessageCircle, Send, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import type { ActionStep } from "@/lib/types";
 import { MessageBubble } from "./MessageBubble";
 import { PlanPreview } from "./PlanPreview";
 
-export function ChatPanel() {
+export function ChatPanel({ onCollapse }: { onCollapse?: () => void }) {
   const { messages, pending, send, dismissPlan } = useChat();
   const { refresh } = useProject();
 
@@ -86,6 +86,16 @@ export function ChatPanel() {
         >
           助手
         </span>
+        {onCollapse && (
+          <button
+            type="button"
+            onClick={onCollapse}
+            aria-label="收起助手"
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded-full text-muted transition-all duration-200 hover:bg-clay-accent/10 hover:text-clay-accent"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        )}
       </header>
       <div className="mx-4 h-px bg-clay-surface" />
 

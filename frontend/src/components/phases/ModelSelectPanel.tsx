@@ -42,7 +42,7 @@ export function ModelSelectPanel(panel: PanelProps) {
           />
           <ActionButton
             label="重测模型"
-            variant="ghost"
+            variant="soft"
             disabled={running}
             onClick={makeRunHandler(run, "retest-models")}
           />

@@ -30,11 +30,36 @@ function ClayLogo() {
   );
 }
 
+/** Short Chinese label per phase, for the header status chip. */
+const PHASE_LABELS: Record<string, string> = {
+  INIT: "初始化",
+  MODEL_SELECT: "选模型",
+  STYLE_REFINE: "精炼",
+  BATCH_T2I: "批量 T2I",
+  BATCH_I2I: "批量 I2I",
+  COMPLETED: "完成",
+};
+
+/** "2026-06-11T08:30:00Z" → "06-11 08:30" (best-effort, falls back to raw). */
+function shortTime(iso: string): string {
+  const m = /(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso);
+  return m ? `${m[2]}-${m[3]} ${m[4]}:${m[5]}` : iso;
+}
+
 export function Header({ onNewProject }: HeaderProps) {
   const currentProject = useAppStore((s) => s.currentProject);
   const setCurrentProject = useAppStore((s) => s.setCurrentProject);
 
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+
+  const summary = projects.find((p) => p.name === currentProject) ?? null;
+  const roundOrBatch = summary
+    ? summary.phase === "STYLE_REFINE"
+      ? `轮次 ${summary.current_round}`
+      : summary.phase === "BATCH_T2I" || summary.phase === "BATCH_I2I"
+        ? `批次 ${summary.current_batch}`
+        : null
+    : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +135,18 @@ export function Header({ onNewProject }: HeaderProps) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {summary && (
+        <div className="hidden items-center gap-2 text-xs font-bold text-muted md:flex">
+          <span className="rounded-full bg-clay-surface px-3 py-1 text-clay-accent">
+            {PHASE_LABELS[summary.phase] ?? summary.phase}
+          </span>
+          {roundOrBatch && (
+            <span className="rounded-full bg-clay-surface px-3 py-1">{roundOrBatch}</span>
+          )}
+          <span className="text-muted/70">更新 {shortTime(summary.last_updated)}</span>
+        </div>
+      )}
 
       <div className="flex items-center gap-3">
         <Badge variant="secondary">本地</Badge>

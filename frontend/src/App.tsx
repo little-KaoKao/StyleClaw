@@ -56,6 +56,7 @@ export default function App() {
 
   const [showSelectModel, setShowSelectModel] = useState(false);
   const [showAddRefs, setShowAddRefs] = useState(false);
+  const [chatCollapsed, setChatCollapsed] = useState(false);
 
   let mainContent: React.ReactNode;
   if (!currentProject) {
@@ -91,7 +92,13 @@ export default function App() {
       />
       <AppShell
         main={mainContent}
-        chat={currentProject ? <ChatPanel key={currentProject} /> : null}
+        chat={
+          currentProject ? (
+            <ChatPanel key={currentProject} onCollapse={() => setChatCollapsed(true)} />
+          ) : null
+        }
+        chatCollapsed={chatCollapsed}
+        onExpandChat={() => setChatCollapsed(false)}
       />
 
       <NewProjectModal open={showNew} onOpenChange={setShowNew} />

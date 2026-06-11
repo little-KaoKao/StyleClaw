@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 
 import {
   Dialog,
@@ -42,14 +43,14 @@ export function GalleryGrid({ groups, refImages, trigger }: GalleryGridProps) {
   const openLightbox = (src: string) => setSelectedSrc(src);
 
   return (
-    <div className="flex flex-col gap-6">
+    // A soft left rail groups every result block (trigger / refs / cards) under
+    // the parent "结果 · RESULTS" heading, so the sub-sections read as nested
+    // rather than as peers of it.
+    <div className="flex flex-col gap-6 border-l-2 border-clay-accent/15 pl-5">
       {trigger && (
         <section className="flex flex-col gap-2">
-          <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted">
-            <span className="h-4 w-4 shrink-0 rounded-full bg-gradient-to-br from-purple-400 to-purple-600" />
-            触发词 · Trigger
-          </h3>
-          <div className="rounded-[20px] bg-white/70 p-4 shadow-clayCard backdrop-blur-xl">
+          <SubLabel>触发词 · Trigger</SubLabel>
+          <div className="rounded-[20px] bg-white p-4 shadow-clayCard">
             <p className="select-text whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
               {trigger}
             </p>
@@ -59,19 +60,16 @@ export function GalleryGrid({ groups, refImages, trigger }: GalleryGridProps) {
 
       {hasRefs && (
         <section className="flex flex-col gap-3">
-          <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted">
-            <span className="h-4 w-4 shrink-0 rounded-full bg-gradient-to-br from-purple-400 to-purple-600" />
-            参考图
-          </h3>
+          <SubLabel>参考图 · Refs</SubLabel>
           <div className="flex flex-wrap gap-3">
             {refImages!.map((src) => (
               <button
                 key={src}
                 type="button"
                 onClick={() => openLightbox(src)}
-                className="overflow-hidden rounded-2xl bg-clay-surface shadow-clayCard transition-all duration-300 hover:-translate-y-0.5 hover:shadow-clayCardHover"
+                className="flex items-center justify-center overflow-hidden rounded-2xl bg-clay-surface p-1.5 shadow-clayCard transition-all duration-300 hover:-translate-y-0.5 hover:shadow-clayCardHover"
               >
-                <img src={src} alt="参考图" loading="lazy" className="size-20 object-cover" />
+                <img src={src} alt="参考图" loading="lazy" className="size-24 rounded-xl object-contain" />
               </button>
             ))}
           </div>
@@ -82,7 +80,7 @@ export function GalleryGrid({ groups, refImages, trigger }: GalleryGridProps) {
         {groups.map((group, groupIndex) => (
           <section
             key={group.label}
-            className="flex flex-col gap-2 rounded-[24px] bg-white/70 p-4 shadow-clayCard backdrop-blur-xl transition-all duration-500 hover:-translate-y-1 hover:shadow-clayCardHover"
+            className="flex flex-col gap-2 rounded-[24px] bg-white p-4 shadow-clayCard transition-all duration-500 hover:-translate-y-1 hover:shadow-clayCardHover"
           >
             <div className="flex items-center gap-2">
               <span
@@ -154,3 +152,18 @@ export function GalleryGrid({ groups, refImages, trigger }: GalleryGridProps) {
     </div>
   );
 }
+
+/**
+ * A demoted sub-section label (触发词 / 参考图). Intentionally smaller and
+ * lighter than the top-level SectionLabel so these read as children of the
+ * parent "结果 · RESULTS" heading, not as peers.
+ */
+function SubLabel({ children }: { children: ReactNode }) {
+  return (
+    <h3 className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-muted/70">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-clay-accent/50" />
+      {children}
+    </h3>
+  );
+}
+

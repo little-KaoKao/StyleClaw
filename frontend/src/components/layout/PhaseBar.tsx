@@ -17,7 +17,7 @@ const PHASES: { phase: Phase; label: string }[] = [
   { phase: "STYLE_REFINE", label: "③ 精炼 STYLE_REFINE" },
   { phase: "BATCH_T2I", label: "④ 批量 T2I" },
   { phase: "BATCH_I2I", label: "⑤ 批量 I2I" },
-  { phase: "COMPLETED", label: "✓ 完成" },
+  { phase: "COMPLETED", label: "完成" },
 ];
 
 export function PhaseBar({ current, onSelectPhase }: PhaseBarProps) {

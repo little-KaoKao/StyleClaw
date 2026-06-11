@@ -42,7 +42,7 @@ export function BatchI2IPanel(panel: PanelProps) {
           />
           <ActionButton
             label="返回 T2I"
-            variant="ghost"
+            variant="soft"
             disabled={running}
             onClick={makeRunHandler(run, "back-to-t2i")}
           />

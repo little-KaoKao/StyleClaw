@@ -21,6 +21,7 @@ const buttonVariants = cva(
         default: `${PRIMARY_GRADIENT} text-white ${CLAY_BUTTON}`,
         primary: `${PRIMARY_GRADIENT} text-white ${CLAY_BUTTON}`,
         secondary: `bg-white text-foreground ${CLAY_BUTTON}`,
+        soft: "rounded-2xl bg-clay-surface text-muted-foreground shadow-[5px_5px_12px_rgba(160,150,180,0.22),-5px_-5px_12px_rgba(255,255,255,0.9)] transition-all duration-200 hover:-translate-y-0.5 hover:text-clay-accent active:scale-[0.96] active:shadow-clayPressed",
         outline:
           "border-2 border-clay-accent/20 bg-transparent text-clay-accent rounded-2xl transition-all duration-200 hover:border-clay-accent hover:bg-clay-accent/5 hover:-translate-y-1 active:scale-[0.92]",
         ghost:
