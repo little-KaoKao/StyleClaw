@@ -33,8 +33,22 @@ interface ActionButtonProps {
 }
 
 /**
+ * The filled gradient variants (`default` / `primary` / `red`) are the phase's
+ * MAIN "推进" action — rendered one tier larger than the supporting buttons so
+ * the visual hierarchy is obvious at a glance.
+ */
+const PRIMARY_VARIANTS = new Set(["default", "primary", "red"]);
+
+/**
  * A single action button. Disabled while a run is in flight so the user can't
- * stack overlapping runs. Icons auto-size to h-5 w-5 via the Button primitive.
+ * stack overlapping runs. Buttons are split into two visual tiers:
+ *
+ *   • primary (filled gradient): taller `h-12`, wider min-width — the lead action.
+ *   • secondary (white / outline / ghost): `h-11`, uniform smaller min-width.
+ *
+ * Within a tier every button shares the same height AND minimum width, so a row
+ * of them lines up tidily instead of each hugging its label. Across tiers the
+ * size + fill difference makes "which one is the main action" unmistakable.
  */
 export function ActionButton({
   label,
@@ -43,15 +57,14 @@ export function ActionButton({
   variant = "outline",
   icon,
 }: ActionButtonProps) {
+  const isPrimary = PRIMARY_VARIANTS.has(variant ?? "outline");
   return (
     <Button
-      size="default"
+      size={isPrimary ? "default" : "sm"}
       variant={variant}
       onClick={onClick}
       disabled={disabled}
-      // Uniform minimum width so same-tier action buttons align in a tidy row
-      // instead of each hugging its label width.
-      className="min-w-[8.5rem]"
+      className={isPrimary ? "min-w-[9.5rem]" : "min-w-[7.5rem]"}
     >
       {icon}
       {label}
