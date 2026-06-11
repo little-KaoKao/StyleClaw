@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
+import { History } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { RunProgress } from "@/components/run/RunProgress";
@@ -21,6 +22,8 @@ export interface PanelProps {
   resetRun: () => void;
   onSelectModel?: () => void;
   onAddRefs?: () => void;
+  /** Open this phase's read-only history (pass/round/batch browser). */
+  onViewHistory?: () => void;
 }
 
 interface ActionButtonProps {
@@ -108,18 +111,26 @@ export function PanelShell({
   extra,
   panel,
 }: PanelShellProps) {
-  const { gallery, runStatus, runEvents, llmBuffer, refresh, resetRun } = panel;
+  const { gallery, runStatus, runEvents, llmBuffer, refresh, resetRun, onViewHistory } = panel;
   const hasRun = runStatus !== "idle" || runEvents.length > 0;
   return (
     <div className="space-y-6 p-6">
-      <header className="space-y-2">
-        <h2
-          className="text-3xl font-black tracking-tight text-foreground md:text-4xl"
-          style={{ fontFamily: "Nunito, sans-serif" }}
-        >
-          {title}
-        </h2>
-        <p className="font-medium text-muted">{description}</p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          <h2
+            className="text-3xl font-black tracking-tight text-foreground md:text-4xl"
+            style={{ fontFamily: "Nunito, sans-serif" }}
+          >
+            {title}
+          </h2>
+          <p className="font-medium text-muted">{description}</p>
+        </div>
+        {onViewHistory && (
+          <Button variant="soft" size="sm" onClick={onViewHistory} className="shrink-0">
+            <History />
+            查看历史
+          </Button>
+        )}
       </header>
 
       {extra}

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import { useProject } from "@/hooks/useProject";
 import { useRun } from "@/hooks/useRun";
+import { useAppStore } from "@/store/app-store";
 import type { Phase } from "@/lib/types";
 
 import type { PanelProps } from "./shared";
@@ -42,6 +43,7 @@ function renderPhase(phase: Phase, panel: PanelProps) {
 export function PhasePanel({ onSelectModel, onAddRefs }: PhasePanelProps) {
   const { detail, gallery, refresh } = useProject();
   const { runStatus, runEvents, llmBuffer, run, resetRun } = useRun();
+  const setViewing = useAppStore((s) => s.setViewing);
 
   // Pull fresh detail + gallery once each time a run finishes successfully so
   // the panel reflects new artifacts. `refresh` is a stable useCallback; keep
@@ -68,7 +70,19 @@ export function PhasePanel({ onSelectModel, onAddRefs }: PhasePanelProps) {
     resetRun,
     onSelectModel,
     onAddRefs,
+    // Only phases that actually persist history get a "查看历史" entry. INIT /
+    // COMPLETED have no pass/round/batch slices to browse.
+    onViewHistory: HISTORY_PHASES.has(detail.state.phase)
+      ? () => setViewing({ phase: detail.state.phase })
+      : undefined,
   };
 
   return renderPhase(detail.state.phase, panel);
 }
+
+const HISTORY_PHASES = new Set<Phase>([
+  "MODEL_SELECT",
+  "STYLE_REFINE",
+  "BATCH_T2I",
+  "BATCH_I2I",
+]);

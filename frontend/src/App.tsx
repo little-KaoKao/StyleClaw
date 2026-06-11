@@ -88,7 +88,19 @@ export default function App() {
       <Header onNewProject={onNewProject} />
       <PhaseBar
         current={detail?.state.phase ?? null}
-        onSelectPhase={currentProject ? (phase) => setViewing({ phase }) : undefined}
+        onSelectPhase={
+          currentProject
+            ? (phase) =>
+                // Clicking the CURRENT phase returns to the live working panel
+                // (with its action buttons); clicking any OTHER phase opens that
+                // phase's read-only history. Without this, clicking the current
+                // phase to "go back" just reopened history and the actions
+                // appeared to vanish.
+                phase === detail?.state.phase
+                  ? setViewing(null)
+                  : setViewing({ phase })
+            : undefined
+        }
       />
       <AppShell
         main={mainContent}
