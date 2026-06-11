@@ -44,7 +44,15 @@ export function ActionButton({
   icon,
 }: ActionButtonProps) {
   return (
-    <Button size="default" variant={variant} onClick={onClick} disabled={disabled}>
+    <Button
+      size="default"
+      variant={variant}
+      onClick={onClick}
+      disabled={disabled}
+      // Uniform minimum width so same-tier action buttons align in a tidy row
+      // instead of each hugging its label width.
+      className="min-w-[8.5rem]"
+    >
       {icon}
       {label}
     </Button>
