@@ -17,6 +17,13 @@ const buttonVariants = cva(
   ),
   {
     variants: {
+      // Tier system — used app-wide so buttons read consistently everywhere:
+      //   primary    紫填充  → the ONE lead / commit action in a context
+      //   secondary  白填充  → supporting actions
+      //   soft       淡紫    → de-emphasised: redo / cancel / back / status
+      //   outline    紫描边  → navigation (e.g. 回到当前)
+      //   destructive 粉填充 → retry-after-error / dangerous
+      // Pick by intent, not by looks, so same-tier buttons match across pages.
       variant: {
         default: `${PRIMARY_GRADIENT} text-white ${CLAY_BUTTON}`,
         primary: `${PRIMARY_GRADIENT} text-white ${CLAY_BUTTON}`,
@@ -34,10 +41,10 @@ const buttonVariants = cva(
         link: "rounded-2xl bg-transparent text-clay-accent underline-offset-4 transition-all duration-200 hover:underline",
       },
       size: {
-        default: "h-12 px-7",
-        xs: "h-9 gap-1 px-3 text-xs [&_svg]:h-3.5 [&_svg]:w-3.5",
-        sm: "h-11 px-5 text-sm",
-        lg: "h-16 px-8 text-lg",
+        default: "h-12 px-8",
+        xs: "h-9 gap-1 px-4 text-xs [&_svg]:h-3.5 [&_svg]:w-3.5",
+        sm: "h-11 px-6 text-sm",
+        lg: "h-16 px-9 text-lg",
         icon: "h-12 w-12",
         "icon-xs": "h-9 w-9 [&_svg]:h-3.5 [&_svg]:w-3.5",
         "icon-sm": "h-11 w-11",

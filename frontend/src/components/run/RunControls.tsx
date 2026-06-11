@@ -21,7 +21,7 @@ export function RunControls({
 
   if (status === "running") {
     return (
-      <Button size="sm" disabled>
+      <Button size="sm" variant="soft" disabled>
         <Loader2 className="animate-spin" />
         运行中…
       </Button>
@@ -37,7 +37,7 @@ export function RunControls({
             重试
           </Button>
         )}
-        <Button size="sm" variant="outline" onClick={onRefresh}>
+        <Button size="sm" variant="secondary" onClick={onRefresh}>
           <RefreshCw />
           刷新数据
         </Button>

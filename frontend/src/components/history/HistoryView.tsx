@@ -106,7 +106,7 @@ export function HistoryView({ viewing, history, onHistoryChange }: HistoryViewPr
               切换到此 pass 继续
             </Button>
             <Button
-              variant="outline"
+              variant="soft"
               size="sm"
               disabled={busy}
               onClick={() => doRun("retest-models", {})}

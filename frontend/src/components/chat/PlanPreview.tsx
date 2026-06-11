@@ -88,7 +88,7 @@ export function PlanPreview({
           <Button variant="primary" size="sm" onClick={onConfirm} disabled={disabled}>
             确认执行
           </Button>
-          <Button variant="ghost" size="sm" onClick={onCancel}>
+          <Button variant="soft" size="sm" onClick={onCancel}>
             取消
           </Button>
         </div>
