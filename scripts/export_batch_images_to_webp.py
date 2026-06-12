@@ -18,7 +18,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 
 # Paste the batch folder you want to export here.
-TARGET_BATCH_DIR = Path("data/projects/reelshort-euro-live/batch-t2i/batch-004")
+TARGET_BATCH_DIR = Path("data/projects/jojo-style-0611/batch-t2i/batch-005")
 
 # Output folder at the StyleClaw project root.
 OUTPUT_ROOT = Path("cloud_upload")
@@ -90,9 +90,9 @@ def iter_image_files(batch_dir: Path) -> list[Path]:
     )
 
 
-def output_name_for(source: Path, batch_dir: Path, source_prefix: str) -> str:
+def output_name_for(source: Path, batch_dir: Path) -> str:
     relative = source.relative_to(batch_dir).with_suffix("")
-    parts = [source_prefix, *(safe_filename_segment(part) for part in relative.parts)]
+    parts = [safe_filename_segment(part) for part in relative.parts]
     return "__".join(part for part in parts if part) + ".webp"
 
 
@@ -125,7 +125,7 @@ def export_images(
 
     project_name = project_name_from_batch_dir(batch_dir)
     source_prefix = source_prefix_from_batch_dir(batch_dir)
-    output_dir = output_root / project_name
+    output_dir = output_root / project_name / source_prefix
     images = iter_image_files(batch_dir)
 
     converted = 0
@@ -136,7 +136,7 @@ def export_images(
         output_dir.mkdir(parents=True, exist_ok=True)
 
     for source in images:
-        destination = output_dir / output_name_for(source, batch_dir, source_prefix)
+        destination = output_dir / output_name_for(source, batch_dir)
         if destination.exists() and not overwrite:
             skipped += 1
             continue
